@@ -13,7 +13,7 @@ Usage: ./scripts/sync-to-local-pi.sh [--dry-run] [--target project|user|both]
 
 Options:
   --dry-run         只预览要同步的目标，不写入文件
-  --target project  默认值：同步到当前项目的 .pi/agents
+  --target project  默认值：同步到当前项目的 .pi
   --target user     同步到 ~/.pi/agents
   --target both     同时同步到当前项目和用户目录
   -h, --help        显示此帮助
@@ -72,7 +72,7 @@ echo
 
 TARGET_DIRS=()
 if [[ "$TARGET_MODE" == "project" || "$TARGET_MODE" == "both" ]]; then
-  TARGET_DIRS+=("$ROOT_DIR/.pi/agents")
+  TARGET_DIRS+=("$ROOT_DIR/.pi")
 fi
 if [[ "$TARGET_MODE" == "user" || "$TARGET_MODE" == "both" ]]; then
   TARGET_DIRS+=("$HOME/.pi/agents")
