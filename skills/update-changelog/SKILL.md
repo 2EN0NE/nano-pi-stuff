@@ -3,45 +3,44 @@ name: update-changelog
 description: "Read this skill before updating changelogs"
 ---
 
-Update the repository changelog with changes between the last release and the current version (`main`) that are not yet incorporated. If `CHANGELOG.md` does not exist, use `CHANGELOG` instead.
+更新仓库的 changelog，内容应当包括从上一次发布到当前版本（`main`）之间尚未纳入的变更。如果 `CHANGELOG.md` 不存在，就使用 `CHANGELOG`。
 
-## Step-by-Step Process
+## 分步流程
 
-### 1. Determine baseline version
-If no baseline version is provided, use the most recent git tag. You can find it with `git describe --tags --abbrev=0`.
+### 1. 确定基线版本
+如果没有提供基线版本，就使用最近的 git tag。可以通过 `git describe --tags --abbrev=0` 找到它。
 
-### 2. Find the commits from git
-
-Use the following commands to gather commit information:
+### 2. 查找 git 中的提交
+使用以下命令收集提交信息：
 
 ```bash
-# Get the baseline version (if not provided)
+# 获取基线版本（如果没有提供）
 git describe --tags --abbrev=0
 
-# Get all commits since the baseline version
+# 获取自基线版本以来的所有提交
 git log <baseline-version>..HEAD
 ```
 
-### 3. Update the changelog
-Read the existing changelog file (`CHANGELOG.md`, or `CHANGELOG` if missing) and check if there are changes not yet incorporated, then add them. Always add them to the "Unreleased" section only. If there is none yet, add it at the top in the same style as the existing changelog (for example, `## Unreleased` vs `## [Unreleased]`).
+### 3. 更新 changelog
+阅读现有的 changelog 文件（`CHANGELOG.md`，如果不存在则用 `CHANGELOG`），检查是否有尚未纳入的变更，然后把它们添加进去。始终只把内容添加到 "Unreleased" 部分。如果还没有这一节，就在顶部按照现有 changelog 的风格补一个（例如 `## Unreleased` 与 `## [Unreleased]`）。
 
-## Ground Rules When Writing Changelogs
+## 编写 changelog 时的基本规则
 
-### Content Guidelines
-* Focus on **notable changes** that affect users (features, fixes, breaking changes)
-* Mention pull requests (`#NUMBER`) when available, but not raw commit hashes
-* Ignore insignificant changes (typo fixes, internal refactoring, minor documentation updates)
-* Group related changes together when appropriate
-* Order entries by importance: breaking changes first, then features, then fixes
+### 内容指南
+* 关注对用户有影响的显著变化（功能、修复、破坏性变更）
+* 如果有 PR 号，就写上（`#NUMBER`），但不要写原始提交哈希
+* 忽略不重要的变更（拼写错误、内部重构、次要文档更新）
+* 相关改动可以适当归类合并
+* 按重要性排序：先写破坏性变更，再写新功能，最后写修复
 
-### Style Guidelines
-* Use valid markdown syntax
-* Start each entry with a past-tense verb or descriptive phrase
-* Keep entries concise but descriptive enough to understand the change
-* Use bullet points (`*` or `-`) for individual changes
-* Format code references with backticks (e.g., `` `foo.cleanup` ``)
+### 风格指南
+* 使用有效的 Markdown 语法
+* 每条条目都以过去式动词或描述性短语开头
+* 保持条目简洁，但足够清楚地说明变更内容
+* 对每一项变更使用项目符号（`*` 或 `-`）
+* 对代码引用使用反引号格式（例如 `` `foo.cleanup` ``）
 
-### Example Format
+### 示例格式
 
 ```markdown
 ## 2.13.0
@@ -59,22 +58,22 @@ Read the existing changelog file (`CHANGELOG.md`, or `CHANGELOG` if missing) and
 * Ignore `.jinja` and `.jinja2` as extensions in auto escape.  #832
 ```
 
-### Good vs. Bad Examples
+### 好的示例与不好的示例
 
-**Good:**
+**好的示例：**
 * `Fixed an issue with the TypeScript SDK which caused an incorrect config for CJS.`
 * `Added support for claim timeout extension on checkpoint writes.`
 * `Improved error reporting when task claim expires.`
 
-**Bad:**
-* `Fixed bug` (too vague)
-* `Updated dependencies` (insignificant unless it fixes a security issue)
-* `Refactored internal code structure` (internal change, not user-facing)
-* `Fixed typo in comment` (insignificant)
+**不好的示例：**
+* `Fixed bug`（太模糊）
+* `Updated dependencies`（除非是安全修复，否则不重要）
+* `Refactored internal code structure`（内部改动，不是面向用户的）
+* `Fixed typo in comment`（不重要）
 
-## Notes
+## 备注
 
-* If the current changelog already has an "Unreleased" section with content, append to it rather than replacing it
-* Preserve the existing changelog style and formatting (headings, bullet style, ordering, and spacing)
-* If the repo uses a different default branch name, treat that as the "current version" instead of `main`
-* When in doubt about whether a change is significant, err on the side of including it
+* 如果当前 changelog 已经有 "Unreleased" 段落且其中有内容，就把新内容追加到它里面，而不是替换它
+* 保留现有 changelog 的风格与格式（标题、列表样式、顺序、空行）
+* 如果仓库使用了不同的默认分支名，就把它视为“当前版本”，而不是 `main`
+* 如果不确定某项改动是否重要，宁可把它写进去，也不要漏掉
