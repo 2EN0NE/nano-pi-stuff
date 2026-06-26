@@ -25,6 +25,7 @@ import {
 	Container,
 	type SettingItem,
 	SettingsList,
+	truncateToWidth,
 } from "@earendil-works/pi-tui";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -163,18 +164,14 @@ export default function skillsExtension(pi: ExtensionAPI) {
 				? `⚙  Skills: ${enabled}/${total} enabled`
 				: `⚙  Skills: ${enabled}/${total} enabled (no changes)`;
 
-		// Show config file path for transparency
-		const configInfo = configFilePath ? `  Config: ${configFilePath}` : "";
-
 		pi.sendMessage(
 			{
 				customType: "skills-summary",
-				content: `${header}\n${lines.join("\n")}${configInfo ? "\n" + configInfo : ""}`,
+				content: `${header}\n${lines.join("\n")}`,
 				display: true,
 				details: {
 					enabledCount: enabled,
 					totalCount: total,
-					configPath: configFilePath,
 					changed: changedSkills.map((s) => ({
 						name: s.name,
 						enabled: enabledSkills.has(s.name),
@@ -327,7 +324,9 @@ export default function skillsExtension(pi: ExtensionAPI) {
 						const lines = container.render(width);
 						if (warningText) {
 							lines.push("");
-							lines.push(theme.fg("warning", `  ${warningText}`));
+							lines.push(
+								theme.fg("warning", truncateToWidth(`  ${warningText}`, width)),
+							);
 						}
 						return lines;
 					},
@@ -368,9 +367,27 @@ export default function skillsExtension(pi: ExtensionAPI) {
 		const filteredXml = formatSkillsForPrompt(visibleSkills);
 
 		if (fullXml) {
-			return {
-				systemPrompt: event.systemPrompt.replace(fullXml, filteredXml),
-			};
+			// Replace the <available_skills> XML block using regex, which is
+			// robust against ordering differences between the prompt and the
+			// output of formatSkillsForPrompt (exact string match can fail
+			// when the skill arrays are sorted differently).
+			let newPrompt = event.systemPrompt.replace(fullXml, filteredXml);
+			if (newPrompt === event.systemPrompt) {
+				// Exact match failed — fall back to regex-based replacement
+				// of just the <available_skills>…</available_skills> block.
+				const filteredBlock = filteredXml.match(
+					/<available_skills>[\s\S]*<\/available_skills>/,
+				);
+				if (filteredBlock) {
+					newPrompt = event.systemPrompt.replace(
+						/<available_skills>[\s\S]*?<\/available_skills>/,
+						filteredBlock[0],
+					);
+				}
+			}
+			if (newPrompt !== event.systemPrompt) {
+				return { systemPrompt: newPrompt };
+			}
 		}
 	});
 
