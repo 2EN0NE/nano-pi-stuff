@@ -21,17 +21,21 @@ import type { LogEvent, LogLevel, Logger } from "./types.js";
 import { LOG_EVENT_CHANNEL } from "./types.js";
 
 // ============================================================================
-// Global EventBus reference (set by initEventBus, called from index.ts)
+// Global EventBus reference (stored on globalThis to survive jiti module isolation)
+//
+// jiti loads extensions with moduleCache:false, so each extension gets its own
+// module instance of api.ts. Module-level variables are NOT shared across jiti
+// instances. We use globalThis so all instances see the same EventBus reference.
 // ============================================================================
 
-let _bus: EventBus | null = null;
+const GLOBAL_EVENTBUS_KEY = "__pi_logger_eventbus__";
 
 /**
  * Initialize the EventBus reference. Called by the pi-logger extension factory
  * (index.ts) at startup. Must be called before any createLogger() usage.
  */
 export function initEventBus(bus: EventBus): void {
-	_bus = bus;
+	(globalThis as Record<string, unknown>)[GLOBAL_EVENTBUS_KEY] = bus;
 }
 
 /**
@@ -39,7 +43,11 @@ export function initEventBus(bus: EventBus): void {
  * Returns null if initEventBus has not been called yet.
  */
 export function getEventBus(): EventBus | null {
-	return _bus;
+	return (
+		((globalThis as Record<string, unknown>)[
+			GLOBAL_EVENTBUS_KEY
+		] as EventBus) ?? null
+	);
 }
 
 // ============================================================================
@@ -127,7 +135,8 @@ function emitLogEvent(
 	message: string,
 	details?: unknown,
 ): void {
-	if (!_bus) return; // silently drop until initEventBus is called
+	const bus = getEventBus();
+	if (!bus) return; // silently drop until initEventBus is called
 
 	const event: LogEvent = {
 		level,
@@ -136,7 +145,7 @@ function emitLogEvent(
 		details,
 		timestamp: Date.now(),
 	};
-	_bus.emit(LOG_EVENT_CHANNEL, event);
+	bus.emit(LOG_EVENT_CHANNEL, event);
 }
 
 // ============================================================================

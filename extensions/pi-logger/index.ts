@@ -13,6 +13,7 @@
  *   /log config            Show current configuration
  *   /log config reload     Reload config files
  *   /log config level <name> [level]  Get/set per-logger level
+ *   /log level             Interactive TUI: change log level with persist dialog
  *   /log tail [n]          Show last n log entries from current file
  *   /log path              Show current log file path
  *   /log set-output <file|console|both>
@@ -21,10 +22,16 @@
  *   pi -e ./pi-logger --log-level debug
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
+import type { SelectItem } from "@earendil-works/pi-tui";
+import { Container, SelectList, Text } from "@earendil-works/pi-tui";
 import { initEventBus } from "./api.js";
 import {
 	loadConfiguration,
@@ -70,6 +77,37 @@ function getTail(n: number): LogEvent[] {
 }
 
 // ============================================================================
+// Log-event deduplication: collapse identical events within a short window.
+//
+// pi reloads extensions via /reload, which re-executes factory functions
+// and re-registers event handlers.  Each handler can independently emit the
+// same log call (same source, level, message), producing N copies.
+// This cache deduplicates by (source, level, message) within a 500 ms window
+// so downstream consumers (file, console, tail-buffer) see each event once.
+// ============================================================================
+
+const DEDUP_WINDOW_MS = 500;
+const recentEvents = new Map<string, number>(); // key !92 timestamp
+
+function dedupCheck(event: LogEvent): boolean {
+	const key = `${event.source}\x00${event.level}\x00${event.message}`;
+	const last = recentEvents.get(key);
+	const now = event.timestamp;
+	if (last !== undefined && now - last < DEDUP_WINDOW_MS) {
+		return true; // duplicate
+	}
+	recentEvents.set(key, now);
+
+	// Periodic cleanup: drop entries older than the window
+	if (recentEvents.size > 300) {
+		for (const [k, t] of recentEvents) {
+			if (now - t > DEDUP_WINDOW_MS) recentEvents.delete(k);
+		}
+	}
+	return false;
+}
+
+// ============================================================================
 // Log handler: receive events from EventBus, filter, route to appenders
 // ============================================================================
 
@@ -80,11 +118,15 @@ async function handleLogEvent(
 	// 1. Check per-logger level filter
 	if (!shouldLog(event.source, event.level)) return;
 
-	// 2. Push to tail buffer (always, regardless of appenders)
+	// 2. Deduplicate identical events arriving within DEDUP_WINDOW_MS
+	//    (protects against /reload-triggered duplicate handler registrations)
+	if (dedupCheck(event)) return;
+
+	// 3. Push to tail buffer (always, regardless of appenders)
 	pushTail(event);
 
-	// 3. Route to appenders
-	// File appender
+	// 4. Route to appenders
+	// 4a. File appender
 	if (
 		config.appenders.file.enabled &&
 		shouldAppend(config.appenders.file.level, event.level)
@@ -92,7 +134,7 @@ async function handleLogEvent(
 		await writeFileLog(event, config);
 	}
 
-	// Console appender
+	// 4b. Console appender
 	if (
 		config.appenders.console.enabled &&
 		shouldAppend(config.appenders.console.level, event.level)
@@ -114,6 +156,270 @@ function formatTailEvent(event: LogEvent): string {
 
 function pad(n: number, w = 2): string {
 	return String(n).padStart(w, "0");
+}
+
+// ============================================================================
+// Interactive TUI helpers for /log level
+// ============================================================================
+
+/**
+ * Step 1: Select a logger (or "default") to configure.
+ */
+async function interactiveSelectLogger(
+	ctx: ExtensionCommandContext,
+): Promise<string | null> {
+	const config = getEffectiveConfig();
+
+	// Collect unique sources from tail buffer + already-configured loggers
+	const sourceSet = new Set<string>();
+	for (const e of tailBuffer) {
+		sourceSet.add(e.source);
+	}
+	for (const name of Object.keys(config.loggers)) {
+		sourceSet.add(name);
+	}
+
+	const items: SelectItem[] = [
+		{
+			value: "__default__",
+			label: "default (for all loggers)",
+			description: `Current level: ${config.defaultLevel}`,
+		},
+		...[...sourceSet].sort().map((s) => ({
+			value: s,
+			label: s,
+			description: `Current: ${config.loggers[s] ?? `inherited (${config.defaultLevel})`}`,
+		})),
+	];
+
+	return await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
+		const container = new Container();
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+		container.addChild(
+			new Text(
+				theme.fg("accent", theme.bold("Select Logger to Configure")),
+				1,
+				0,
+			),
+		);
+		const selectList = new SelectList(items, Math.min(items.length, 12), {
+			selectedPrefix: (t) => theme.fg("accent", t),
+			selectedText: (t) => theme.fg("accent", t),
+			description: (t) => theme.fg("muted", t),
+			scrollInfo: (t) => theme.fg("dim", t),
+			noMatch: (t) => theme.fg("warning", t),
+		});
+		selectList.onSelect = (item) => done(item.value);
+		selectList.onCancel = () => done(null);
+		container.addChild(selectList);
+		container.addChild(
+			new Text(
+				theme.fg("dim", "↑↓ navigate • enter select • esc cancel"),
+				1,
+				0,
+			),
+		);
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+		return {
+			render: (w) => container.render(w),
+			invalidate: () => container.invalidate(),
+			handleInput: (data) => {
+				selectList.handleInput(data);
+				tui.requestRender();
+			},
+		};
+	});
+}
+
+function levelDescription(level: LogLevel): string {
+	switch (level) {
+		case "trace":
+			return "All events (most verbose)";
+		case "debug":
+			return "Debug and above";
+		case "info":
+			return "Info and above (default)";
+		case "warn":
+			return "Warnings and errors only";
+		case "error":
+			return "Errors only";
+		case "off":
+			return "Suppress all logging";
+	}
+}
+
+/**
+ * Step 2: Select a log level.
+ */
+async function interactiveSelectLevel(
+	ctx: ExtensionCommandContext,
+	loggerName: string,
+): Promise<LogLevel | null> {
+	const items: SelectItem[] = LOG_LEVELS.map((l) => ({
+		value: l,
+		label: l.toUpperCase(),
+		description: levelDescription(l),
+	}));
+
+	return await ctx.ui.custom<LogLevel | null>((tui, theme, _kb, done) => {
+		const container = new Container();
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+		container.addChild(
+			new Text(
+				theme.fg(
+					"accent",
+					theme.bold(
+						`Set Log Level for "${loggerName === "__default__" ? "default" : loggerName}"`,
+					),
+				),
+				1,
+				0,
+			),
+		);
+		const selectList = new SelectList(items, Math.min(items.length, 10), {
+			selectedPrefix: (t) => theme.fg("accent", t),
+			selectedText: (t) => theme.fg("accent", t),
+			description: (t) => theme.fg("muted", t),
+			scrollInfo: (t) => theme.fg("dim", t),
+			noMatch: (t) => theme.fg("warning", t),
+		});
+		selectList.onSelect = (item) => done(item.value as LogLevel);
+		selectList.onCancel = () => done(null);
+		container.addChild(selectList);
+		container.addChild(
+			new Text(
+				theme.fg("dim", "↑↓ navigate • enter select • esc cancel"),
+				1,
+				0,
+			),
+		);
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+		return {
+			render: (w) => container.render(w),
+			invalidate: () => container.invalidate(),
+			handleInput: (data) => {
+				selectList.handleInput(data);
+				tui.requestRender();
+			},
+		};
+	});
+}
+
+/**
+ * Step 3: Ask whether to persist the change to config file.
+ */
+async function interactivePersist(
+	ctx: ExtensionCommandContext,
+	loggerName: string,
+	level: LogLevel,
+): Promise<void> {
+	const projectPath = join(ctx.cwd, ".pi", "pi-logger.json");
+	const globalPath = join(homedir(), ".pi", "agents", "pi-logger.json");
+
+	const items: SelectItem[] = [
+		{
+			value: "project",
+			label: "Save to project config",
+			description: `Write to project: ${projectPath}`,
+		},
+		{
+			value: "global",
+			label: "Save to global config",
+			description: `Write to user global: ${globalPath}`,
+		},
+		{
+			value: "none",
+			label: "Session only",
+			description: "Don't persist, apply to current session only",
+		},
+	];
+
+	const result = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
+		const container = new Container();
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+		container.addChild(
+			new Text(
+				theme.fg("accent", theme.bold("Persist Log Level Change?")),
+				1,
+				0,
+			),
+		);
+		const selectList = new SelectList(items, items.length, {
+			selectedPrefix: (t) => theme.fg("accent", t),
+			selectedText: (t) => theme.fg("accent", t),
+			description: (t) => theme.fg("muted", t),
+			scrollInfo: (t) => theme.fg("dim", t),
+			noMatch: (t) => theme.fg("warning", t),
+		});
+		selectList.onSelect = (item) => done(item.value);
+		selectList.onCancel = () => done("none");
+		container.addChild(selectList);
+		container.addChild(
+			new Text(
+				theme.fg(
+					"dim",
+					`${loggerName === "__default__" ? "Default" : loggerName} → ${level.toUpperCase()}`,
+				),
+				1,
+				0,
+			),
+		);
+		container.addChild(
+			new Text(
+				theme.fg("dim", "↑↓ navigate • enter select • esc = session only"),
+				1,
+				0,
+			),
+		);
+		container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+		return {
+			render: (w) => container.render(w),
+			invalidate: () => container.invalidate(),
+			handleInput: (data) => {
+				selectList.handleInput(data);
+				tui.requestRender();
+			},
+		};
+	});
+
+	if (!result || result === "none") {
+		ctx.ui.notify("Log level change applied to current session only", "info");
+		return;
+	}
+
+	const configPath = result === "project" ? projectPath : globalPath;
+
+	// Read existing config or start fresh
+	let config: Record<string, unknown> = {};
+	if (existsSync(configPath)) {
+		try {
+			config = JSON.parse(readFileSync(configPath, "utf-8"));
+		} catch {
+			config = {};
+		}
+	}
+
+	// Update the level
+	if (loggerName === "__default__") {
+		config.defaultLevel = level;
+	} else {
+		config.loggers = config.loggers ?? {};
+		(config.loggers as Record<string, unknown>)[loggerName] = level;
+	}
+
+	// Ensure directory exists
+	const dir = dirname(configPath);
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+
+	writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
+
+	// Reload configuration to pick up changes
+	reloadConfiguration(ctx.cwd);
+	await initFileAppender(getRuntimeConfig());
+
+	ctx.ui.notify(`Log level saved to ${configPath}`, "success");
 }
 
 async function logCommandHandler(
@@ -282,12 +588,46 @@ async function logCommandHandler(
 			return;
 		}
 
+		case "level": {
+			// Interactive log level changer (TUI only)
+			if (!ctx.hasUI) {
+				console.log("Use /log config level <name> [level] in non-TUI mode");
+				return;
+			}
+
+			// Step 1: Select logger
+			const loggerName = await interactiveSelectLogger(ctx);
+			if (!loggerName) return;
+
+			// Step 2: Select level
+			const level = await interactiveSelectLevel(ctx, loggerName);
+			if (!level) return;
+
+			// Step 3: Apply to current session
+			if (loggerName === "__default__") {
+				setDefaultLevel(level);
+			} else {
+				setLoggerLevel(loggerName, level);
+			}
+
+			const displayName = loggerName === "__default__" ? "default" : loggerName;
+			ctx.ui.notify(
+				`Log level changed: ${displayName} → ${level.toUpperCase()}`,
+				"info",
+			);
+
+			// Step 4: Ask whether to persist
+			await interactivePersist(ctx, loggerName, level);
+			return;
+		}
+
 		default: {
 			const help = [
 				"pi-logger commands:",
 				"  /log config                      Show current configuration",
 				"  /log config reload               Reload config files",
 				"  /log config level <name> [level]  Get/set per-logger level",
+				"  /log level                       Interactive log level changer",
 				"  /log tail [n]                    Show last n log entries (default: 20)",
 				"  /log path                        Show current log file path",
 				"  /log set-output file|console|both",
@@ -309,33 +649,17 @@ export default function loggerExtension(pi: ExtensionAPI) {
 	// Track lifecycle unsubscribe for cleanup
 	let lifecycleUnsubscribe: (() => void) | null = null;
 
-	// 1. Register CLI flags
-	pi.registerFlag("log-level", {
-		description: "Set default log level (trace, debug, info, warn, error, off)",
-		type: "string",
-	});
+	// 0. Early EventBus initialization — idempotent via globalThis guard.
+	//    jiti loads extensions with moduleCache:false, which can cause this
+	//    factory to run multiple times if the module is loaded through different
+	//    jiti instances.  The guard ensures initEventBus + listener registration
+	//    happens at most once per Node process, preventing duplicate log entries.
+	const _G = globalThis as Record<string, unknown>;
+	const FACTORY_GUARD = "__pi_logger_factory_init_guard__";
 
-	// 2. Initialize subsystems once we have a session context
-	pi.on("session_start", async (_event, ctx) => {
-		// Initialize config (loads from files)
-		loadConfiguration(ctx.cwd);
-
-		// Apply CLI flag override if provided
-		const flagLevel = pi.getFlag("log-level");
-		if (
-			typeof flagLevel === "string" &&
-			(LOG_LEVELS as readonly string[]).includes(flagLevel)
-		) {
-			setDefaultLevel(flagLevel as LogLevel);
-		}
-
-		// Initialize file appender
-		await initFileAppender(getRuntimeConfig());
-
-		// Initialize EventBus reference for api.ts (createLogger)
+	if (!_G[FACTORY_GUARD]) {
+		_G[FACTORY_GUARD] = true;
 		initEventBus(pi.events);
-
-		// Subscribe to log events from the EventBus
 		pi.events.on(LOG_EVENT_CHANNEL, (data: unknown) => {
 			const event = data as LogEvent;
 			if (
@@ -347,6 +671,32 @@ export default function loggerExtension(pi: ExtensionAPI) {
 				void handleLogEvent(event);
 			}
 		});
+	}
+
+	void initFileAppender(getRuntimeConfig());
+
+	// 1. Register CLI flags
+	pi.registerFlag("log-level", {
+		description: "Set default log level (trace, debug, info, warn, error, off)",
+		type: "string",
+	});
+
+	// 2. On session_start: reload config with proper cwd and reinit appender
+	pi.on("session_start", async (_event, ctx) => {
+		// Reload config (bundled + user + project), resolve paths against cwd
+		loadConfiguration(ctx.cwd);
+
+		// Apply CLI flag override if provided
+		const flagLevel = pi.getFlag("log-level");
+		if (
+			typeof flagLevel === "string" &&
+			(LOG_LEVELS as readonly string[]).includes(flagLevel)
+		) {
+			setDefaultLevel(flagLevel as LogLevel);
+		}
+
+		// Reinitialize file appender with the project-resolved path
+		await initFileAppender(getRuntimeConfig());
 
 		// Import and setup lifecycle capture dynamically
 		try {
@@ -359,17 +709,14 @@ export default function loggerExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	// 4. Register /log command
+	// 3. Register /log command
 	pi.registerCommand("log", {
 		description:
-			"Control the pi-logger system (config, tail, path, set-output)",
+			"Control the pi-logger system (config, level, tail, path, set-output)",
 		handler: logCommandHandler,
 	});
 
-	// 5. Register /log argument completions
-	// (We'll handle this in the command itself)
-
-	// 6. Status widget
+	// 4. Status widget
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		const config = getRuntimeConfig();
@@ -379,7 +726,7 @@ export default function loggerExtension(pi: ExtensionAPI) {
 		);
 	});
 
-	// 7. Cleanup on shutdown
+	// 5. Cleanup on shutdown
 	pi.on("session_shutdown", async () => {
 		if (lifecycleUnsubscribe) {
 			lifecycleUnsubscribe();

@@ -16,9 +16,9 @@
   ],
   "pi": {
     "extensions": [
+      "./extensions/pi-logger",
       "./extensions",
-      "!extensions/goal.ts",
-      "./extensions/pi-logger"
+      "!extensions/goal.ts"
     ],
     "skills": [
       "./skills"
