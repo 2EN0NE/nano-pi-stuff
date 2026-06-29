@@ -29,6 +29,9 @@ import {
 } from "@earendil-works/pi-tui";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { createLogger } from "./pi-logger/api.js";
+
+const log = createLogger("skills");
 
 // ── State ──────────────────────────────────────────────────────────
 
@@ -39,6 +42,7 @@ interface SkillsState {
 const CONFIG_FILE = "skills-config.json";
 
 export default function skillsExtension(pi: ExtensionAPI) {
+	log.info("Skills extension loaded");
 	let enabledSkills: Set<string> = new Set();
 	let allSkills: { name: string; description: string }[] = [];
 	let initialized = false;
@@ -132,6 +136,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 		const fileSkills = loadFromFile();
 		const branchSkills = getBranchSkills(ctx);
 		mergeSavedSkills(fileSkills, branchSkills);
+		log.info("Skills: initialized, %d skills enabled", enabledSkills.size);
 	}
 
 	// ── Deduplicate skills by name (same skill may load from multiple sources) ──
@@ -283,8 +288,10 @@ export default function skillsExtension(pi: ExtensionAPI) {
 						const wasEnabled = enabledSkills.has(id);
 						if (wasEnabled) {
 							enabledSkills.delete(id);
+							log.info("Skills: disabled %s", id);
 						} else {
 							enabledSkills.add(id);
+							log.info("Skills: enabled %s", id);
 						}
 
 						const item = items.find((i) => i.id === id);
@@ -391,7 +398,9 @@ export default function skillsExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	pi.on("session_start", async () => {});
+	pi.on("session_start", async () => {
+		log.info("Skills: session started");
+	});
 
 	pi.on("session_tree", async (_event, ctx) => {
 		if (!initialized) return;
