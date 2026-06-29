@@ -1,10 +1,46 @@
 # Agent Notes
 
 ## 项目基本原则
+
 ### 1. 如涉及基础设施改造，完成后需询问是否同步AGENTS.md和README.md说明
+
 正例：如设置logger为所有模块提供日志支撑，logger体系创建或用法修改后，要问用户是否检查AGENTS.md是否涉及这一块的说明，是否要把extensions创建要求更新；
 反例：创建一个展示辅助模块（不影响其他模块），在未询问我的建议的情况下，就擅自把这个功能的说明加入了AGENTS.md或README.md
 
+### 2. 完成任务后，要把端到端集成测试完成，再回复最后结果
+
+详见技能 [`e2e-test`](skills/e2e-test/SKILL.md)，测试基础设施在 [`test/`](test/)。
+
+简要流程：
+
+1. 用 `bash test/scripts/run-e2e.sh --ext <name>` 或 `--skill <name>` 执行对应模块测试
+2. 查看 `test/results/<latest>/summary.md` 了解测试结果
+3. 对标记为 `[REVIEW]` 的用例，逐条读取日志进行 AI 衡量（≤20 条全部判断，>20 条需用户手动比对）
+4. 确认所有用例通过或已了解非标结果后，再告知用户"已完成"
+
+常用命令：
+
+```bash
+# 运行测试
+bash test/scripts/run-e2e.sh --ext pi-logger
+bash test/scripts/run-e2e.sh --skill e2e-test
+bash test/scripts/run-e2e.sh              # 全部模块
+
+# 查看最新结果
+LATEST=$(ls -1t test/results/ | head -1)
+cat test/results/$LATEST/summary.md
+
+# 查看单条用例详情
+cat test/results/$LATEST/cases/*.log
+
+# 快速手动验证
+pi -a --no-session -e ./extensions/foo.ts -p "test prompt"
+```
+
+正例：运行 run-e2e.sh → 查看 summary → 衡量 REVIEW 用例 → 确认通过后告知完成。
+反例：修改完代码直接告知完成，无真实测试验证。
+
+详情和完整流程见 [`skills/e2e-test/SKILL.md`](skills/e2e-test/SKILL.md)。
 
 ## 本地同步
 
