@@ -1,0 +1,17 @@
+# pi-rate-limiter 插件配置文件
+# 项目级配置会覆盖全局配置，全局配置会覆盖插件默认值
+
+# 每分钟最大请求数（0 表示不限）
+maxRequestsPerMinute: 10
+
+# 每分钟最大输入 Token 数（0 表示不限）
+maxTokensPerMinute: 10000
+
+# 遇到 432 错误时是否自动继续
+autoResumeOn432: true
+
+# Token 估算分母：字符数 / 该值 = 估算 Token 数
+tokenEstimateRatio: 4
+
+# 限流触发阈值百分比：达到上限的百分之多少时开始主动限流
+throttleThresholdPercent: 80
