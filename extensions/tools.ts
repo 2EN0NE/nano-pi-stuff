@@ -45,6 +45,18 @@ export default function toolsExtension(pi: ExtensionAPI) {
 	let disabledTools: Set<string> = new Set();
 	let allTools: ToolInfo[] = [];
 
+	/**
+	 * 外部覆盖标记。
+	 *
+	 * 当 preset.ts 等扩展通过 __toolsApi.replaceTools() 调用来批量替换工具
+	 * 集时，此标记为 true。restoreFromBranch 检测到此标记后会跳过自有恢复逻辑，
+	 * 避免用旧的 session branch 数据覆盖 replaceTools 刚设定的状态。
+	 *
+	 * 复位：restoreFromBranch 检查后立即复位为 false，保证后续 session_tree
+	 * 等事件仍正常触发恢复。
+	 */
+	let externalOverride = false;
+
 	// Persist current state
 	function persistState() {
 		pi.appendEntry<ToolsState>("tools-config", {
@@ -94,16 +106,43 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		}
 	}
 
-	// Find the last tools-config entry in the current branch
+	/**
+	 * 从 session 记录中恢复工具状态。
+	 *
+	 * 使用 getEntries()（全局视图）而非 getBranch()（树路径过滤），
+	 * 因为工具配置是 session 级全局设定，不受分支导航影响。
+	 *
+	 * 若 externalOverride 为 true（表示 replaceTools 已被外部调用并设置
+	 * 了正确状态），跳过自有恢复逻辑，避免用旧数据覆盖。
+	 */
 	function restoreFromBranch(ctx: ExtensionContext) {
+		// 外部已接管：replaceTools 已完成全部状态设置（enabled / disabled /
+		// apply / persist），不需要本函数再覆盖
+		if (externalOverride) {
+			log.debug("restoreFromBranch: skipped — external override in effect");
+			// 同步 disabledTools（replaceTools 也会更新 disabledTools，但
+			// 此处兜底确保 session branch 中的禁用记录也得到反映）
+			const entries = ctx.sessionManager.getEntries();
+			let savedDisabled: string[] | undefined;
+			for (const entry of entries) {
+				if (entry.type === "custom" && entry.customType === "tools-config") {
+					const data = entry.data as ToolsState | undefined;
+					if (data?.disabledTools) savedDisabled = data.disabledTools;
+				}
+			}
+			if (savedDisabled) disabledTools = new Set(savedDisabled);
+			externalOverride = false;
+			return;
+		}
+
 		allTools = pi.getAllTools();
 
-		// Get entries in current branch only
-		const branchEntries = ctx.sessionManager.getBranch();
+		// 全局视图：所有 session entries，而非树路径过滤
+		const entries = ctx.sessionManager.getEntries();
 		let savedEnabled: string[] | undefined;
 		let savedDisabled: string[] | undefined;
 
-		for (const entry of branchEntries) {
+		for (const entry of entries) {
 			if (entry.type === "custom" && entry.customType === "tools-config") {
 				const data = entry.data as ToolsState | undefined;
 				if (data?.enabledTools) {
@@ -398,4 +437,66 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		restoreFromBranch(ctx);
 		reapplyRestrictions(ctx);
 	});
+
+	// ──────────────────────────────────────────────────────────
+	// External API — 供 preset.ts 等扩展通过 `(globalThis as any).__toolsApi`
+	// 调用，在不直接耦合 imports 的情况下协作修改工具状态。
+	//
+	// 设计原则：
+	//   - replaceTools() 完全替换 enabled 集，排出的工具自动加入
+	//     disabledTools，确保 tool_call handler 能拦截
+	//   - 调用方自行负责识别自身是否与 tools.ts 共存（不存在时
+	//     退化回 pi.setActiveTools()）
+	//   - 所有变更即时持久化到 session branch，跨 reload 不丢失
+	// ──────────────────────────────────────────────────────────
+
+	// 挂到 globalThis 而非 pi 对象上，避免 ExtensionAPI 的 Proxy / freeze
+	// 限制导致属性赋值被静默吞掉
+	(globalThis as any).__toolsApi = {
+		/**
+		 * 完全替换当前工具启用集。
+		 *
+		 * - 新列表中的工具 → enabled，并从 disabledTools 中移除
+		 * - 已知工具中不在新列表的 → 加入 disabledTools（确保 tool_call handler 能拦截）
+		 * - 即时调用 applyTools() 推送到 pi 运行时 + persistState() 持久化
+		 *
+		 * @param toolNames — 启用工具名列表（无效名自动过滤）
+		 */
+		replaceTools(toolNames: string[]) {
+			// 标记外部覆盖，通知 restoreFromBranch 跳过自有恢复，
+			// 避免在 handler 执行顺序不确定时旧的 session 数据
+			// 覆盖本函数刚设置的值
+			externalOverride = true;
+
+			const allToolNames = pi.getAllTools().map((t) => t.name);
+			const validTools = toolNames.filter((t) => allToolNames.includes(t));
+
+			if (validTools.length === 0 && toolNames.length > 0) {
+				log.warn("replaceTools: all requested tools are unknown", {
+					requested: toolNames,
+				});
+				externalOverride = false; // 无有效工具，复位标记
+				return;
+			}
+
+			// ① 替换 enabled 集
+			enabledTools = new Set(validTools);
+
+			// ② 同步 disabledTools：新列表中包含的 → 解禁；不含的 → 禁用
+			for (const t of allToolNames) {
+				if (validTools.includes(t)) {
+					disabledTools.delete(t);
+				} else {
+					disabledTools.add(t);
+				}
+			}
+
+			applyTools();
+			persistState();
+			log.info("replaceTools: tools replaced", {
+				enabled: validTools,
+				disabled: [...disabledTools],
+			});
+		},
+	};
 }

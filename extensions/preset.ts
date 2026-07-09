@@ -125,6 +125,26 @@ export default function presetExtension(pi: ExtensionAPI) {
 	let activePreset: Preset | undefined;
 	let originalState: OriginalState | undefined;
 
+	/**
+	 * 工具变更委托：优先尝试 tools.ts 的 replaceTools API，不存在则退化到
+	 * pi.setActiveTools() 直接操作。
+	 *
+	 * 解耦设计：preset.ts 不 import tools.ts，通过 `(globalThis as any).__toolsApi`
+	 * 鸭子类型调用。若 tools.ts 未加载，`__toolsApi` 不存在，走 fallback。
+	 *
+	 * @param toolNames - 要启用的工具名列表
+	 */
+	function applyToolsToPi(toolNames: string[]) {
+		// 从 globalThis 而非 pi 上读 __toolsApi（避免 pi 对象 Proxy / freeze）
+		const api = (globalThis as any).__toolsApi;
+		if (api?.replaceTools) {
+			api.replaceTools(toolNames);
+		} else {
+			// Fallback: tools.ts 未加载，直接操作 pi 内置活性列表
+			pi.setActiveTools(toolNames);
+		}
+	}
+
 	// Register --preset CLI flag
 	pi.registerFlag("preset", {
 		description: "Preset configuration to use",
@@ -188,7 +208,7 @@ export default function presetExtension(pi: ExtensionAPI) {
 			}
 
 			if (validTools.length > 0) {
-				pi.setActiveTools(validTools);
+				applyToolsToPi(validTools);
 			}
 		}
 
@@ -314,9 +334,9 @@ export default function presetExtension(pi: ExtensionAPI) {
 					await pi.setModel(originalState.model);
 				}
 				pi.setThinkingLevel(originalState.thinkingLevel);
-				pi.setActiveTools(originalState.tools);
+				applyToolsToPi(originalState.tools);
 			} else {
-				pi.setActiveTools(["read", "bash", "edit", "write"]);
+				applyToolsToPi(["read", "bash", "edit", "write"]);
 			}
 			ctx.ui.notify("Preset cleared, defaults restored", "info");
 			updateStatus(ctx);
@@ -374,9 +394,9 @@ export default function presetExtension(pi: ExtensionAPI) {
 					await pi.setModel(originalState.model);
 				}
 				pi.setThinkingLevel(originalState.thinkingLevel);
-				pi.setActiveTools(originalState.tools);
+				applyToolsToPi(originalState.tools);
 			} else {
-				pi.setActiveTools(["read", "bash", "edit", "write"]);
+				applyToolsToPi(["read", "bash", "edit", "write"]);
 			}
 			ctx.ui.notify("Preset cleared, defaults restored", "info");
 			updateStatus(ctx);
@@ -475,7 +495,24 @@ export default function presetExtension(pi: ExtensionAPI) {
 			if (preset) {
 				activePresetName = presetEntry.data.name;
 				activePreset = preset;
-				// Don't re-apply model/tools on restore, just keep the name for instructions
+				// Re-apply preset tools so mode stays consistent.
+				// User /tools changes in-session are respected;
+				// preset re-applies only on session restart.
+				if (preset.tools && preset.tools.length > 0) {
+					const valid = preset.tools.filter((t) =>
+						pi
+							.getAllTools()
+							.map((tt) => tt.name)
+							.includes(t),
+					);
+					if (valid.length > 0) {
+						applyToolsToPi(valid);
+						log.debug("preset restored — tools re-applied", {
+							preset: presetEntry.data.name,
+							tools: valid,
+						});
+					}
+				}
 			}
 		}
 
