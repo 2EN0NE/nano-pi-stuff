@@ -4,6 +4,9 @@
  * Tracks 4 dimensions in real time as events come in.
  * Provides a snapshot to compute sigma against historical data.
  * Uses clamping for display only — persistence stores raw values.
+ *
+ * Supports serialization: exportRawState() / importRawState() for
+ * mid-session persistence across extension reloads (/reload, pi -r).
  */
 
 import type { SessionMetrics } from "./session-store.js";
@@ -13,6 +16,16 @@ export interface MetricsSnapshot {
 	avgTurnsPerQuestion: number;
 	userQuestions: number;
 	toolTypesUsed: number;
+}
+
+/**
+ * Serializable raw state of the tracker — used for per-session live persistence.
+ */
+export interface TrackerRawState {
+	thinkingSteps: number;
+	userQuestions: number;
+	agentTurns: number;
+	toolTypes: string[];
 }
 
 export class MetricsTracker {
@@ -74,6 +87,30 @@ export class MetricsTracker {
 	 */
 	toSessionMetrics(): SessionMetrics {
 		return this._rawSnapshot();
+	}
+
+	/**
+	 * Export raw mutable state for persistence.
+	 * Returns a plain object suitable for JSON serialization.
+	 */
+	exportRawState(): TrackerRawState {
+		return {
+			thinkingSteps: this._thinkingSteps,
+			userQuestions: this._userQuestions,
+			agentTurns: this._agentTurns,
+			toolTypes: [...this._toolTypes],
+		};
+	}
+
+	/**
+	 * Import raw state previously exported via exportRawState().
+	 * Restores all counters and tool type set from a previous incarnation.
+	 */
+	importRawState(state: TrackerRawState): void {
+		this._thinkingSteps = state.thinkingSteps;
+		this._userQuestions = state.userQuestions;
+		this._agentTurns = state.agentTurns;
+		this._toolTypes = new Set(state.toolTypes);
 	}
 
 	/** Reset all counters (for a new session) */

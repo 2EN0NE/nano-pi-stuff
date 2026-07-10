@@ -22,7 +22,13 @@ import {
 } from "./sigma.js";
 import type { ColorLevel } from "./sigma.js";
 import { MetricsTracker, type MetricsSnapshot } from "./metrics.js";
-import { appendSession, loadSessions } from "./session-store.js";
+import {
+	appendSession,
+	loadSessions,
+	saveLiveState,
+	loadLiveState,
+	deleteLiveState,
+} from "./session-store.js";
 import type { SessionMetrics } from "./session-store.js";
 import { DIMENSION_KEYS, pickMessage } from "./messages.js";
 import type { DimensionKey } from "./messages.js";
@@ -61,6 +67,21 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 	let shuttingDown = false;
 	/** Snapshot of metrics at last refresh — skip tick if nothing changed. */
 	let lastSnapshot: MetricsSnapshot | null = null;
+
+	// -------------------------------------------------------------------------
+	// Checkpoint: persist current tracker state to the live file so it
+	// survives extension re-initialization (/reload, pi -r).
+	// -------------------------------------------------------------------------
+	function saveCheckpoint() {
+		if (!sessionId) return;
+		const raw = tracker.exportRawState();
+		saveLiveState({
+			sessionId,
+			timestamp: Date.now(),
+			cwd: sessionCwd ?? "",
+			...raw,
+		});
+	}
 
 	// -------------------------------------------------------------------------
 	// Tick mechanism: periodically refresh the working message so it updates
@@ -103,6 +124,7 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 			return;
 		}
 		lastSnapshot = snapshot;
+		saveCheckpoint(); // Persist mid-session state after any metric change
 
 		// Compute sigma for each dimension
 		const results: Record<
@@ -175,7 +197,9 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 	// Event Handlers
 	// -------------------------------------------------------------------------
 
-	// 1. Load historical data and reset tracker at session start
+	// 1. Load historical data and reset tracker at session start.
+	//    Also restore any mid-session live state from a previous extension
+	//    incarnation (survives /reload, pi -r, or any re-initialization).
 	pi.on("session_start", async (_event, ctx) => {
 		log.debug("event: session_start");
 
@@ -183,6 +207,25 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 		sessionCwd = ctx.cwd;
 		tracker.reset();
 		shuttingDown = false;
+
+		// Restore live state if one exists for this session
+		const live = await loadLiveState(sessionId);
+		if (live) {
+			tracker.importRawState({
+				thinkingSteps: live.thinkingSteps,
+				userQuestions: live.userQuestions,
+				agentTurns: live.agentTurns,
+				toolTypes: live.toolTypes,
+			});
+			log.info(
+				"whimsical:restore sessionId=%s thinkingSteps=%d userQuestions=%d agentTurns=%d toolTypes=%d",
+				sessionId,
+				live.thinkingSteps,
+				live.userQuestions,
+				live.agentTurns,
+				live.toolTypes.length,
+			);
+		}
 
 		// Load historical session data
 		const sessions = await loadSessions();
@@ -225,10 +268,11 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 		startTicking(ctx);
 	});
 
-	// 6. On turn_end: track turns, clear working message, stop ticking
+	// 6. On turn_end: track turns, persist checkpoint, clear message, stop ticking
 	pi.on("turn_end", async (_event, ctx) => {
 		log.debug("event: turn_end");
 		tracker.incrementAgentTurns();
+		saveCheckpoint(); // Persist at turn boundary (safe checkpoint)
 		stopTicking();
 		ctx.ui.setWorkingMessage(); // Reset to default
 	});
@@ -248,6 +292,7 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 				cwd: sessionCwd ?? ctx.cwd,
 				metrics,
 			});
+			await deleteLiveState(sessionId); // Clean up mid-session state
 			log.info(
 				"whimsical:persist sessionId=%s thinkingSteps=%d avgTurns=%s questions=%d tools=%d",
 				sessionId,
