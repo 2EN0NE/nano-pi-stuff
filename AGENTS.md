@@ -194,23 +194,13 @@ isIdle = () => !this.isStreaming
 - 要监听 idle 状态用 `agent_settled`，不是 `agent_end`
 - `agent_end` 后虽然 `isIdle()` 可能仍 false，但可以用 `compactingInProgress` flag 防止多实例冲突
 
-### 3. `complete()` 的 Auth 解析不会走 Pi 的 ModelRegistry
+### 3. `complete()` 调用全流程注意事项
 
-`@earendil-works/pi-ai` 的 `complete()` 函数内部通过 `getEnvApiKey(model.provider)` 解析 API Key，**只检查环境变量**：
+`@earendil-works/pi-ai` 的 `complete()` 有两处文档未提及的细节：
 
-```typescript
-// pi-ai 内部（provider/openai-completions.js）:
-const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-```
+**① Auth 解析不会走 Pi 的 ModelRegistry**
 
-但用户通常通过 Pi 的 `models.json`、`settings.json` 或 auth storage 配置 API Key，**不一定会设置环境变量**。
-
-Pi 正常流程通过 `ModelRegistry.getApiKeyAndHeaders(model)` 解析 auth，它会依次检查：
-1. auth storage（OAuth/登录状态）
-2. provider config 中的 `apiKey` 字段（来自 models.json）
-3. 环境变量（最后回退）
-
-**正确做法**：调用 `complete()` 前，必须先用 `ctx.modelRegistry.getApiKeyAndHeaders(modelInfo)` 显式解析 auth，并将 `apiKey` 和 `headers` 传入 options：
+内部通过 `getEnvApiKey(model.provider)` 解析 API Key，**只检查环境变量**。但用户通常通过 `models.json` / auth storage 配置 Key。必须手动调用 `ctx.modelRegistry.getApiKeyAndHeaders()` 解析后传入 options：
 
 ```typescript
 const auth = await ctx.modelRegistry.getApiKeyAndHeaders(modelInfo);
@@ -222,15 +212,11 @@ if (auth.ok) {
 const response = await complete(modelInfo, { messages }, options as any);
 ```
 
-### 4. `Response.errorMessage` 在 `stopReason: "error"` 时有值
+**② `Response.errorMessage` 在 `stopReason: "error"` 时有值**
 
-当 `complete()` 返回的 `response.stopReason === "error"` 时，`response.errorMessage` 包含错误详情（如 "401 Unauthorized"）。这个字段在文档中没有明确说明。
-
-**使用方式**：
 ```typescript
 if (response.stopReason === "error") {
   log.error("Model call failed", { errorMessage: response.errorMessage });
-  // response.errorMessage 包含 API 返回的具体错误
 }
 ```
 
@@ -336,6 +322,19 @@ if (live) tracker.importRawState(live);
 **反模式**：只在 `session_shutdown` 保存，或只保存比率不保存原始计数。
 
 > 具体实现参考：`extensions/tui/whimsical/metrics.ts` / `index.ts` / `session-store.ts` 中的 save/load/delete checkpoint 完整实现。
+
+### 11. Pi 挂起调试：扩展 vs 无扩展对比诊断
+
+当 Pi 在运行中卡住（5min+ 无响应）而 `pi -ne`（无扩展模式）正常，根因通常是某个扩展的 `complete()` 调用未正确处理 API 错误，或事件处理器进入无限循环。
+
+**诊断步骤**：
+
+1. **确认同步状态**：检查 `.pi/extensions/` 下对应扩展是否与源码版本一致——`ls -la .pi/extensions/<name>/` 对比文件时间戳，不一致则重新 sync
+2. **检查 `complete()` 错误处理**：确认每次调用有 `stopReason === "error"` 的日志和超时 signal 传递
+3. **清 jiti 缓存**：`rm -rf node_modules/.cache/jiti` 后重启
+4. **逐个排除**：在 `models.json` 的 `extensions` 列表中逐个去除扩展定位问题扩展
+
+**反模式**：只在 `-ne` 模式确认正常即断定是"Pi 本身的问题"，必须先排除上述三项。
 
 ---
 
