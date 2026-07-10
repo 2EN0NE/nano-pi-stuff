@@ -1,9 +1,9 @@
 /**
- * Files Extension
+ * Files Extension（文件浏览器）
  *
- * /files command lists files in the current git tree (plus session-referenced files)
- * and offers quick actions like reveal, open, edit, or diff.
- * /diff is kept as an alias to the same picker.
+ * /files 命令列出当前 git 仓库中的文件（以及会话中引用/修改过的文件），
+ * 并提供快速操作：在 Finder 中显示、打开、编辑、diff、Quick Look、添加到提示词等。
+ * /diff 命令直接打开文件选择器，选中 tracked 文件后自动打开 VS Code diff 视图。
  */
 
 import { spawnSync } from "node:child_process";
@@ -34,9 +34,12 @@ import {
 	SelectList,
 	Spacer,
 	Text,
+	truncateToWidth,
 	type TUI,
 } from "@earendil-works/pi-tui";
+import { createLogger } from "@zenone/pi-logger";
 
+const log = createLogger("files");
 
 type ContentBlock = {
 	type?: string;
@@ -705,23 +708,47 @@ const getEditableContent = (target: FileEntry): EditCheckResult => {
 
 const showActionSelector = async (
 	ctx: ExtensionContext,
-	options: { canQuickLook: boolean; canEdit: boolean; canDiff: boolean },
+	options: {
+		canQuickLook: boolean;
+		canEdit: boolean;
+		canViewChanges: boolean;
+		canFileDiff: boolean;
+	},
 ): Promise<
-	"reveal" | "quicklook" | "open" | "edit" | "addToPrompt" | "diff" | null
+	| "reveal"
+	| "quicklook"
+	| "open"
+	| "edit"
+	| "addToPrompt"
+	| "viewChanges"
+	| "fileDiff"
+	| null
 > => {
 	const actions: SelectItem[] = [
-		...(options.canDiff ? [{ value: "diff", label: "Diff in VS Code" }] : []),
-		{ value: "reveal", label: "Reveal in Finder" },
-		{ value: "open", label: "Open" },
-		{ value: "addToPrompt", label: "Add to prompt" },
-		...(options.canQuickLook
-			? [{ value: "quicklook", label: "Open in Quick Look" }]
+		...(options.canViewChanges
+			? [{ value: "viewChanges", label: "查看 git 变更" }]
 			: []),
-		...(options.canEdit ? [{ value: "edit", label: "Edit" }] : []),
+		...(options.canFileDiff
+			? [{ value: "fileDiff", label: "进行 diff 对比" }]
+			: []),
+		{ value: "reveal", label: "在 Finder 中显示" },
+		{ value: "open", label: "打开" },
+		{ value: "addToPrompt", label: "添加到提示词" },
+		...(options.canQuickLook
+			? [{ value: "quicklook", label: "Quick Look 预览" }]
+			: []),
+		...(options.canEdit ? [{ value: "edit", label: "编辑" }] : []),
 	];
 
 	return ctx.ui.custom<
-		"reveal" | "quicklook" | "open" | "edit" | "addToPrompt" | "diff" | null
+		| "reveal"
+		| "quicklook"
+		| "open"
+		| "edit"
+		| "addToPrompt"
+		| "viewChanges"
+		| "fileDiff"
+		| null
 	>((tui, theme, _kb, done) => {
 		const container = new Container();
 		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
@@ -745,7 +772,8 @@ const showActionSelector = async (
 					| "open"
 					| "edit"
 					| "addToPrompt"
-					| "diff",
+					| "viewChanges"
+					| "fileDiff",
 			);
 		selectList.onCancel = () => done(null);
 
@@ -776,6 +804,7 @@ const openPath = async (
 	target: FileEntry,
 ): Promise<void> => {
 	if (!existsSync(target.resolvedPath)) {
+		log.warn("openPath 失败：文件不存在", { 路径: target.displayPath });
 		ctx.ui.notify(`File not found: ${target.displayPath}`, "error");
 		return;
 	}
@@ -785,8 +814,15 @@ const openPath = async (
 	if (result.code !== 0) {
 		const errorMessage =
 			result.stderr?.trim() || `Failed to open ${target.displayPath}`;
+		log.error("openPath 执行失败", {
+			命令: command,
+			路径: target.displayPath,
+			错误: errorMessage,
+		});
 		ctx.ui.notify(errorMessage, "error");
+		return;
 	}
+	log.debug("openPath 成功", { 路径: target.displayPath });
 };
 
 const openExternalEditor = (
@@ -826,10 +862,15 @@ const editPath = async (
 ): Promise<void> => {
 	const editorCmd = process.env.VISUAL || process.env.EDITOR;
 	if (!editorCmd) {
+		log.warn("editPath 跳过：未设置 $VISUAL/$EDITOR");
 		ctx.ui.notify("No editor configured. Set $VISUAL or $EDITOR.", "warning");
 		return;
 	}
 
+	log.debug("editPath 启动外部编辑器", {
+		编辑器: editorCmd,
+		文件: target.displayPath,
+	});
 	const updated = await ctx.ui.custom<string | null>(
 		(tui, theme, _kb, done) => {
 			const status = new Text(theme.fg("dim", `Opening ${editorCmd}...`));
@@ -844,13 +885,19 @@ const editPath = async (
 	);
 
 	if (updated === null) {
+		log.info("editPath 取消编辑", { 文件: target.displayPath });
 		ctx.ui.notify("Edit cancelled", "info");
 		return;
 	}
 
 	try {
 		writeFileSync(target.resolvedPath, updated, "utf8");
-	} catch {
+		log.info("editPath 保存成功", { 文件: target.displayPath });
+	} catch (err) {
+		log.error("editPath 保存失败", {
+			文件: target.displayPath,
+			错误: String(err),
+		});
 		ctx.ui.notify(`Failed to save ${target.displayPath}`, "error");
 	}
 };
@@ -861,6 +908,7 @@ const revealPath = async (
 	target: FileEntry,
 ): Promise<void> => {
 	if (!existsSync(target.resolvedPath)) {
+		log.warn("revealPath 失败：文件不存在", { 路径: target.displayPath });
 		ctx.ui.notify(`File not found: ${target.displayPath}`, "error");
 		return;
 	}
@@ -879,10 +927,19 @@ const revealPath = async (
 		];
 	}
 
+	log.debug("revealPath 执行", {
+		路径: target.displayPath,
+		命令: command,
+		参数: args,
+	});
 	const result = await pi.exec(command, args);
 	if (result.code !== 0) {
 		const errorMessage =
 			result.stderr?.trim() || `Failed to reveal ${target.displayPath}`;
+		log.error("revealPath 执行失败", {
+			路径: target.displayPath,
+			错误: errorMessage,
+		});
 		ctx.ui.notify(errorMessage, "error");
 	}
 };
@@ -893,11 +950,13 @@ const quickLookPath = async (
 	target: FileEntry,
 ): Promise<void> => {
 	if (process.platform !== "darwin") {
+		log.warn("quickLookPath 跳过：非 macOS 平台");
 		ctx.ui.notify("Quick Look is only available on macOS", "warning");
 		return;
 	}
 
 	if (!existsSync(target.resolvedPath)) {
+		log.warn("quickLookPath 失败：文件不存在", { 路径: target.displayPath });
 		ctx.ui.notify(`File not found: ${target.displayPath}`, "error");
 		return;
 	}
@@ -905,16 +964,235 @@ const quickLookPath = async (
 	const isDirectory =
 		target.isDirectory || statSync(target.resolvedPath).isDirectory();
 	if (isDirectory) {
+		log.warn("quickLookPath 跳过：不支持目录", { 路径: target.displayPath });
 		ctx.ui.notify("Quick Look only works on files", "warning");
 		return;
 	}
 
+	log.debug("quickLookPath 执行", { 路径: target.displayPath });
 	const result = await pi.exec("qlmanage", ["-p", target.resolvedPath]);
 	if (result.code !== 0) {
 		const errorMessage =
 			result.stderr?.trim() || `Failed to Quick Look ${target.displayPath}`;
+		log.error("quickLookPath 执行失败", {
+			路径: target.displayPath,
+			错误: errorMessage,
+		});
 		ctx.ui.notify(errorMessage, "error");
 	}
+};
+
+const getDiffToolCommand = async (
+	pi: ExtensionAPI,
+): Promise<{
+	cmd: string;
+	args: (left: string, right: string) => string[];
+} | null> => {
+	// 1. 检测 $VISUAL/$EDITOR → 使用 nvim -d / vimdiff
+	const editorCmd = process.env.VISUAL || process.env.EDITOR || "";
+	const editorBase = path.basename(editorCmd.split(" ")[0] ?? "");
+	if (editorBase.includes("nvim") || editorBase === "neovim") {
+		log.debug("检测到 $EDITOR=nvim，使用 nvim -d --clean");
+		return {
+			cmd: "nvim",
+			args: (left, right) => ["-d", "--clean", left, right],
+		};
+	}
+	if (editorBase.includes("vim")) {
+		log.debug("检测到 $EDITOR=vim，使用 vimdiff");
+		return {
+			cmd: "vimdiff",
+			args: (left, right) => [left, right],
+		};
+	}
+
+	// 2. 检测 git difftool（尊重用户 git config 配置的 difftool）
+	const difftoolCheck = await pi.exec("git", ["config", "--get", "diff.tool"]);
+	if (difftoolCheck.code === 0 && difftoolCheck.stdout.trim()) {
+		log.debug("检测到 git difftool 配置，使用 git difftool", {
+			工具: difftoolCheck.stdout.trim(),
+		});
+		return {
+			cmd: "git",
+			args: (left, right) => [
+				"difftool",
+				"--no-prompt",
+				"--tool",
+				difftoolCheck.stdout.trim(),
+				left,
+				right,
+			],
+		};
+	}
+
+	// 3. 尝试全局 vimdiff
+	const vimCheck = await pi.exec("which", ["vimdiff"]);
+	if (vimCheck.code === 0) {
+		log.debug("使用系统 vimdiff");
+		return {
+			cmd: "vimdiff",
+			args: (left, right) => [left, right],
+		};
+	}
+
+	// 4. 最后才尝试 VS Code（默认环境）
+	const codeCheck = await pi.exec("which", ["code"]);
+	if (codeCheck.code === 0 && codeCheck.stdout.trim()) {
+		log.debug("未检测到 vim 类工具，回退到 code --diff");
+		return {
+			cmd: "code",
+			args: (left, right) => ["--diff", left, right],
+		};
+	}
+
+	return null;
+};
+
+/** 判断 diff 工具是否是终端类编辑器（vim/nvim 等需要可见终端展示的） */
+const isTerminalBasedTool = (cmd: string): boolean => {
+	const base = path.basename(cmd);
+	return base.includes("vim") || base.includes("nvim") || base === "vi";
+};
+
+/** 询问用户如何展示终端类 diff 工具的结果 */
+const promptDiffDisplayMode = async (
+	ctx: ExtensionContext,
+	inTmux: boolean,
+): Promise<"panel" | "tmux" | null> => {
+	if (!ctx.hasUI) return "panel";
+
+	const options: SelectItem[] = [
+		{
+			value: "panel",
+			label: "Pi 原生面板",
+			description: "在 pi 的 TUI 面板中显示 diff 文本",
+		},
+	];
+	if (inTmux) {
+		options.push({
+			value: "tmux",
+			label: "Tmux 新面板",
+			description: "在 tmux 分屏中打开 vimdiff",
+		});
+	}
+
+	return ctx.ui.custom<"panel" | "tmux" | null>((tui, theme, _kb, done) => {
+		const container = new Container();
+		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+		container.addChild(
+			new Text(theme.fg("accent", theme.bold(" 选择 diff 展示方式")), 0, 0),
+		);
+
+		const list = new SelectList(options, options.length, {
+			selectedPrefix: (text) => theme.fg("accent", text),
+			selectedText: (text) => theme.fg("accent", text),
+			description: (text) => theme.fg("muted", text),
+			scrollInfo: (text) => theme.fg("dim", text),
+			noMatch: (text) => theme.fg("warning", text),
+		});
+		list.onSelect = (item) => done(item.value as "panel" | "tmux");
+		list.onCancel = () => done(null);
+
+		container.addChild(list);
+		container.addChild(
+			new Text(theme.fg("dim", "enter 确认 · esc 取消"), 0, 0),
+		);
+		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+
+		return {
+			render(w: number) {
+				return container.render(w);
+			},
+			invalidate() {
+				container.invalidate();
+			},
+			handleInput(data: string) {
+				list.handleInput(data);
+				tui.requestRender();
+			},
+		};
+	});
+};
+
+/** 在 pi 原生 TUI 面板中展示 diff 文本内容 */
+const showDiffInPiPanel = async (
+	ctx: ExtensionContext,
+	title: string,
+	diffContent: string,
+): Promise<void> => {
+	return ctx.ui.custom<void>((_tui, theme, _kb, done) => {
+		const container = new Container();
+		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+		container.addChild(
+			new Text(theme.fg("accent", theme.bold(` ${title}`)), 0, 0),
+		);
+		container.addChild(new Spacer(1));
+
+		const lines = diffContent.split("\n");
+		// 预留 4 列边距防止溢出
+		const maxLineWidth = 120;
+		for (const raw of lines) {
+			const line =
+				raw.length > maxLineWidth ? truncateToWidth(raw, maxLineWidth) : raw;
+			let styled = line;
+			if (line.startsWith("+")) {
+				styled = theme.fg("success", line);
+			} else if (line.startsWith("-")) {
+				styled = theme.fg("error", line);
+			} else if (line.startsWith("@@")) {
+				styled = theme.fg("warning", line);
+			} else if (
+				line.startsWith("diff --git") ||
+				line.startsWith("---") ||
+				line.startsWith("+++")
+			) {
+				styled = theme.fg("accent", line);
+			}
+			container.addChild(new Text(styled, 0, 0));
+		}
+
+		container.addChild(new Spacer(1));
+		container.addChild(new Text(theme.fg("dim", "按 q 或 esc 关闭"), 0, 0));
+		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+
+		return {
+			render(w: number) {
+				return container.render(w);
+			},
+			invalidate() {
+				container.invalidate();
+			},
+			handleInput(data: string) {
+				if (data === "q" || data === "Escape") {
+					done(undefined);
+				}
+			},
+		};
+	});
+};
+
+/** 在 tmux 中创建新分屏并运行 diff 命令 */
+const showDiffInTmuxSplit = async (
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	cmd: string,
+	args: string[],
+	cwd: string,
+): Promise<void> => {
+	const quotedArgs = args.map((a) => (a.includes(" ") ? `"${a}"` : a));
+	const fullCmd = `${cmd} ${quotedArgs.join(" ")}`;
+
+	log.info("在 tmux 中创建新窗口", { 命令: fullCmd });
+
+	// 不指定 -t，让 tmux 在当前 session 自动分配索引创建新窗口
+	const result = await pi.exec("tmux", ["new-window", "-c", cwd, fullCmd]);
+	if (result.code !== 0) {
+		const errMsg = result.stderr?.trim() || "tmux new-window failed";
+		log.error("tmux 新窗口失败", { 错误: errMsg });
+		ctx.ui.notify(`Tmux new-window failed: ${errMsg}`, "error");
+		return;
+	}
+	ctx.ui.notify("Diff opened in tmux new window", "info");
 };
 
 const openDiff = async (
@@ -924,6 +1202,7 @@ const openDiff = async (
 	gitRoot: string | null,
 ): Promise<void> => {
 	if (!gitRoot) {
+		log.warn("openDiff 跳过：无 git 仓库");
 		ctx.ui.notify("Git repository not found", "warning");
 		return;
 	}
@@ -932,6 +1211,8 @@ const openDiff = async (
 		.relative(gitRoot, target.resolvedPath)
 		.split(path.sep)
 		.join("/");
+	log.debug("openDiff 开始", { 文件: target.displayPath, relativePath });
+
 	const tmpDir = mkdtempSync(path.join(os.tmpdir(), "pi-files-"));
 	const tmpFile = path.join(tmpDir, path.basename(target.displayPath));
 
@@ -947,11 +1228,18 @@ const openDiff = async (
 		if (result.code !== 0) {
 			const errorMessage =
 				result.stderr?.trim() || `Failed to diff ${target.displayPath}`;
+			log.error("openDiff 获取 HEAD 版本失败", {
+				文件: target.displayPath,
+				错误: errorMessage,
+			});
 			ctx.ui.notify(errorMessage, "error");
 			return;
 		}
 		writeFileSync(tmpFile, result.stdout ?? "", "utf8");
 	} else {
+		log.debug("openDiff 文件在 HEAD 中不存在，使用空文件对比", {
+			文件: target.displayPath,
+		});
 		writeFileSync(tmpFile, "", "utf8");
 	}
 
@@ -964,15 +1252,171 @@ const openDiff = async (
 		writeFileSync(workingPath, "", "utf8");
 	}
 
-	const openResult = await pi.exec("code", ["--diff", tmpFile, workingPath], {
+	// 自动检测系统默认 diff 工具
+	const diffTool = await getDiffToolCommand(pi);
+	if (!diffTool) {
+		const msg = "No diff tool found (code, vimdiff, or git difftool)";
+		log.error("openDiff 失败：" + msg);
+		ctx.ui.notify(msg, "error");
+		return;
+	}
+
+	log.info("openDiff: 使用 diff 工具", {
+		文件: target.displayPath,
+		工具: diffTool.cmd,
+		左: tmpFile,
+		右: workingPath,
+	});
+
+	if (isTerminalBasedTool(diffTool.cmd)) {
+		// 终端编辑器 → 询问展示方式
+		const inTmux = !!process.env.TMUX;
+		const mode = await promptDiffDisplayMode(ctx, inTmux);
+		if (!mode) {
+			log.info("openDiff 用户取消 diff");
+			return;
+		}
+
+		if (mode === "tmux") {
+			const diffArgs = diffTool.args(tmpFile, workingPath);
+			await showDiffInTmuxSplit(pi, ctx, diffTool.cmd, diffArgs, gitRoot);
+			log.debug("openDiff tmux 分屏完成", { 文件: target.displayPath });
+			return;
+		}
+
+		// Pi 原生面板：获取 git diff 文本并展示
+		const gitDiffResult = await pi.exec(
+			"git",
+			["diff", "HEAD", "--", relativePath],
+			{ cwd: gitRoot },
+		);
+		const diffText =
+			gitDiffResult.code === 0 && gitDiffResult.stdout
+				? gitDiffResult.stdout
+				: `(no diff output for ${target.displayPath})`;
+		await showDiffInPiPanel(ctx, `Git 变更: ${target.displayPath}`, diffText);
+		log.debug("openDiff pi 面板展示完成", { 文件: target.displayPath });
+		return;
+	}
+
+	// GUI 工具（code --diff 等）→ 直接执行
+	const diffArgs = diffTool.args(tmpFile, workingPath);
+	const openResult = await pi.exec(diffTool.cmd, diffArgs, {
 		cwd: gitRoot,
 	});
 	if (openResult.code !== 0) {
 		const errorMessage =
 			openResult.stderr?.trim() ||
 			`Failed to open diff for ${target.displayPath}`;
+		log.error("openDiff 打开 diff 失败", {
+			文件: target.displayPath,
+			工具: diffTool.cmd,
+			错误: errorMessage,
+		});
 		ctx.ui.notify(errorMessage, "error");
+		return;
 	}
+	log.debug("openDiff 成功", { 文件: target.displayPath });
+};
+
+/**
+ * 打开两个文件的 diff 对比（不涉及 git，直接比较文件内容）
+ * 使用系统检测到的 diff 工具（code --diff / vimdiff / git difftool）
+ */
+const openFilesDiff = async (
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	left: FileEntry,
+	right: FileEntry,
+): Promise<void> => {
+	log.info("openFilesDiff 开始", {
+		左: left.displayPath,
+		右: right.displayPath,
+	});
+
+	const diffTool = await getDiffToolCommand(pi);
+	if (!diffTool) {
+		const msg = "No diff tool found (code, vimdiff, or git difftool)";
+		log.error("openFilesDiff 失败：" + msg);
+		ctx.ui.notify(msg, "error");
+		return;
+	}
+
+	const leftPath = existsSync(left.resolvedPath)
+		? left.resolvedPath
+		: path.join(
+				os.tmpdir(),
+				`pi-files-empty-left-${path.basename(left.displayPath)}`,
+			);
+	const rightPath = existsSync(right.resolvedPath)
+		? right.resolvedPath
+		: path.join(
+				os.tmpdir(),
+				`pi-files-empty-right-${path.basename(right.displayPath)}`,
+			);
+
+	if (!existsSync(left.resolvedPath)) {
+		writeFileSync(leftPath, "", "utf8");
+	}
+	if (!existsSync(right.resolvedPath)) {
+		writeFileSync(rightPath, "", "utf8");
+	}
+
+	log.info("openFilesDiff: 使用 diff 工具", {
+		工具: diffTool.cmd,
+		左: leftPath,
+		右: rightPath,
+	});
+
+	if (isTerminalBasedTool(diffTool.cmd)) {
+		// 终端编辑器 → 询问展示方式
+		const inTmux = !!process.env.TMUX;
+		const mode = await promptDiffDisplayMode(ctx, inTmux);
+		if (!mode) {
+			log.info("openFilesDiff 用户取消");
+			return;
+		}
+
+		if (mode === "tmux") {
+			const diffArgs = diffTool.args(leftPath, rightPath);
+			await showDiffInTmuxSplit(pi, ctx, diffTool.cmd, diffArgs, ctx.cwd);
+			log.debug("openFilesDiff tmux 分屏完成");
+			return;
+		}
+
+		// Pi 原生面板：使用系统 diff 命令获取文本
+		const diffResult = await pi.exec("diff", [leftPath, rightPath]);
+		const diffText =
+			diffResult.code === 0
+				? "(两个文件内容一致)"
+				: diffResult.stdout || "(diff 无输出)";
+		await showDiffInPiPanel(
+			ctx,
+			`文件对比: ${left.displayPath} ↔ ${right.displayPath}`,
+			diffText,
+		);
+		log.debug("openFilesDiff pi 面板展示完成");
+		return;
+	}
+
+	// GUI 工具（code --diff 等）→ 直接执行
+	const diffArgs = diffTool.args(leftPath, rightPath);
+	const openResult = await pi.exec(diffTool.cmd, diffArgs);
+	if (openResult.code !== 0) {
+		const errorMessage =
+			openResult.stderr?.trim() ||
+			`Failed to diff ${left.displayPath} vs ${right.displayPath}`;
+		log.error("openFilesDiff 打开 diff 失败", {
+			工具: diffTool.cmd,
+			错误: errorMessage,
+		});
+		ctx.ui.notify(errorMessage, "error");
+		return;
+	}
+	log.debug("openFilesDiff 成功", {
+		左: left.displayPath,
+		右: right.displayPath,
+	});
 };
 
 const addFileToPrompt = (ctx: ExtensionContext, target: FileEntry): void => {
@@ -981,31 +1425,40 @@ const addFileToPrompt = (ctx: ExtensionContext, target: FileEntry): void => {
 	const current = ctx.ui.getEditorText();
 	const separator = current && !current.endsWith(" ") ? " " : "";
 	ctx.ui.setEditorText(`${current}${separator}${mention}`);
+	log.info("addToPrompt: 文件引用已添加到输入框", { 文件: mentionTarget });
 	ctx.ui.notify(`Added ${mention} to prompt`, "info");
 };
+
+const buildSelectItems = (
+	files: FileEntry[],
+	selectedPaths: Set<string>,
+): SelectItem[] =>
+	files.map((file) => {
+		const checkbox = selectedPaths.has(file.canonicalPath) ? "☑ " : "☐ ";
+		const directoryLabel = file.isDirectory ? " [directory]" : "";
+		const statusSuffix = file.status ? ` [${file.status}]` : "";
+		return {
+			value: file.canonicalPath,
+			label: `${checkbox}${file.displayPath}${directoryLabel}${statusSuffix}`,
+		};
+	});
 
 const showFileSelector = async (
 	ctx: ExtensionContext,
 	files: FileEntry[],
 	selectedPath?: string | null,
 	gitRoot?: string | null,
-): Promise<{ selected: FileEntry | null; quickAction: "diff" | null }> => {
-	const items: SelectItem[] = files.map((file) => {
-		const directoryLabel = file.isDirectory ? " [directory]" : "";
-		const statusSuffix = file.status ? ` [${file.status}]` : "";
-		return {
-			value: file.canonicalPath,
-			label: `${file.displayPath}${directoryLabel}${statusSuffix}`,
-		};
-	});
+): Promise<{ selected: FileEntry[]; quickAction: "diff" | null }> => {
+	const selectedPaths = new Set<string>();
+	const allItems = buildSelectItems(files, selectedPaths);
 
 	let quickAction: "diff" | null = null;
-	const selection = await ctx.ui.custom<string | null>(
+	const selectionResult = await ctx.ui.custom<string[] | null>(
 		(tui, theme, keybindings, done) => {
 			const container = new Container();
 			container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
 			container.addChild(
-				new Text(theme.fg("accent", theme.bold(" Select file")), 0, 0),
+				new Text(theme.fg("accent", theme.bold(" Select file(s)")), 0, 0),
 			);
 
 			const searchInput = new Input();
@@ -1018,7 +1471,7 @@ const showFileSelector = async (
 				new Text(
 					theme.fg(
 						"dim",
-						"Type to filter • enter to select • ctrl+shift+d diff • esc to cancel",
+						"Type to filter • space toggle • enter confirm • ctrl+shift+d diff • esc cancel",
 					),
 					0,
 					0,
@@ -1026,7 +1479,7 @@ const showFileSelector = async (
 			);
 			container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
 
-			let filteredItems = items;
+			let filteredItems = allItems;
 			let selectList: SelectList | null = null;
 
 			const updateList = () => {
@@ -1051,7 +1504,7 @@ const showFileSelector = async (
 					},
 				);
 
-				if (selectedPath) {
+				if (selectedPath && !selectedPaths.size) {
 					const index = filteredItems.findIndex(
 						(item) => item.value === selectedPath,
 					);
@@ -1060,21 +1513,43 @@ const showFileSelector = async (
 					}
 				}
 
-				selectList.onSelect = (item) => done(item.value as string);
+				selectList.onSelect = () => {
+					const values =
+						selectedPaths.size > 0
+							? Array.from(selectedPaths)
+							: selectList?.getSelectedItem()
+								? [selectList.getSelectedItem()!.value]
+								: [];
+					done(values);
+				};
 				selectList.onCancel = () => done(null);
 
 				listContainer.addChild(selectList);
 			};
 
-			const applyFilter = () => {
+			const refreshItems = () => {
 				const query = searchInput.getValue();
+				const currentItems = buildSelectItems(files, selectedPaths);
 				filteredItems = query
 					? fuzzyFilter(
-							items,
+							currentItems,
 							query,
 							(item) => `${item.label} ${item.value} ${item.description ?? ""}`,
 						)
-					: items;
+					: currentItems;
+				updateList();
+			};
+
+			const applyFilter = () => {
+				const query = searchInput.getValue();
+				const currentItems = buildSelectItems(files, selectedPaths);
+				filteredItems = query
+					? fuzzyFilter(
+							currentItems,
+							query,
+							(item) => `${item.label} ${item.value} ${item.description ?? ""}`,
+						)
+					: currentItems;
 				updateList();
 			};
 
@@ -1088,11 +1563,42 @@ const showFileSelector = async (
 					container.invalidate();
 				},
 				handleInput(data: string) {
+					// Space: toggle multi-select for the focused item
+					if (data === " ") {
+						const focused = selectList?.getSelectedItem();
+						if (focused) {
+							const wasSelected = selectedPaths.has(focused.value);
+							if (wasSelected) {
+								selectedPaths.delete(focused.value);
+							} else {
+								selectedPaths.add(focused.value);
+							}
+							log.debug("多选切换", {
+								文件: focused.value,
+								已选: selectedPaths.size,
+							});
+							// 保存光标位置后刷新
+							const focusedVal = selectList?.getSelectedItem()?.value;
+							refreshItems();
+							// 恢复光标位置
+							if (focusedVal && selectList) {
+								const newIdx = filteredItems.findIndex(
+									(item) => item.value === focusedVal,
+								);
+								if (newIdx >= 0) {
+									selectList.setSelectedIndex(newIdx);
+								}
+							}
+							tui.requestRender();
+						}
+						return;
+					}
+
 					if (matchesKey(data, "ctrl+shift+d")) {
-						const selected = selectList?.getSelectedItem();
-						if (selected) {
+						const focused = selectList?.getSelectedItem();
+						if (focused) {
 							const file = files.find(
-								(entry) => entry.canonicalPath === selected.value,
+								(entry) => entry.canonicalPath === focused.value,
 							);
 							const canDiff =
 								file?.isTracked && !file.isDirectory && Boolean(gitRoot);
@@ -1104,7 +1610,7 @@ const showFileSelector = async (
 								return;
 							}
 							quickAction = "diff";
-							done(selected.value as string);
+							done([focused.value]);
 							return;
 						}
 					}
@@ -1132,9 +1638,11 @@ const showFileSelector = async (
 		},
 	);
 
-	const selected = selection
-		? (files.find((file) => file.canonicalPath === selection) ?? null)
-		: null;
+	const selected = selectionResult
+		? selectionResult
+				.map((path) => files.find((f) => f.canonicalPath === path))
+				.filter((f): f is FileEntry => f !== undefined)
+		: [];
 	return { selected, quickAction };
 };
 
@@ -1143,11 +1651,14 @@ const runFileBrowser = async (
 	ctx: ExtensionContext,
 ): Promise<void> => {
 	if (!ctx.hasUI) {
+		log.warn("/files 被调用但当前不是交互模式");
 		ctx.ui.notify("Files requires interactive mode", "error");
 		return;
 	}
 
+	log.info("/files 命令启动");
 	const { files, gitRoot } = await buildFileEntries(pi, ctx);
+	log.debug("文件列表构建完成", { 文件数: files.length, 有Git仓库: !!gitRoot });
 	if (files.length === 0) {
 		ctx.ui.notify("No files found", "info");
 		return;
@@ -1161,91 +1672,288 @@ const runFileBrowser = async (
 			lastSelectedPath,
 			gitRoot,
 		);
-		if (!selected) {
+		if (selected.length === 0) {
 			ctx.ui.notify("Files cancelled", "info");
 			return;
 		}
 
-		lastSelectedPath = selected.canonicalPath;
+		// 如果只有单个文件，记住它作为下次的 pre-select
+		if (selected.length === 1) {
+			lastSelectedPath = selected[0].canonicalPath;
+		}
 
-		const canQuickLook = process.platform === "darwin" && !selected.isDirectory;
-		const editCheck = getEditableContent(selected);
-		const canDiff =
-			selected.isTracked && !selected.isDirectory && Boolean(gitRoot);
-
-		if (quickAction === "diff") {
-			await openDiff(pi, ctx, selected, gitRoot);
+		// 单个文件快速 diff（ctrl+shift+d）
+		if (quickAction === "diff" && selected.length === 1) {
+			await openDiff(pi, ctx, selected[0], gitRoot);
 			continue;
 		}
 
+		/**
+		 * 条件说明：
+		 * - viewChanges（查看 git 变更）: 文件有 git 变更状态（如 M/A/D），且处于 git 仓库中
+		 * - fileDiff（进行 diff 对比）: 恰好选中 2 个文件，且都不是目录
+		 */
+		const allHaveChanges =
+			Boolean(gitRoot) &&
+			selected.every(
+				(f) =>
+					!f.isDirectory &&
+					f.status !== undefined &&
+					f.status !== "" &&
+					f.status !== "??",
+			);
+		const canFileDiff =
+			selected.length === 2 && selected.every((f) => !f.isDirectory);
+		const allCanQuickLook =
+			process.platform === "darwin" && selected.every((f) => !f.isDirectory);
+		log.debug("action 可用性检查", {
+			allHaveChanges,
+			canFileDiff,
+			allCanQuickLook,
+			selectedCount: selected.length,
+			gitRoot: !!gitRoot,
+			selectedFiles: selected.map((f) => ({
+				file: f.displayPath,
+				isTracked: f.isTracked,
+				isDir: f.isDirectory,
+				status: f.status,
+			})),
+		});
+
+		const allCanEdit = selected.every((f) => {
+			const e = getEditableContent(f);
+			return e.allowed;
+		});
+
 		const action = await showActionSelector(ctx, {
-			canQuickLook,
-			canEdit: editCheck.allowed,
-			canDiff,
+			canQuickLook: allCanQuickLook,
+			canEdit: allCanEdit,
+			canViewChanges: allHaveChanges,
+			canFileDiff,
 		});
 		if (!action) {
 			continue;
 		}
 
-		switch (action) {
-			case "quicklook":
-				await quickLookPath(pi, ctx, selected);
-				break;
-			case "open":
-				await openPath(pi, ctx, selected);
-				break;
-			case "edit":
-				if (!editCheck.allowed || editCheck.content === undefined) {
-					ctx.ui.notify(editCheck.reason ?? "File cannot be edited", "warning");
+		// 应用操作到所有选中的文件
+		for (const file of selected) {
+			switch (action) {
+				case "quicklook":
+					log.info("操作: quicklook", { 文件: file.displayPath });
+					await quickLookPath(pi, ctx, file);
+					break;
+				case "open":
+					log.info("操作: open", { 文件: file.displayPath });
+					await openPath(pi, ctx, file);
+					break;
+				case "edit": {
+					const ec = getEditableContent(file);
+					if (!ec.allowed || ec.content === undefined) {
+						log.warn("操作: edit 拒绝", {
+							文件: file.displayPath,
+							原因: ec.reason,
+						});
+						ctx.ui.notify(ec.reason ?? "File cannot be edited", "warning");
+						break;
+					}
+					log.info("操作: edit", { 文件: file.displayPath });
+					await editPath(ctx, file, ec.content);
 					break;
 				}
-				await editPath(ctx, selected, editCheck.content);
-				break;
-			case "addToPrompt":
-				addFileToPrompt(ctx, selected);
-				break;
-			case "diff":
-				await openDiff(pi, ctx, selected, gitRoot);
-				break;
-			default:
-				await revealPath(pi, ctx, selected);
-				break;
+				case "addToPrompt":
+					log.info("操作: addToPrompt", { 文件: file.displayPath });
+					addFileToPrompt(ctx, file);
+					break;
+				case "viewChanges":
+					log.info("操作: viewChanges", { 文件: file.displayPath });
+					await openDiff(pi, ctx, file, gitRoot);
+					break;
+				case "fileDiff":
+					// fileDiff 只有 2 个文件时出现，直接对两者对比
+					if (selected.length === 2) {
+						log.info("操作: fileDiff", {
+							左: selected[0].displayPath,
+							右: selected[1].displayPath,
+						});
+						await openFilesDiff(pi, ctx, selected[0], selected[1]);
+						break;
+					}
+					break;
+				default:
+					log.info("操作: reveal", { 文件: file.displayPath });
+					await revealPath(pi, ctx, file);
+					break;
+			}
+		}
+	}
+};
+
+const runDiffBrowser = async (
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+): Promise<void> => {
+	if (!ctx.hasUI) {
+		log.warn("/diff 被调用但当前不是交互模式");
+		ctx.ui.notify("Diff requires interactive mode", "error");
+		return;
+	}
+
+	log.info("/diff 命令启动");
+	const { files, gitRoot } = await buildFileEntries(pi, ctx);
+	log.debug("文件列表构建完成", { 文件数: files.length, 有Git仓库: !!gitRoot });
+
+	if (files.length === 0) {
+		ctx.ui.notify("No files found", "info");
+		return;
+	}
+
+	let lastSelectedPath: string | null = null;
+	while (true) {
+		const { selected } = await showFileSelector(
+			ctx,
+			files,
+			lastSelectedPath,
+			gitRoot,
+		);
+		if (selected.length === 0) {
+			log.info("/diff 用户取消选择");
+			ctx.ui.notify("Diff cancelled", "info");
+			return;
+		}
+
+		if (selected.length === 1) {
+			lastSelectedPath = selected[0].canonicalPath;
+		}
+
+		const diffable = selected.filter(
+			(f) => f.isTracked && !f.isDirectory && Boolean(gitRoot),
+		);
+		const nonDiffable = selected.filter(
+			(f) => !(f.isTracked && !f.isDirectory && Boolean(gitRoot)),
+		);
+
+		if (diffable.length > 0) {
+			log.info("/diff: 直接打开 diff", { 文件数: diffable.length });
+			for (const file of diffable) {
+				await openDiff(pi, ctx, file, gitRoot);
+			}
+			if (nonDiffable.length === 0) return;
+		}
+
+		// 不可 diff 的文件显示回退操作
+		if (nonDiffable.length > 0) {
+			for (const file of nonDiffable) {
+				log.warn("/diff 跳过：文件不可 diff", {
+					文件: file.displayPath,
+					原因: file.isDirectory
+						? "是目录"
+						: !file.isTracked
+							? "不是 tracked 文件"
+							: "无 git 仓库",
+				});
+			}
+
+			const anyCanQuickLook =
+				process.platform === "darwin" &&
+				nonDiffable.some((f) => !f.isDirectory);
+			const anyCanEdit = nonDiffable.some((f) => getEditableContent(f).allowed);
+
+			const action = await showActionSelector(ctx, {
+				canQuickLook: anyCanQuickLook,
+				canEdit: anyCanEdit,
+				canViewChanges: false,
+				canFileDiff: false,
+			});
+			if (!action) continue;
+
+			for (const file of nonDiffable) {
+				switch (action) {
+					case "quicklook":
+						log.info("/diff 回退操作: quicklook", { 文件: file.displayPath });
+						await quickLookPath(pi, ctx, file);
+						break;
+					case "open":
+						log.info("/diff 回退操作: open", { 文件: file.displayPath });
+						await openPath(pi, ctx, file);
+						break;
+					case "edit": {
+						const ec = getEditableContent(file);
+						if (!ec.allowed || ec.content === undefined) {
+							log.warn("/diff 回退操作: edit 拒绝", {
+								文件: file.displayPath,
+								原因: ec.reason,
+							});
+							ctx.ui.notify(ec.reason ?? "File cannot be edited", "warning");
+							break;
+						}
+						log.info("/diff 回退操作: edit", { 文件: file.displayPath });
+						await editPath(ctx, file, ec.content);
+						break;
+					}
+					case "addToPrompt":
+						log.info("/diff 回退操作: addToPrompt", { 文件: file.displayPath });
+						addFileToPrompt(ctx, file);
+						break;
+					default:
+						log.info("/diff 回退操作: reveal", { 文件: file.displayPath });
+						await revealPath(pi, ctx, file);
+						break;
+				}
+			}
 		}
 	}
 };
 
 export default function (pi: ExtensionAPI): void {
+	log.info("files 扩展已加载");
+
 	pi.registerCommand("files", {
-		description: "Browse files with git status and session references",
+		description:
+			"浏览文件（含 git 状态和会话引用），支持 reveal/open/edit/diff/quicklook",
 		handler: async (_args, ctx) => {
+			log.info("命令 /files 被调用");
 			await runFileBrowser(pi, ctx);
 		},
 	});
 
+	pi.registerCommand("diff", {
+		description:
+			"打开文件选择器，选中 tracked 文件后直接打开 VS Code diff 视图",
+		handler: async (_args, ctx) => {
+			log.info("命令 /diff 被调用");
+			await runDiffBrowser(pi, ctx);
+		},
+	});
+
 	pi.registerShortcut("ctrl+shift+o", {
-		description: "Browse files mentioned in the session",
+		description: "浏览会话中引用的文件",
 		handler: async (ctx) => {
+			log.info("快捷键 ctrl+shift+o 触发：打开文件浏览器");
 			await runFileBrowser(pi, ctx);
 		},
 	});
 
 	pi.registerShortcut("ctrl+shift+f", {
-		description: "Reveal the latest file reference in Finder",
+		description: "在 Finder 中显示最近引用的文件",
 		handler: async (ctx) => {
+			log.info("快捷键 ctrl+shift+f 触发：reveal 最新文件引用");
 			const entries = ctx.sessionManager.getBranch();
 			const latest = findLatestFileReference(entries, ctx.cwd);
 
 			if (!latest) {
+				log.warn("ctrl+shift+f 未找到会话中的文件引用");
 				ctx.ui.notify("No file reference found in the session", "warning");
 				return;
 			}
 
 			const canonical = toCanonicalPath(latest.path);
 			if (!canonical) {
+				log.warn("ctrl+shift+f 引用的文件不存在", { 路径: latest.display });
 				ctx.ui.notify(`File not found: ${latest.display}`, "error");
 				return;
 			}
 
+			log.debug("ctrl+shift+f reveal 文件", { 路径: latest.display });
 			await revealPath(pi, ctx, {
 				canonicalPath: canonical.canonicalPath,
 				resolvedPath: canonical.canonicalPath,
@@ -1263,22 +1971,26 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	pi.registerShortcut("ctrl+shift+r", {
-		description: "Quick Look the latest file reference",
+		description: "Quick Look 最近引用的文件",
 		handler: async (ctx) => {
+			log.info("快捷键 ctrl+shift+r 触发：Quick Look 最新文件引用");
 			const entries = ctx.sessionManager.getBranch();
 			const latest = findLatestFileReference(entries, ctx.cwd);
 
 			if (!latest) {
+				log.warn("ctrl+shift+r 未找到会话中的文件引用");
 				ctx.ui.notify("No file reference found in the session", "warning");
 				return;
 			}
 
 			const canonical = toCanonicalPath(latest.path);
 			if (!canonical) {
+				log.warn("ctrl+shift+r 引用的文件不存在", { 路径: latest.display });
 				ctx.ui.notify(`File not found: ${latest.display}`, "error");
 				return;
 			}
 
+			log.debug("ctrl+shift+r Quick Look 文件", { 路径: latest.display });
 			await quickLookPath(pi, ctx, {
 				canonicalPath: canonical.canonicalPath,
 				resolvedPath: canonical.canonicalPath,
