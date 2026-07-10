@@ -3,8 +3,13 @@
  *
  * This module creates the handler for session_before_compact events.
  * It uses the active profile's model and prompt to generate summaries.
- * Auth is auto-resolved by pi-ai from environment variables (no manual
- * API key resolution needed when using the current Pi model).
+ *
+ * ⚠️ Auth resolution:
+ *   pi-ai's complete() internally uses getEnvApiKey() which ONLY checks env vars.
+ *   But users configure their API key through Pi's model registry (auth storage,
+ *   settings.json, models.json), NOT through env vars. So we MUST resolve auth
+ *   explicitly via ctx.modelRegistry.getApiKeyAndHeaders() and pass apiKey/headers
+ *   in the options. Without this, the model call will fail with an auth error.
  */
 
 import { type Api, type Model, complete } from "@earendil-works/pi-ai";
@@ -163,16 +168,29 @@ ${conversationText}
 		];
 
 		try {
-			// Use pi-ai's complete() with the full Model object.
-			// Auth is auto-resolved from env by pi-ai — no manual API key resolution needed,
-			// which was the root cause of the Google API error in the original implementation.
+			// Resolve auth via Pi's model registry (NOT via pi-ai's getEnvApiKey).
+			// pi-ai's complete() internally uses getEnvApiKey() which only checks env vars,
+			// but users configure their API keys through Pi's model registry (auth storage,
+			// settings.json, models.json). Without explicit resolution, the call fails
+			// with an auth error.
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(modelInfo);
+			const completeOptions: Record<string, unknown> = {
+				maxTokens: 8192,
+				signal,
+			};
+			if (auth.ok) {
+				if (auth.apiKey) completeOptions.apiKey = auth.apiKey;
+				if (auth.headers) completeOptions.headers = auth.headers;
+			} else {
+				log.error("Auth resolution failed:", auth.error);
+				ctx.ui.notify(`Compaction auth failed: ${auth.error}`, "error");
+				return; // fall back to default compaction
+			}
+
 			const response = await complete(
 				modelInfo,
 				{ messages: summaryMessages },
-				{
-					maxTokens: 8192,
-					signal,
-				},
+				completeOptions as any,
 			);
 
 			// Extract summary: prefer text content, fall back to thinking blocks,
@@ -212,8 +230,15 @@ ${conversationText}
 
 			if (!summary.trim()) {
 				if (!signal.aborted) {
+					const errorDetail = response.errorMessage
+						? `: ${response.errorMessage}`
+						: "";
+					log.error("Empty compaction response", {
+						stopReason: response.stopReason,
+						errorMessage: response.errorMessage,
+					});
 					ctx.ui.notify(
-						`Compaction response had no content (stopReason: ${response.stopReason}), using default`,
+						`Compaction response had no content (stopReason: ${response.stopReason}${errorDetail}), using default`,
 						"warning",
 					);
 				}
