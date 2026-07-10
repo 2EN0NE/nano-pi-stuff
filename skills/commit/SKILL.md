@@ -1,35 +1,35 @@
 ---
 name: commit
-description: "Read this skill before making git commits"
+description: "在创建 git 提交前阅读此技能"
 ---
 
-Create a git commit for the current changes using a concise Conventional Commits-style subject.
+使用简洁的 Conventional Commits 风格主题为当前更改创建 git 提交。
 
-## Format
+## 格式
 
 `<type>(<scope>): <summary>`
 
-- `type` REQUIRED. Use `feat` for new features, `fix` for bug fixes. Other common types: `docs`, `refactor`, `chore`, `test`, `perf`.
-- `scope` OPTIONAL. Short noun in parentheses for the affected area (e.g., `api`, `parser`, `ui`).
-- `summary` REQUIRED. Short, imperative, <= 72 chars, no trailing period.
+- `type` **必填**。新功能用 `feat`，错误修复用 `fix`。其他常见类型：`docs`、`refactor`、`chore`、`test`、`perf`。
+- `scope` **可选**。括号内的影响范围简写名词（如 `api`、`parser`、`ui`）。
+- `summary` **必填**。简短祈使句，≤ 72 字符，末尾不加句号。
 
-## Notes
+## 注意事项
 
-- Body is OPTIONAL. If needed, add a blank line after the subject and write short paragraphs.
-- Do NOT include breaking-change markers or footers.
-- Do NOT add sign-offs (no `Signed-off-by`).
-- Only commit; do NOT push.
-- If it is unclear whether a file should be included, ask the user which files to commit.
-- Treat any caller-provided arguments as additional commit guidance. Common patterns:
-  - Freeform instructions should influence scope, summary, and body.
-  - File paths or globs should limit which files to commit. If files are specified, only stage/commit those unless the user explicitly asks otherwise.
-  - If arguments combine files and instructions, honor both.
+- 正文**可选**。如需添加，在主题后空一行，写入简短段落。
+- 不要包含破坏性变更标记或页脚。
+- 不要添加签名（不要 `Signed-off-by`）。
+- 仅提交，不推送。
+- 如果不确定某个文件是否应包含在内，请询问用户。
+- 将调用方提供的任何参数视为附加的提交指导。常见模式：
+  - 自由格式的说明应影响 scope、summary 和 body。
+  - 文件路径或 glob 应限制哪些文件参与提交。如果指定了文件，仅 stage/commit 这些文件，除非用户明确要求其他。
+  - 如果参数同时包含文件路径和说明，两者均需遵守。
 
-## Steps
+## 步骤
 
-1. Infer from the prompt if the user provided specific file paths/globs and/or additional instructions.
-2. Review `git status` and `git diff` to understand the current changes (limit to argument-specified files if provided).
-3. (Optional) Run `git log -n 50 --pretty=format:%s` to see commonly used scopes.
-4. If there are ambiguous extra files, ask the user for clarification before committing.
-5. Stage only the intended files (all changes if no files specified).
-6. Run `git commit -m "<subject>"` (and `-m "<body>"` if needed).
+1. 从 prompt 中推断用户是否提供了特定的文件路径/glob 和/或附加说明。
+2. 查看 `git status` 和 `git diff` 以了解当前变更（如果指定了文件参数，则限制到那些文件）。
+3. （可选）运行 `git log -n 50 --pretty=format:%s` 查看常用的 scope。
+4. 如果有歧义的额外文件，在提交前请用户澄清。
+5. 仅暂存目标文件（如果未指定文件则暂存所有变更）。
+6. 运行 `git commit -m "<subject>"`（如有需要再加上 `-m "<body>"`）。

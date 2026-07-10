@@ -1,6 +1,6 @@
 ---
 name: update-changelog
-description: "Read this skill before updating changelogs"
+description: "在更新 changelog 前阅读此技能"
 ---
 
 更新仓库的 changelog，内容应当包括从上一次发布到当前版本（`main`）之间尚未纳入的变更。如果 `CHANGELOG.md` 不存在，就使用 `CHANGELOG`。

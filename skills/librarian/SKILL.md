@@ -1,22 +1,22 @@
 ---
 name: librarian
-description: "Cache and refresh remote git repositories under ~/.cache/checkouts/<host>/<org>/<repo> so future references can reuse a local copy. Use this skill when the user points you to a remote git repository as reference or you encountered a remote git repo through other means."
+description: "在 ~/.cache/checkouts/<host>/<org>/<repo> 下缓存和刷新远程 git 仓库，以便后续引用可以复用本地副本。当用户指向远程 git 仓库作为参考，或通过其他方式遇到远程 git 仓库时使用此技能。"
 ---
 
-Use this skill when the user points you to a remote git repository (GitHub/GitLab/Bitbucket URLs, `git@...`, or `owner/repo` shorthand).
+当用户指向远程 git 仓库（GitHub/GitLab/Bitbucket URL、`git@...` 或 `owner/repo` 简写）时使用此技能。
 
-The goal is to keep a reusable local checkout that is:
-- **stable** (predictable path)
-- **up to date** (periodic fetch + fast-forward when safe)
-- **efficient** (partial clone with `--filter=blob:none`, no repeated full clones)
+目标是维护一个可复用的本地检出，其具有：
+- **稳定性**（路径可预测）
+- **实时性**（定期 fetch + 安全时快速向前合并）
+- **高效性**（使用 `--filter=blob:none` 部分克隆，无需重复完整克隆）
 
-## Cache location
+## 缓存位置
 
-Repositories are stored at:
+仓库存储在：
 
 `~/.cache/checkouts/<host>/<org>/<repo>`
 
-Example:
+示例：
 
 `github.com/mitsuhiko/minijinja` → `~/.cache/checkouts/github.com/mitsuhiko/minijinja`
 
@@ -34,32 +34,32 @@ bash checkout.sh github.com/mitsuhiko/minijinja --path-only
 bash checkout.sh https://github.com/mitsuhiko/minijinja --path-only
 ```
 
-The script will:
-1. Parse the repo reference into host/org/repo.
-2. Clone if missing.
-3. Reuse existing checkout if present.
-4. Fetch from `origin` when stale (default interval: 300s).
-5. Attempt a fast-forward merge if the checkout is clean and has an upstream.
+该脚本会：
+1. 将仓库引用解析为 host/org/repo。
+2. 如果缺少则克隆。
+3. 如果存在则复用现有检出。
+4. 过期时从 `origin` 获取（默认间隔：300 秒）。
+5. 如果检出是干净的且有上游，则尝试快速向前合并。
 
-## Update strategy
+## 更新策略
 
-- Default behavior is **throttled refresh** (every 5 minutes) to avoid unnecessary network calls.
-- Force immediate refresh with:
+- 默认行为是**限流刷新**（每 5 分钟一次），避免不必要的网络请求。
+- 强制立即刷新：
 
 ```bash
 bash checkout.sh <repo> --force-update --path-only
 ```
 
-## Recommended workflow
+## 推荐工作流
 
-1. Resolve repository path via `checkout.sh --path-only`.
-2. Use that path for searching, reading, and analysis.
-3. On later references to the same repo, call `checkout.sh` again; it will find and update the cached checkout.
+1. 通过 `checkout.sh --path-only` 解析仓库路径。
+2. 使用该路径进行搜索、读取和分析。
+3. 后续再次引用相同仓库时，重新调用 `checkout.sh`；它会找到并更新缓存的检出。
 
-## If edits are needed
+## 如果需要编辑
 
-Prefer not to edit directly in the shared cache. Create a separate worktree or copy from the cached checkout for task-specific modifications.
+建议不要在共享缓存中直接编辑。从缓存的检出一个创建独立 worktree 或拷贝副本，用于特定任务的修改。
 
-## Notes
+## 注意事项
 
-- `owner/repo` defaults to `github.com`.
+- `owner/repo` 默认指向 `github.com`。

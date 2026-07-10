@@ -1,108 +1,108 @@
 ---
 name: frontend-design
-description: "Design and implement distinctive, production-ready frontend interfaces with strong aesthetic direction. Use when asked to create or restyle web pages, components, or applications (HTML/CSS/JS, React, Vue, etc.)."
+description: "设计和实现具有独特审美方向、可直接投入生产的前端界面。在需要创建或重设计网页、组件或应用程序（HTML/CSS/JS、React、Vue 等）时使用。"
 ---
 
-# Frontend Design Skill
+# 前端设计技能
 
-Design and implement memorable frontend interfaces with a clear, intentional aesthetic. The output must be real, working code — not just mood boards. This skill is about **design thinking + execution**: every visual choice should be rooted in purpose and context.
+设计和实现令人难忘的前端界面，具有清晰、有意的审美。输出必须是真实可运行的代码——而不仅仅是情绪板。这项技能关乎**设计思维 + 执行**：每个视觉选择都应根植于目的和上下文。
 
-## When to Use
+## 何时使用
 
-Use this skill when the user wants to:
-- Create a new web page, landing page, dashboard, or app UI
-- Design or redesign frontend components or screens
-- Improve typography, layout, color, motion, or overall visual polish
-- Convert a concept or brief into a high‑fidelity, coded interface
+当用户想要以下内容时使用此技能：
+- 创建新的网页、落地页、仪表盘或应用界面
+- 设计或重新设计前端组件或屏幕
+- 改善排版、布局、颜色、动效或整体视觉润色
+- 将概念或需求转化为高保真的编码界面
 
-## Inputs to Gather (or Assume)
+## 需要收集（或假设）的输入
 
-Before coding, identify:
-- **Purpose & audience**: What problem does this UI solve? Who uses it?
-- **Brand/voice**: Any reference brands, tone, or visual inspiration?
-- **Technical constraints**: Framework, library, CSS strategy, accessibility, performance
-- **Content constraints**: Required copy, assets, data, features
+在编码之前，明确：
+- **目的与受众**：这个 UI 解决什么问题？谁使用它？
+- **品牌/语态**：是否有参考品牌、语调或视觉灵感？
+- **技术约束**：框架、库、CSS 策略、可访问性、性能
+- **内容约束**：需要的文案、资源、数据、功能
 
-If the user did not provide this, ask **2–4 targeted questions**, or state reasonable assumptions in a short preface.
+如果用户未提供这些信息，请提出 **2–4 个有针对性的问题**，或在简短前言中陈述合理的假设。
 
-## Design Thinking (Required)
+## 设计思维（必读）
 
-Commit to a **single, bold aesthetic direction**. Name it and execute it consistently. Examples:
-- Brutalist / raw / utilitarian
-- Editorial / magazine / typographic
-- Luxury / refined / minimal
-- Retro‑futuristic / cyber / neon
-- Art‑deco / geometric / ornamental
-- Handcrafted / organic / textured
+坚持**单一、大胆的审美方向**。给它命名并一致地执行。示例：
+- 粗野主义 / 原始 / 实用主义
+- 编辑风 / 杂志风 / 排印风
+- 奢华 / 精致 / 极简
+- 复古未来 / 赛博 / 霓虹
+- 装饰艺术 / 几何 / 装饰
+- 手工感 / 有机 / 纹理
 
-**Avoid generic AI aesthetics.** No “default” fonts, color schemes, or stock layouts.
+**避免通用的 AI 审美。** 不要使用"默认"字体、配色方案或模板布局。
 
-Before writing code, define the system:
-1. **Visual direction** — one sentence that describes the vibe
-2. **Differentiator** — what should be memorable about this UI?
-3. **Typography system** — display + body fonts, scale, weight, casing
-4. **Color system** — dominant, accent, neutral; define as CSS variables
-5. **Layout strategy** — grid rhythm, spacing scale, hierarchy plan
-6. **Motion strategy** — 1–2 meaningful interaction moments
+在写代码之前，先定义设计体系：
+1. **视觉方向** — 一句话描述整体氛围
+2. **差异化要素** — 这个 UI 令人记住的是什么？
+3. **排版系统** — 展示字体 + 正文字体、字号、字重、大小写
+4. **色彩系统** — 主色、强调色、中性色；定义为 CSS 变量
+5. **布局策略** — 网格节奏、间距尺度、层次规划
+6. **动效策略** — 1–2 个有意义的交互时刻
 
-If the user wants code only, skip the explanation but still follow this internally.
+如果用户只需要代码，可以跳过说明，但内部仍遵循此原则。
 
-## Implementation Principles
+## 实现原则
 
-- **Working code**: HTML/CSS/JS or framework code that runs as‑is
-- **Semantic & accessible**: headings, labels, focus states, keyboard nav
-- **Responsive**: fluid layouts, breakpoints, responsive typography
-- **Tokenized styling**: CSS variables for colors, spacing, radii, shadows
-- **Modern layout**: prefer CSS Grid/Flex, avoid brittle positioning hacks
+- **可运行的代码**：HTML/CSS/JS 或框架代码，可直接运行
+- **语义化 & 可访问**：标题、标签、聚焦状态、键盘导航
+- **响应式**：流式布局、断点、响应式排版
+- **令牌化样式**：使用 CSS 变量管理颜色、间距、圆角、阴影
+- **现代布局**：优先使用 CSS Grid/Flex，避免脆弱的定位技巧
 
-## Aesthetic Guidelines
+## 审美指南
 
-### Typography
-- Typography should define the voice of the design
-- Avoid default fonts (Inter, Roboto, Arial, system stacks)
-- Use a **distinct display font** + a **refined body font**
-- Implement a clear hierarchy (size, weight, spacing, casing)
+### 排版
+- 排版应定义设计的语态
+- 避免默认字体（Inter、Roboto、Arial、系统字体栈）
+- 使用**独特的展示字体** + **精致的正文字体**
+- 实现清晰的层次结构（字号、字重、间距、大小写）
 
-### Color & Theme
-- Commit to a palette with a strong point‑of‑view
-- Avoid timid, overused gradients (e.g., purple‑to‑pink on white)
-- Use contrast intentionally and check legibility
+### 颜色 & 主题
+- 坚持有强烈观点的配色方案
+- 避免胆小、过度使用的渐变（如白底上的紫到粉）
+- 有意使用对比，检查可读性
 
-### Composition & Layout
-- Encourage asymmetry, scale contrast, overlap, or grid breaks
-- Use negative space deliberately (or controlled density if maximalist)
-- Create visual rhythm and hierarchy through spacing and alignment
+### 构图 & 布局
+- 鼓励不对称、尺度对比、重叠或打破网格
+- 刻意使用负空间（如果是极繁风格则控制密度）
+- 通过间距和对齐创造视觉节奏与层次
 
-### Detail & Atmosphere
-- Add texture or depth when appropriate (noise, grain, subtle patterns)
-- Use shadows/glows only when they serve the concept
-- Consider unique borders, masks, or clip‑paths for distinct shapes
+### 细节 & 氛围
+- 在适当的时候添加纹理或深度（噪点、颗粒、微妙图案）
+- 阴影/发光仅用于服务于概念
+- 考虑独特的边框、遮罩或 clip-path 来塑造独特形状
 
-### Motion & Interaction
-- Use motion sparingly but meaningfully
-- Favor one standout interaction over many tiny ones
-- Honor `prefers-reduced-motion`
+### 动效 & 交互
+- 有节制但有意义地使用动效
+- 偏好一个突出的交互，而非许多微小的
+- 尊重 `prefers-reduced-motion`
 
-## Avoid
+## 避免
 
-- Cookie‑cutter hero + 3 card layouts
-- Generic gradients and default font choices
-- Unmotivated decorative elements
-- Overly flat, characterless component libraries
+- 千篇一律的 hero + 3 卡片布局
+- 通用渐变和默认字体选择
+- 无动机的装饰元素
+- 过于扁平、没有个性的组件库
 
-## Deliverables
+## 交付物
 
-- Provide full code with file names or component boundaries
-- Make customization easy with CSS variables or config objects
-- If assets are needed, provide inline SVGs or generative CSS patterns
+- 提供完整的代码，标明文件名或组件边界
+- 使用 CSS 变量或配置对象使定制变得容易
+- 如果需要资源，提供内联 SVG 或生成式 CSS 模式
 
-## Quality Checklist (Self‑validate)
+## 质量检查清单（自检）
 
-- Aesthetic direction is unmistakable
-- Typography feels intentional and expressive
-- Layout and spacing are consistent and purposeful
-- Color palette feels cohesive and legible
-- Interactions enhance the experience without clutter
-- Code runs as provided and is production‑ready
+- 审美方向毋庸置疑
+- 排版感觉有意图且富有表现力
+- 布局和间距一致且有目的性
+- 配色方案协调且易读
+- 交互增强了体验而不带来杂乱
+- 代码按原样运行且可投入生产
 
-**Remember:** a design is only as strong as its commitment. Choose a direction and execute it relentlessly.
+**记住：** 设计的力量取决于其坚定程度。选择一个方向并坚定不移地执行。

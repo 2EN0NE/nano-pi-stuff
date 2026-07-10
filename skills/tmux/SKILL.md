@@ -1,105 +1,105 @@
 ---
 name: tmux
-description: "Remote control tmux sessions for interactive CLIs (python, gdb, etc.) by sending keystrokes and scraping pane output."
+description: "通过发送按键和抓取面板输出来远程控制 tmux 会话，用于交互式 CLI（python、gdb 等）。"
 license: Vibecoded
 ---
 
-# tmux Skill
+# tmux 技能
 
-Use tmux as a programmable terminal multiplexer for interactive work. Works on Linux and macOS with stock tmux; avoid custom config by using a private socket.
+使用 tmux 作为可编程终端复用器进行交互式工作。适用于 Linux 和 macOS 的原生 tmux；通过使用私有 socket 避免自定义配置的干扰。
 
-## Quickstart (isolated socket)
+## 快速开始（隔离 socket）
 
 ```bash
-SOCKET_DIR=${TMPDIR:-/tmp}/claude-tmux-sockets  # well-known dir for all agent sockets
+SOCKET_DIR=${TMPDIR:-/tmp}/claude-tmux-sockets  # 所有 agent socket 的公共目录
 mkdir -p "$SOCKET_DIR"
-SOCKET="$SOCKET_DIR/claude.sock"                # keep agent sessions separate from your personal tmux
-SESSION=claude-python                           # slug-like names; avoid spaces
+SOCKET="$SOCKET_DIR/claude.sock"                # 保持 agent 会话与你的个人 tmux 分离
+SESSION=claude-python                           # 类 slug 名称；避免空格
 tmux -S "$SOCKET" new -d -s "$SESSION" -n shell
 tmux -S "$SOCKET" send-keys -t "$SESSION":0.0 -- 'python3 -q' Enter
-tmux -S "$SOCKET" capture-pane -p -J -t "$SESSION":0.0 -S -200  # watch output
-tmux -S "$SOCKET" kill-session -t "$SESSION"                   # clean up
+tmux -S "$SOCKET" capture-pane -p -J -t "$SESSION":0.0 -S -200  # 查看输出
+tmux -S "$SOCKET" kill-session -t "$SESSION"                   # 清理
 ```
 
-After starting a session ALWAYS tell the user how to monitor the session by giving them a command to copy paste:
+启动会话后，**始终**告知用户如何监控会话，提供一个可复制粘贴的命令：
 
 ```
-To monitor this session yourself:
+要自行监控此会话：
   tmux -S "$SOCKET" attach -t claude-lldb
 
-Or to capture the output once:
+或者一次性捕获输出：
   tmux -S "$SOCKET" capture-pane -p -J -t claude-lldb:0.0 -S -200
 ```
 
-This must ALWAYS be printed right after a session was started and once again at the end of the tool loop.  But the earlier you send it, the happier the user will be.
+这条消息必须在会话启动后立即打印，并在工具循环结束前再次打印。越早发送，用户越满意。
 
-## Socket convention
+## Socket 约定
 
-- Agents MUST place tmux sockets under `CLAUDE_TMUX_SOCKET_DIR` (defaults to `${TMPDIR:-/tmp}/claude-tmux-sockets`) and use `tmux -S "$SOCKET"` so we can enumerate/clean them. Create the dir first: `mkdir -p "$CLAUDE_TMUX_SOCKET_DIR"`.
-- Default socket path to use unless you must isolate further: `SOCKET="$CLAUDE_TMUX_SOCKET_DIR/claude.sock"`.
+- Agent 必须将 tmux socket 放在 `CLAUDE_TMUX_SOCKET_DIR` 下（默认为 `${TMPDIR:-/tmp}/claude-tmux-sockets`），并使用 `tmux -S "$SOCKET"`，以便我们可以枚举/清理它们。先创建目录：`mkdir -p "$CLAUDE_TMUX_SOCKET_DIR"`。
+- 默认 socket 路径（除非需要进一步隔离）：`SOCKET="$CLAUDE_TMUX_SOCKET_DIR/claude.sock"`。
 
-## Targeting panes and naming
+## 定位面板与命名
 
-- Target format: `{session}:{window}.{pane}`, defaults to `:0.0` if omitted. Keep names short (e.g., `claude-py`, `claude-gdb`).
-- Use `-S "$SOCKET"` consistently to stay on the private socket path. If you need user config, drop `-f /dev/null`; otherwise `-f /dev/null` gives a clean config.
-- Inspect: `tmux -S "$SOCKET" list-sessions`, `tmux -S "$SOCKET" list-panes -a`.
+- 目标格式：`{session}:{window}.{pane}`，省略时默认为 `:0.0`。名称保持简短（如 `claude-py`、`claude-gdb`）。
+- 一致使用 `-S "$SOCKET"` 以保持在私有 socket 路径上。如果需要用户配置，去掉 `-f /dev/null`；否则 `-f /dev/null` 提供干净的配置。
+- 检查：`tmux -S "$SOCKET" list-sessions`、`tmux -S "$SOCKET" list-panes -a`。
 
-## Finding sessions
+## 查找会话
 
-- List sessions on your active socket with metadata: `./scripts/find-sessions.sh -S "$SOCKET"`; add `-q partial-name` to filter.
-- Scan all sockets under the shared directory: `./scripts/find-sessions.sh --all` (uses `CLAUDE_TMUX_SOCKET_DIR` or `${TMPDIR:-/tmp}/claude-tmux-sockets`).
+- 列出活动 socket 上的会话及元数据：`./scripts/find-sessions.sh -S "$SOCKET"`；添加 `-q partial-name` 进行过滤。
+- 扫描共享目录下的所有 socket：`./scripts/find-sessions.sh --all`（使用 `CLAUDE_TMUX_SOCKET_DIR` 或 `${TMPDIR:-/tmp}/claude-tmux-sockets`）。
 
-## Sending input safely
+## 安全发送输入
 
-- Prefer literal sends to avoid shell splitting: `tmux -L "$SOCKET" send-keys -t target -l -- "$cmd"`
-- When composing inline commands, use single quotes or ANSI C quoting to avoid expansion: `tmux ... send-keys -t target -- $'python3 -m http.server 8000'`.
-- To send control keys: `tmux ... send-keys -t target C-c`, `C-d`, `C-z`, `Escape`, etc.
+- 偏好逐字发送以避免 shell 分割：`tmux -L "$SOCKET" send-keys -t target -l -- "$cmd"`
+- 组合内联命令时，使用单引号或 ANSI C 引用来避免展开：`tmux ... send-keys -t target -- $'python3 -m http.server 8000'`
+- 发送控制键：`tmux ... send-keys -t target C-c`、`C-d`、`C-z`、`Escape` 等
 
-## Watching output
+## 查看输出
 
-- Capture recent history (joined lines to avoid wrapping artifacts): `tmux -L "$SOCKET" capture-pane -p -J -t target -S -200`.
-- For continuous monitoring, poll with the helper script (below) instead of `tmux wait-for` (which does not watch pane output).
-- You can also temporarily attach to observe: `tmux -L "$SOCKET" attach -t "$SESSION"`; detach with `Ctrl+b d`.
-- When giving instructions to a user, **explicitly print a copy/paste monitor command** alongside the action don't assume they remembered the command.
+- 捕获最近的历史（合并行以避免换行伪影）：`tmux -L "$SOCKET" capture-pane -p -J -t target -S -200`
+- 持续监控时，使用辅助脚本轮询（如下），而非 `tmux wait-for`（后者不监控面板输出）
+- 也可以临时附加观察：`tmux -L "$SOCKET" attach -t "$SESSION"`；用 `Ctrl+b d` 分离
+- 给用户说明时，**明确打印可复制粘贴的监控命令**以及操作说明，不要假设用户记得命令
 
-## Spawning Processes
+## 启动进程
 
-Some special rules for processes:
+进程的一些特殊规则：
 
-- when asked to debug, use lldb by default
-- when starting a python interactive shell, always set the `PYTHON_BASIC_REPL=1` environment variable. This is very important as the non-basic console interferes with your send-keys.
+- 当被要求调试时，默认使用 lldb
+- 启动 python 交互式 shell 时，始终设置 `PYTHON_BASIC_REPL=1` 环境变量。这非常重要，因为非基础控制台会干扰你的 send-keys。
 
-## Synchronizing / waiting for prompts
+## 同步 / 等待提示符
 
-- Use timed polling to avoid races with interactive tools. Example: wait for a Python prompt before sending code:
+- 使用定时轮询避免与交互式工具的竞态条件。示例：发送代码前等待 Python 提示符：
   ```bash
   ./scripts/wait-for-text.sh -t "$SESSION":0.0 -p '^>>>' -T 15 -l 4000
   ```
-- For long-running commands, poll for completion text (`"Type quit to exit"`, `"Program exited"`, etc.) before proceeding.
+- 对于长时间运行的命令，轮询完成文本（`"Type quit to exit"`、`"Program exited"` 等）后再继续
 
-## Interactive tool recipes
+## 交互式工具配方
 
-- **Python REPL**: `tmux ... send-keys -- 'python3 -q' Enter`; wait for `^>>>`; send code with `-l`; interrupt with `C-c`. Always with `PYTHON_BASIC_REPL`.
-- **gdb**: `tmux ... send-keys -- 'gdb --quiet ./a.out' Enter`; disable paging `tmux ... send-keys -- 'set pagination off' Enter`; break with `C-c`; issue `bt`, `info locals`, etc.; exit via `quit` then confirm `y`.
-- **Other TTY apps** (ipdb, psql, mysql, node, bash): same pattern—start the program, poll for its prompt, then send literal text and Enter.
+- **Python REPL**：`tmux ... send-keys -- 'python3 -q' Enter`；等待 `^>>>`；用 `-l` 发送代码；用 `C-c` 中断。始终使用 `PYTHON_BASIC_REPL`。
+- **gdb**：`tmux ... send-keys -- 'gdb --quiet ./a.out' Enter`；禁用分页 `tmux ... send-keys -- 'set pagination off' Enter`；用 `C-c` 中断；执行 `bt`、`info locals` 等；通过 `quit` 退出然后确认 `y`。
+- **其他 TTY 应用**（ipdb、psql、mysql、node、bash）：相同模式——启动程序，轮询其提示符，然后发送逐字文本和 Enter。
 
-## Cleanup
+## 清理
 
-- Kill a session when done: `tmux -S "$SOCKET" kill-session -t "$SESSION"`.
-- Kill all sessions on a socket: `tmux -S "$SOCKET" list-sessions -F '#{session_name}' | xargs -r -n1 tmux -S "$SOCKET" kill-session -t`.
-- Remove everything on the private socket: `tmux -S "$SOCKET" kill-server`.
+- 完成后终止会话：`tmux -S "$SOCKET" kill-session -t "$SESSION"`
+- 终止 socket 上的所有会话：`tmux -S "$SOCKET" list-sessions -F '#{session_name}' | xargs -r -n1 tmux -S "$SOCKET" kill-session -t`
+- 移除私有 socket 上的所有内容：`tmux -S "$SOCKET" kill-server`
 
-## Helper: wait-for-text.sh
+## 辅助工具：wait-for-text.sh
 
-`./scripts/wait-for-text.sh` polls a pane for a regex (or fixed string) with a timeout. Works on Linux/macOS with bash + tmux + grep.
+`./scripts/wait-for-text.sh` 轮询面板以匹配正则表达式（或固定字符串），带超时。适用于 Linux/macOS，需要 bash + tmux + grep。
 
 ```bash
 ./scripts/wait-for-text.sh -t session:0.0 -p 'pattern' [-F] [-T 20] [-i 0.5] [-l 2000]
 ```
 
-- `-t`/`--target` pane target (required)
-- `-p`/`--pattern` regex to match (required); add `-F` for fixed string
-- `-T` timeout seconds (integer, default 15)
-- `-i` poll interval seconds (default 0.5)
-- `-l` history lines to search from the pane (integer, default 1000)
-- Exits 0 on first match, 1 on timeout. On failure prints the last captured text to stderr to aid debugging.
+- `-t`/`--target` 面板目标（必填）
+- `-p`/`--pattern` 要匹配的正则表达式（必填）；加 `-F` 表示固定字符串
+- `-T` 超时秒数（整数，默认 15）
+- `-i` 轮询间隔秒数（默认 0.5）
+- `-l` 从面板搜索的历史行数（整数，默认 1000）
+- 首次匹配退出码 0，超时退出码 1。失败时将最后捕获的文本打印到 stderr 以辅助调试

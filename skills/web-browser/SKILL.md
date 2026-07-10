@@ -1,51 +1,51 @@
 ---
 name: web-browser
-description: "Allows to interact with web pages by performing actions such as clicking buttons, filling out forms, and navigating links. It works by remote controlling Google Chrome or Chromium browsers using the Chrome DevTools Protocol (CDP). When Claude needs to browse the web, it can use this skill to do so."
+description: "通过执行点击按钮、填写表单、导航链接等操作与网页交互。通过 Chrome DevTools Protocol (CDP) 远程控制 Google Chrome 或 Chromium 浏览器来实现。当 Claude 需要浏览网页时，可以使用此技能。"
 license: Stolen from Mario
 ---
 
-# Web Browser Skill
+# 网页浏览器技能
 
-Minimal CDP tools for collaborative site exploration.
+用于协作站点探索的最小化 CDP 工具集。
 
-## Start Chrome
+## 启动 Chrome
 
 ```bash
-./scripts/start.js                  # Isolated reusable profile (default)
-./scripts/start.js --profile        # Copy your profile into isolated cache
-./scripts/start.js --reset-profile  # Clear selected cached profile before launch
+./scripts/start.js                  # 隔离的可复用配置文件（默认）
+./scripts/start.js --profile        # 将你的配置文件复制到隔离缓存
+./scripts/start.js --reset-profile  # 启动前清除选中的缓存配置文件
 ```
 
-Starts Chrome with remote debugging (default port `:9222`).
+以远程调试模式启动 Chrome（默认端口 `:9222`）。
 
-Profile behavior:
-- Default mode uses: `~/.cache/agent-web/browser/fresh-profile`
-- `--profile` mode uses: `~/.cache/agent-web/browser/profile-copy`
-- The skill **does not attach to your live Chrome profile directly**
-- If `:9222` is already used by an unknown instance, start will fail instead of reusing it
+配置文件行为：
+- 默认模式使用：`~/.cache/agent-web/browser/fresh-profile`
+- `--profile` 模式使用：`~/.cache/agent-web/browser/profile-copy`
+- 该技能**不会直接附加到你正在使用的 Chrome 配置文件**
+- 如果 `:9222` 已被未知实例占用，启动将失败，不会复用它
 
-If Chrome is installed in a non-standard location, set:
+如果 Chrome 安装在非标准位置，请设置：
 
 ```bash
 BROWSER_BIN=/path/to/chrome ./scripts/start.js
 ```
 
-Optional debug endpoint override:
+可选的调试端点覆盖：
 
 ```bash
 BROWSER_DEBUG_PORT=9333 ./scripts/start.js
 ```
 
-## Navigate
+## 导航
 
 ```bash
 ./scripts/nav.js https://example.com
 ./scripts/nav.js https://example.com --new
 ```
 
-Navigate current tab or open new tab.
+导航当前标签页或打开新标签页。
 
-## Device Emulation (Mobile)
+## 设备模拟（移动端）
 
 ```bash
 ./scripts/emulate.js --list
@@ -54,11 +54,11 @@ Navigate current tab or open new tab.
 ./scripts/emulate.js --reset
 ```
 
-Set an active device emulation preference (viewport, DPR, touch, UA) for browser skill commands. Use `--reset` to clear.
+为浏览器技能命令设置活动的设备模拟偏好（视口、DPR、触摸、UA）。使用 `--reset` 清除。
 
-Commands like `nav.js`, `eval.js`, `pick.js`, `dismiss-cookies.js`, and `screenshot.js` automatically apply the active preference.
+`nav.js`、`eval.js`、`pick.js`、`dismiss-cookies.js` 和 `screenshot.js` 等命令会自动应用活动的模拟偏好。
 
-## Evaluate JavaScript
+## 执行 JavaScript
 
 ```bash
 ./scripts/eval.js 'document.title'
@@ -68,9 +68,9 @@ Commands like `nav.js`, `eval.js`, `pick.js`, `dismiss-cookies.js`, and `screens
 ./scripts/eval.js 'JSON.stringify(Array.from(document.querySelectorAll("a")).map(a => ({ text: a.textContent.trim(), href: a.href })).filter(link => !link.href.startsWith("https://")))'
 ```
 
-Execute JavaScript in the active tab. Input can be an expression or statement list; the console-style completion value is printed and promises/top-level `await` are awaited. Be careful with string escaping, best to use single quotes.
+在当前活动标签页中执行 JavaScript。输入可以是表达式或语句列表；会打印控制台风格的完成值，并等待 promise/顶层 `await`。注意字符串转义，最好使用单引号。
 
-## Screenshot
+## 截图
 
 ```bash
 ./scripts/screenshot.js
@@ -79,65 +79,65 @@ Execute JavaScript in the active tab. Input can be an expression or statement li
 ./scripts/screenshot.js --device pixel-7 --full-page
 ```
 
-Takes a screenshot and returns a temp file path.
+截取屏幕并返回临时文件路径。
 
-- Default: current viewport
-- `--full-page`: captures full document height
-- `--device <preset>`: temporary mobile emulation for that screenshot only
+- 默认：当前视口
+- `--full-page`：捕获完整文档高度
+- `--device <preset>`：仅对该截图临时进行移动端模拟
 
-## Pick Elements
+## 选取元素
 
 ```bash
 ./scripts/pick.js "Click the submit button"
 ```
 
-Interactive element picker. Click to select, Cmd/Ctrl+Click for multi-select, Enter to finish.
+交互式元素选择器。点击选择，Cmd/Ctrl+点击多选，Enter 完成。
 
-## Dismiss Cookie Dialogs
+## 关闭 Cookie 对话框
 
 ```bash
-./scripts/dismiss-cookies.js          # Accept cookies
-./scripts/dismiss-cookies.js --reject # Reject cookies (where possible)
+./scripts/dismiss-cookies.js          # 接受 cookie
+./scripts/dismiss-cookies.js --reject # 拒绝 cookie（尽可能）
 ```
 
-Automatically dismisses EU cookie consent dialogs.
+自动关闭欧盟 Cookie 同意对话框。
 
-Run after navigating to a page:
+在导航到页面后运行：
 ```bash
 ./scripts/nav.js https://example.com && ./scripts/dismiss-cookies.js
 ```
 
-## Quick Mobile Debug Flow
+## 快速移动端调试流程
 
 ```bash
 ./scripts/start.js
 ./scripts/nav.js https://example.com
 ./scripts/emulate.js iphone-14
-./scripts/nav.js https://example.com      # reload with mobile UA
+./scripts/nav.js https://example.com      # 用移动端 UA 重新加载
 ./scripts/dismiss-cookies.js
 ./scripts/screenshot.js --full-page
 ```
 
-## Background Logging (Console + Errors + Network)
+## 后台日志（控制台 + 错误 + 网络）
 
-Automatically started by `start.js` and writes JSONL logs to:
+由 `start.js` 自动启动，将 JSONL 日志写入：
 
 ```
 ~/.cache/agent-web/logs/YYYY-MM-DD/<targetId>.jsonl
 ```
 
-Manually start:
+手动启动：
 ```bash
 ./scripts/watch.js
 ```
 
-Tail latest log:
+查看最新日志：
 ```bash
-./scripts/logs-tail.js           # dump current log and exit
-./scripts/logs-tail.js --follow  # keep following
+./scripts/logs-tail.js           # 导出当前日志并退出
+./scripts/logs-tail.js --follow  # 持续跟踪
 ```
 
-Summarize network responses:
+汇总网络响应：
 ```bash
 ./scripts/net-summary.js
 ```

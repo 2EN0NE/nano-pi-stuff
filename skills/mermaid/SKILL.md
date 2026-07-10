@@ -1,34 +1,34 @@
 ---
 name: mermaid
-description: "Must read guide on creating/editing mermaid charts with valiation tools"
+description: "创建/编辑 mermaid 图表的必读指南，附带验证工具"
 ---
 
-# Mermaid Skill
+# Mermaid 技能
 
-Use this skill to quickly validate Mermaid diagrams by parsing + rendering them with the official Mermaid CLI.
+使用此技能通过官方 Mermaid CLI 解析和渲染来快速验证 Mermaid 图表。
 
-## Prerequisites
+## 前置条件
 
-- Node.js + npm (for `npx`).
-- First run downloads a headless Chromium via Puppeteer. If Chromium is missing, set `PUPPETEER_EXECUTABLE_PATH`.
+- Node.js + npm（用于 `npx`）。
+- 首次运行会通过 Puppeteer 下载无头 Chromium。如果缺少 Chromium，请设置 `PUPPETEER_EXECUTABLE_PATH`。
 
-## Tool
+## 工具
 
-### Validate a diagram
+### 验证图表
 
 ```bash
 ./tools/validate.sh diagram.mmd [output.svg]
 ```
 
-- Parses and renders the Mermaid source.
-- Non-zero exit = invalid Mermaid syntax.
-- Prints an ASCII preview using `beautiful-mermaid` (best-effort; not all diagram types are supported).
-- If `output.svg` is omitted, the SVG is rendered to a temp file and discarded.
+- 解析并渲染 Mermaid 源码。
+- 非零退出码 = Mermaid 语法无效。
+- 使用 `beautiful-mermaid` 打印 ASCII 预览（尽力而为；并非所有图表类型都支持）。
+- 如果省略 `output.svg`，SVG 渲染到临时文件后丢弃。
 
-## Workflow (short)
+## 工作流（简版）
 
-1. **If the diagram will live in Markdown**: draft it in a standalone `diagram.mmd` first (the tool only validates plain Mermaid files).
-2. Write/update `diagram.mmd`.
-3. Run `./tools/validate.sh diagram.mmd`.
-4. Fix any errors shown by the CLI.
-5. Once it validates, copy the Mermaid block into your Markdown file.
+1. **如果图表将嵌入 Markdown**：先在独立的 `diagram.mmd` 中起草（该工具仅验证纯 Mermaid 文件）。
+2. 编写/更新 `diagram.mmd`。
+3. 运行 `./tools/validate.sh diagram.mmd`。
+4. 修复 CLI 显示的错误。
+5. 验证通过后，将 Mermaid 块复制到你的 Markdown 文件中。

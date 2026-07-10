@@ -1,59 +1,59 @@
 ---
 name: summarize
-description: "Fetch a URL or convert a local file (PDF/DOCX/HTML/etc.) into Markdown using `uvx markitdown`, optionally it can summarize"
+description: "使用 `uvx markitdown` 获取 URL 或将本地文件（PDF/DOCX/HTML 等）转换为 Markdown，可选地生成摘要"
 ---
 
-Turn “things” (URLs, PDFs, Word docs, PowerPoints, HTML pages, text files, etc.) into **Markdown** so they can be inspected/quoted/processed like normal text.
+将"各种内容"（URL、PDF、Word 文档、PowerPoint、HTML 页面、文本文件等）转换为 **Markdown**，以便像普通文本一样检查/引用/处理。
 
-`markitdown` can fetch URLs by itself; this skill mainly wraps it to make saving + summarizing convenient.
-For PDF inputs, use the `markitdown[pdf]` extra (or the wrapper below, which now does this automatically).
+`markitdown` 可以自行获取 URL；本技能主要封装它以方便保存 + 摘要。
+对于 PDF 输入，使用 `markitdown[pdf]` 扩展（或下面的封装脚本，它现在会自动处理）。
 
-## When to use
+## 何时使用
 
-Use this skill when you need to:
-- pull down a web page as a document-like Markdown representation
-- convert binary docs (PDF/DOCX/PPTX) into Markdown for analysis
-- quickly produce a short summary of a long document before deeper work
+当需要以下场景时使用此技能：
+- 将网页以类似文档的 Markdown 格式拉取下来
+- 将二进制文档（PDF/DOCX/PPTX）转换为 Markdown 进行分析
+- 在深度阅读前快速生成长文档的简短摘要
 
-## Quick usage
+## 快速使用
 
-### Convert a URL or file to Markdown
+### 将 URL 或文件转换为 Markdown
 
-Run from **this skill folder** (the agent should `cd` here first):
+从**此技能文件夹**运行（代理应先 `cd` 到此目录）：
 
 ```bash
 uvx --from 'markitdown[pdf]' markitdown <url-or-path>
 ```
 
-To write Markdown to a temp file (prints the path) use the wrapper:
+要将 Markdown 写入临时文件（打印路径），使用封装脚本：
 
 ```bash
 node to-markdown.mjs <url-or-path> --tmp
 ```
 
-Tip: when summarizing, the script will **always** write the full converted Markdown to a temp `.md` file and will **always** print a final "Hint" line with the path (so you can open/inspect the full content).
+提示：摘要时，脚本会**始终**将完整的转换后 Markdown 写入临时 `.md` 文件，并**始终**打印最后一条带路径的 "Hint" 行（以便你可以打开/查看完整内容）。
 
-Write Markdown to a specific file:
+将 Markdown 写入特定文件：
 
 ```bash
 uvx --from 'markitdown[pdf]' markitdown <url-or-path> > /tmp/doc.md
 ```
 
-### Convert + summarize with haiku-4-5 (pass context!)
+### 使用 haiku-4-5 转换 + 摘要（传递上下文！）
 
-Summaries are only useful when you provide **what you want extracted** and the **audience/purpose**.
+摘要只有在提供了**你想提取的内容**和**受众/目的**时才有用。
 
 ```bash
 node to-markdown.mjs <url-or-path> --summary --prompt "Summarize focusing on X, for audience Y. Extract Z."
 ```
 
-Or:
+或者：
 
 ```bash
 node to-markdown.mjs <url-or-path> --summary --prompt "Focus on security implications and action items."
 ```
 
-This will:
-1) convert to Markdown via `uvx --from 'markitdown[pdf]' markitdown`
-2) write the full Markdown to a temp `.md` file and print its path as a "Hint" line
-3) run `pi --model claude-haiku-4-5` (no-tools, no-session) to summarize using your extra prompt
+该过程将：
+1) 通过 `uvx --from 'markitdown[pdf]' markitdown` 转换为 Markdown
+2) 将完整 Markdown 写入临时 `.md` 文件并打印路径作为 "Hint" 行
+3) 运行 `pi --model claude-haiku-4-5`（无工具、无会话）使用你的额外提示进行摘要
