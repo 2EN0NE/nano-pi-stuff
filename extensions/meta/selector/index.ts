@@ -102,6 +102,10 @@ export async function showSelect<T = string>(
 
 	const allowOther = opts?.allowOther ?? false;
 
+	// ── 通知 pi-tmux-status：对话框打开 ──
+	const dialogCb = (globalThis as any).__piOnDialogChange;
+	if (dialogCb) dialogCb(true);
+
 	return ctx.ui.custom<SelectResult<T> | null>((tui, theme, _kb, done) => {
 		// ---- 状态 ----
 		let state: SelectorState = {
@@ -113,6 +117,7 @@ export async function showSelect<T = string>(
 
 		// ---- 设置 dialog 状态 ----
 		_isSelecting = true;
+		(globalThis as any).__piTmuxDialogState = { isSelecting: true };
 
 		// ============================================================
 		// 渲染函数 — 选项和补充输入框始终在同一界面
@@ -322,6 +327,10 @@ export async function showSelect<T = string>(
 			handleInput,
 			dispose() {
 				_isSelecting = false;
+				(globalThis as any).__piTmuxDialogState = { isSelecting: false };
+				// 通知 pi-tmux-status：对话框关闭
+				const cb = (globalThis as any).__piOnDialogChange;
+				if (cb) cb(false);
 			},
 		};
 	});
