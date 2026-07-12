@@ -28,6 +28,7 @@
 
 import {
 	readFileSync,
+	writeFileSync,
 	existsSync,
 	mkdirSync,
 	statSync,
@@ -849,6 +850,48 @@ function hasDependencies(dir: string): boolean {
 }
 
 /**
+ * Scan target extensions directory for local @zenone/* packages (directories with package.json
+ * whose name starts with "@zenone/"). These packages are both pi extensions AND npm packages
+ * used by other extensions via import.
+ */
+function findLocalPackages(targetDir: string): Map<string, string> {
+	const packages = new Map<string, string>();
+	const extDir = join(targetDir, "extensions");
+	if (!existsSync(extDir)) return packages;
+
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(extDir, { withFileTypes: true });
+	} catch {
+		return packages;
+	}
+
+	for (const entry of entries) {
+		if (entry.name.startsWith(".")) continue;
+		if (entry.name === "node_modules") continue;
+		if (!entry.isDirectory()) continue;
+
+		const pkgPath = join(extDir, entry.name, "package.json");
+		if (!existsSync(pkgPath)) continue;
+
+		try {
+			const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+			if (
+				pkg.name &&
+				typeof pkg.name === "string" &&
+				pkg.name.startsWith("@zenone/")
+			) {
+				packages.set(pkg.name, `./extensions/${entry.name}`);
+			}
+		} catch {
+			// Skip invalid package.json
+		}
+	}
+
+	return packages;
+}
+
+/**
  * Run npm install in a directory. Returns the result.
  */
 function runNpmInstall(dir: string, dryRun: boolean): NpmInstallResult {
@@ -966,7 +1009,7 @@ async function processProfile(
 		}
 	}
 
-	// npm install detection for synced resources
+	// ── Per-extension npm install ──
 	let npmCount = 0;
 	let npmFailCount = 0;
 
@@ -1005,6 +1048,83 @@ async function processProfile(
 				`      ⚙️  [dry-run] npm install would run in ${relative(PROJECT_ROOT, checkPath)}`,
 			);
 		}
+	}
+
+	// ── Root-level local package resolution (link @zenone/* packages) ──
+	const localPackages = findLocalPackages(targetDir);
+	if (localPackages.size > 0) {
+		const rootPkgPath = join(targetDir, "package.json");
+		let rootPkg: Record<string, unknown> = {};
+		if (existsSync(rootPkgPath)) {
+			try {
+				rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
+			} catch {
+				rootPkg = {};
+			}
+		}
+
+		rootPkg.private = true;
+		rootPkg.type = "module";
+		if (!rootPkg.dependencies) {
+			rootPkg.dependencies = {} as Record<string, string>;
+		}
+		const deps = rootPkg.dependencies as Record<string, string>;
+
+		let packagesAdded = 0;
+		for (const [name, relPath] of localPackages) {
+			if (!deps[name]) {
+				deps[name] = relPath;
+				packagesAdded++;
+			}
+		}
+
+		if (packagesAdded > 0) {
+			if (!opts.dryRun) {
+				writeFileSync(rootPkgPath, JSON.stringify(rootPkg, null, 2) + "\n", "utf8");
+			}
+			console.log(
+				`      📝 Added ${packagesAdded} local package(s) to ${relative(PROJECT_ROOT, rootPkgPath)}`,
+			);
+			writeLog(
+				"INFO",
+				`Added ${packagesAdded} local package(s) to ${rootPkgPath}`,
+			);
+		} else if (existsSync(rootPkgPath)) {
+			console.log(
+				`      ⏭️  Root package.json up-to-date (${localPackages.size} local package(s))`,
+			);
+		}
+
+		// Run npm install in target root (creates node_modules symlinks for file: deps)
+		if (!opts.dryRun) {
+			console.log(
+				`      ⚙️  Running npm install in ${relative(PROJECT_ROOT, targetDir)}...`,
+			);
+			writeLog("INFO", `Running npm install in ${targetDir}`);
+			const result = runNpmInstall(targetDir, opts.dryRun);
+			if (result.success) {
+				console.log(
+					`      ✅ npm install completed in ${relative(PROJECT_ROOT, targetDir)}`,
+				);
+				writeLog("INFO", `npm install completed successfully in ${targetDir}`);
+				npmCount++;
+			} else {
+				console.error(
+					`      ❌ npm install failed in ${relative(PROJECT_ROOT, targetDir)}`,
+				);
+				console.error(`         ${result.output.slice(0, 200)}`);
+				writeLog("ERROR", `npm install failed in ${targetDir}: ${result.output.slice(0, 200)}`);
+				npmFailCount++;
+			}
+		} else {
+			console.log(
+				`      ⚙️  [dry-run] npm install would run in ${relative(PROJECT_ROOT, targetDir)}`,
+			);
+		}
+	} else {
+		console.log(
+			`      ⏭️  No local @zenone/* packages found — skipping root npm install`,
+		);
 	}
 
 	// ── Summary for this profile ──
