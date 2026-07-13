@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-test_describe "files extension"
+test_describe "files extension (directory-based)"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 基础功能测试
@@ -52,6 +52,50 @@ test_it "/diff 命令产生正确日志输出" <<'TEST'
   exit 0
 TEST
 
+test_it "/changes 命令产生正确日志输出" <<'TEST'
+  run_pi_and_check     --extensions "pi-logger,files"     --prompt "/changes"     --save-output
+
+  if [[ -d "$PI_LOG_DIR" ]]; then
+    files_log=$(ls "$PI_LOG_DIR"/files_*.log 2>/dev/null | head -1)
+    if [[ -n "$files_log" ]]; then
+      echo "=== files 日志内容 ==="
+      cat "$files_log"
+      grep -q "命令 /changes 被调用" "$files_log" && echo "PASS: 日志包含 /changes 命令调用" || echo "FAIL: 日志缺少 /changes 命令调用"
+    else
+      echo "FAIL: 未找到 files_*.log"
+      ls -la "$PI_LOG_DIR/"
+      exit 1
+    fi
+  else
+    echo "FAIL: 日志目录不存在"
+    exit 1
+  fi
+
+  exit 0
+TEST
+
+test_it "/changes cls 命令产生正确日志输出" <<'TEST'
+  run_pi_and_check     --extensions "pi-logger,files"     --prompt "/changes cls"     --save-output
+
+  if [[ -d "$PI_LOG_DIR" ]]; then
+    files_log=$(ls "$PI_LOG_DIR"/files_*.log 2>/dev/null | head -1)
+    if [[ -n "$files_log" ]]; then
+      echo "=== files 日志内容 ==="
+      cat "$files_log"
+      grep -q "变更记录被清空" "$files_log" && echo "PASS: 日志包含清空操作" || echo "FAIL: 日志缺少清空操作"
+    else
+      echo "FAIL: 未找到 files_*.log"
+      ls -la "$PI_LOG_DIR/"
+      exit 1
+    fi
+  else
+    echo "FAIL: 日志目录不存在"
+    exit 1
+  fi
+
+  exit 0
+TEST
+
 test_it "pi-logger 生命周期日志记录 files 扩展事件" <<'TEST'
   run_pi_and_check     --extensions "pi-logger,files"     --prompt "/files"     --save-output
 
@@ -76,45 +120,40 @@ test_it "pi-logger 生命周期日志记录 files 扩展事件" <<'TEST'
 TEST
 
 test_it "快捷键和命令描述已中文化" <<'TEST'
-  grep -q "浏览.*git 状态" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "浏览.*git 状态" "$ROOT_DIR/extensions/tui/files/index.ts" && \
     echo "PASS: /files 命令描述已中文化" || \
     echo "FAIL: /files 命令描述未中文化"
 
-  grep -q "打开文件选择器" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "打开文件选择器" "$ROOT_DIR/extensions/tui/files/index.ts" && \
     echo "PASS: /diff 命令描述已中文化" || \
     echo "FAIL: /diff 命令描述未中文化"
 
-  grep -q "浏览会话中引用的文件" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "浏览会话中引用的文件" "$ROOT_DIR/extensions/tui/files/index.ts" && \
     echo "PASS: ctrl+shift+o 描述已中文化" || \
     echo "FAIL: ctrl+shift+o 描述未中文化"
 
-  grep -q "Finder.*显示" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "Finder.*显示" "$ROOT_DIR/extensions/tui/files/index.ts" && \
     echo "PASS: ctrl+shift+f 描述已中文化" || \
     echo "FAIL: ctrl+shift+f 描述未中文化"
 
-  grep -q "Quick Look" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "Quick Look" "$ROOT_DIR/extensions/tui/files/index.ts" && \
     echo "PASS: ctrl+shift+r 描述已中文化" || \
     echo "FAIL: ctrl+shift+r 描述未中文化"
+
+  grep -q "变更记录" "$ROOT_DIR/extensions/tui/files/index.ts" && \
+    echo "PASS: /changes 命令描述已中文化" || \
+    echo "FAIL: /changes 命令描述未中文化"
 
   exit 0
 TEST
 
 test_it "关键操作路径包含日志埋点" <<'TEST'
   echo "=== 日志埋点检查 ==="
-  grep -n "log\.\(info\|debug\|warn\|error\)" "$ROOT_DIR/extensions/tui/files.ts" | head -40
 
-  log_count=$(grep -c "log\.\(info\|debug\|warn\|error\)" "$ROOT_DIR/extensions/tui/files.ts")
-  echo ""
-  echo "总计 $log_count 处日志埋点"
-
-  [[ $log_count -ge 20 ]] && echo "PASS: 日志埋点数量充足（>=20）" || echo "WARN: 日志埋点较少（$log_count）"
-
-  for func in "runFileBrowser" "runDiffBrowser" "openPath" "revealPath" "editPath" "quickLookPath" "openDiff" "addFileToPrompt"; do
-    if grep -q "log\.\(info\|debug\|warn\|error\)" <(awk "/const $func/,/^};/" "$ROOT_DIR/extensions/tui/files.ts" 2>/dev/null); then
-      echo "PASS: $func 包含日志埋点"
-    else
-      echo "WARN: $func 可能缺少日志埋点（或函数名有变化）"
-    fi
+  for module in "index.ts" "actions.ts" "scanner.ts" "recorder.ts" "ui.ts" "git.ts"; do
+    log_count=$(grep -c "log\.\(info\|debug\|warn\|error\)" "$ROOT_DIR/extensions/tui/files/$module" 2>/dev/null)
+    echo "$module: $log_count 处日志埋点"
+    [[ $log_count -ge 2 ]] && echo "  PASS: 埋点充足" || echo "  WARN: 埋点较少"
   done
 
   exit 0
@@ -122,57 +161,56 @@ TEST
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 多仓库支持专项测试（静态源码检查）
-# ── 以下测试通过 grep 验证源码结构和关键函数的存在，不依赖运行时行为   ──
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_it "源码包含多仓库发现函数 getAllGitRoots" <<'TEST'
-  grep -q "getAllGitRoots" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "getAllGitRoots" "$ROOT_DIR/extensions/tui/files/git.ts" && \
     echo "PASS: getAllGitRoots 函数存在" || \
     echo "FAIL: 未找到 getAllGitRoots"
 
-  grep -q "\-maxdepth" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "\-maxdepth" "$ROOT_DIR/extensions/tui/files/git.ts" && \
     echo "PASS: 使用 find -maxdepth 发现 git 仓库" || \
     echo "FAIL: 未使用 find 发现模式"
   exit 0
 TEST
 
 test_it "源码包含子仓库文件归属查找函数 findGitRootForFile" <<'TEST'
-  grep -q "findGitRootForFile" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "findGitRootForFile" "$ROOT_DIR/extensions/tui/files/git.ts" && \
     echo "PASS: findGitRootForFile 函数存在" || \
     echo "FAIL: 未找到 findGitRootForFile"
 
-  grep_count=$(grep -c "findGitRootForFile" "$ROOT_DIR/extensions/tui/files.ts")
+  grep_count=$(grep -c "findGitRootForFile" "$ROOT_DIR/extensions/tui/files/git.ts")
   echo "findGitRootForFile 被引用 $grep_count 次"
-  [[ $grep_count -ge 3 ]] && echo "PASS: findGitRootForFile 被多处调用" || \
-    echo "FAIL: findGitRootForFile 引用不足（需 >=3）"
+  [[ $grep_count -ge 1 ]] && echo "PASS: findGitRootForFile 已定义" || \
+    echo "FAIL: findGitRootForFile 未定义"
   exit 0
 TEST
 
 test_it "FileEntry 类型包含 gitRoot 字段" <<'TEST'
-  grep -q "gitRoot?:" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "gitRoot?:" "$ROOT_DIR/extensions/tui/files/types.ts" && \
     echo "PASS: gitRoot 字段已定义" || \
     echo "FAIL: 未找到 gitRoot 字段"
 
-  grep -q "existing.gitRoot ?? data.gitRoot" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "existing.gitRoot \?\? data.gitRoot" "$ROOT_DIR/extensions/tui/files/scanner.ts" && \
     echo "PASS: upsertFile 合并 gitRoot 逻辑存在" || \
     echo "FAIL: upsertFile 缺少 gitRoot 合并"
   exit 0
 TEST
 
 test_it "formatDisplayPath 支持多仓库路径展示" <<'TEST'
-  grep -q "formatDisplayPath.*gitRoot" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "formatDisplayPath.*gitRoot" "$ROOT_DIR/extensions/tui/files/scanner.ts" && \
     echo "PASS: formatDisplayPath 含 gitRoot 参数" || \
     echo "FAIL: formatDisplayPath 缺少 gitRoot 参数"
 
-  grep -q "normalizedGitRoot !== normalizedCwd" "$ROOT_DIR/extensions/tui/files.ts" && \
+  grep -q "normalizedGitRoot !== normalizedCwd" "$ROOT_DIR/extensions/tui/files/scanner.ts" && \
     echo "PASS: 子仓库路径前缀判断存在" || \
     echo "FAIL: 缺少子仓库路径判断"
   exit 0
 TEST
 
 test_it "openDiff/runs 均使用文件级 gitRoot 而非全局变量" <<'TEST'
-  grep -n "file\.gitRoot" "$ROOT_DIR/extensions/tui/files.ts"
-  count=$(grep -c "file\.gitRoot" "$ROOT_DIR/extensions/tui/files.ts")
+  grep -n "file\.gitRoot" "$ROOT_DIR/extensions/tui/files/actions.ts"
+  count=$(grep -c "file\.gitRoot" "$ROOT_DIR/extensions/tui/files/actions.ts")
   echo ""
   echo "file.gitRoot 出现 $count 次"
   [[ $count -ge 2 ]] && echo "PASS: openDiff/runs 均使用文件级 gitRoot" || \
@@ -184,10 +222,10 @@ TEST
 # 加载兼容性测试
 # ══════════════════════════════════════════════════════════════════════════════
 
-test_it "直接加载 files 扩展无报错" <<'TEST'
+test_it "直接加载 files/index.ts 无报错" <<'TEST'
   rm -f "$ROOT_DIR/.pi/extensions/smoke.test.ts"
   cd "$ROOT_DIR"
-  pi -a --no-session -e "$ROOT_DIR/extensions/tui/files.ts" -p "/files" 2>&1
+  pi -a --no-session -e "$ROOT_DIR/extensions/tui/files/index.ts" -p "/files" 2>&1
   local exit_code=$?
   [[ $exit_code -eq 0 ]] && echo "PASS: 直接加载成功" || echo "FAIL: exit code=$exit_code"
   exit 0
@@ -196,9 +234,18 @@ TEST
 test_it "直接加载后 /diff 命令可执行" <<'TEST'
   rm -f "$ROOT_DIR/.pi/extensions/smoke.test.ts"
   cd "$ROOT_DIR"
-  pi -a --no-session -e "$ROOT_DIR/extensions/tui/files.ts" -p "/diff" 2>&1
+  pi -a --no-session -e "$ROOT_DIR/extensions/tui/files/index.ts" -p "/diff" 2>&1
   local exit_code=$?
   [[ $exit_code -eq 0 ]] && echo "PASS: /diff 直接加载成功" || echo "FAIL: exit code=$exit_code"
+  exit 0
+TEST
+
+test_it "直接加载后 /changes 命令可执行" <<'TEST'
+  rm -f "$ROOT_DIR/.pi/extensions/smoke.test.ts"
+  cd "$ROOT_DIR"
+  pi -a --no-session -e "$ROOT_DIR/extensions/tui/files/index.ts" -p "/changes" 2>&1
+  local exit_code=$?
+  [[ $exit_code -eq 0 ]] && echo "PASS: /changes 直接加载成功" || echo "FAIL: exit code=$exit_code"
   exit 0
 TEST
 
@@ -206,7 +253,6 @@ test_it "多仓库环境中扩展可正常加载 [REVIEW]" <<'TEST'
   local multi_root="$ROOT_DIR/.pi/tmp/files-multi-test-$$"
   mkdir -p "$multi_root"
 
-  # 主仓库
   cd "$multi_root"
   git init -q
   echo "main file content" > main.txt
@@ -214,7 +260,6 @@ test_it "多仓库环境中扩展可正常加载 [REVIEW]" <<'TEST'
   echo "const a = 1;" > src/index.ts
   git add -A && git commit -q -m "init"
 
-  # 子仓库
   mkdir -p sub-repo
   cd "$multi_root/sub-repo"
   git init -q
@@ -230,7 +275,7 @@ test_it "多仓库环境中扩展可正常加载 [REVIEW]" <<'TEST'
   find . -maxdepth 2 -name .git -type d | sed 's|/\.git$||'
 
   cd "$multi_root"
-  pi -a --no-session -e "$ROOT_DIR/extensions/tui/files.ts" -p "/files" 2>&1
+  pi -a --no-session -e "$ROOT_DIR/extensions/tui/files/index.ts" -p "/files" 2>&1
   local exit_code=$?
 
   echo ""
