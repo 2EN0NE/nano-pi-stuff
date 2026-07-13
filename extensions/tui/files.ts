@@ -61,6 +61,7 @@ type FileEntry = {
 	exists: boolean;
 	isDirectory: boolean;
 	status?: string;
+	gitRoot?: string;
 	inRepo: boolean;
 	isTracked: boolean;
 	isReferenced: boolean;
@@ -257,7 +258,27 @@ const normalizeReferencePath = (raw: string, cwd: string): string | null => {
 	return candidate;
 };
 
-const formatDisplayPath = (absolutePath: string, cwd: string): string => {
+const formatDisplayPath = (
+	absolutePath: string,
+	cwd: string,
+	gitRoot?: string,
+): string => {
+	if (gitRoot) {
+		const normalizedGitRoot = path.resolve(gitRoot);
+		const normalizedCwd = path.resolve(cwd);
+		// Sub-repo: show as "repo-name/relative/path"
+		if (
+			normalizedGitRoot !== normalizedCwd &&
+			absolutePath.startsWith(normalizedGitRoot + path.sep)
+		) {
+			const repoName = path.relative(normalizedCwd, normalizedGitRoot);
+			return path.join(
+				repoName,
+				path.relative(normalizedGitRoot, absolutePath),
+			);
+		}
+	}
+
 	const normalizedCwd = path.resolve(cwd);
 	if (absolutePath.startsWith(normalizedCwd + path.sep)) {
 		return path.relative(normalizedCwd, absolutePath);
@@ -417,19 +438,46 @@ const collectSessionFileChanges = (
 const splitNullSeparated = (value: string): string[] =>
 	value.split("\0").filter(Boolean);
 
-const getGitRoot = async (
+const getAllGitRoots = async (
 	pi: ExtensionAPI,
 	cwd: string,
-): Promise<string | null> => {
-	const result = await pi.exec("git", ["rev-parse", "--show-toplevel"], {
+): Promise<string[]> => {
+	// changes-tracker 风格：发现 2 层深的所有 git 仓库
+	const result = await pi.exec("find", [
 		cwd,
-	});
-	if (result.code !== 0) {
-		return null;
+		"-maxdepth",
+		"2",
+		"-name",
+		".git",
+		"-type",
+		"d",
+	]);
+	if (result.code !== 0 || !result.stdout.trim()) {
+		return [];
 	}
 
-	const root = result.stdout.trim();
-	return root ? root : null;
+	const dirs = result.stdout.trim().split("\n").filter(Boolean);
+	const roots = dirs
+		.map((p) => path.resolve(path.dirname(p)))
+		.filter((r) => existsSync(r));
+	// 去重
+	return [...new Set(roots)];
+};
+
+/** 找到包含某文件的 git 根目录 */
+const findGitRootForFile = (
+	canonicalPath: string,
+	gitRoots: string[],
+): string | undefined => {
+	for (const root of gitRoots) {
+		if (
+			!path.relative(root, canonicalPath).startsWith("..") &&
+			!path.isAbsolute(path.relative(root, canonicalPath))
+		) {
+			return root;
+		}
+	}
+	return undefined;
 };
 
 const getGitStatusMap = async (
@@ -515,21 +563,10 @@ const getGitFiles = async (
 const buildFileEntries = async (
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
-): Promise<{ files: FileEntry[]; gitRoot: string | null }> => {
+): Promise<{ files: FileEntry[]; gitRoots: string[] }> => {
 	const entries = ctx.sessionManager.getBranch();
 	const sessionChanges = collectSessionFileChanges(entries, ctx.cwd);
-	const gitRoot = await getGitRoot(pi, ctx.cwd);
-	const statusMap = gitRoot
-		? await getGitStatusMap(pi, gitRoot)
-		: new Map<string, GitStatusEntry>();
-
-	let trackedSet = new Set<string>();
-	let gitFiles: Array<{ canonicalPath: string; isDirectory: boolean }> = [];
-	if (gitRoot) {
-		const gitListing = await getGitFiles(pi, gitRoot);
-		trackedSet = gitListing.tracked;
-		gitFiles = gitListing.files;
-	}
+	const gitRoots = await getAllGitRoots(pi, ctx.cwd);
 
 	const fileMap = new Map<string, FileEntry>();
 
@@ -538,7 +575,8 @@ const buildFileEntries = async (
 	) => {
 		const existing = fileMap.get(data.canonicalPath);
 		const displayPath =
-			data.displayPath ?? formatDisplayPath(data.canonicalPath, ctx.cwd);
+			data.displayPath ??
+			formatDisplayPath(data.canonicalPath, ctx.cwd, data.gitRoot);
 
 		if (existing) {
 			fileMap.set(data.canonicalPath, {
@@ -548,6 +586,7 @@ const buildFileEntries = async (
 				exists: data.exists ?? existing.exists,
 				isDirectory: data.isDirectory ?? existing.isDirectory,
 				isReferenced: existing.isReferenced || data.isReferenced === true,
+				gitRoot: existing.gitRoot ?? data.gitRoot,
 				inRepo: existing.inRepo || data.inRepo === true,
 				isTracked: existing.isTracked || data.isTracked === true,
 				hasSessionChange:
@@ -567,6 +606,7 @@ const buildFileEntries = async (
 			exists: data.exists ?? true,
 			isDirectory: data.isDirectory,
 			status: data.status,
+			gitRoot: data.gitRoot,
 			inRepo: data.inRepo ?? false,
 			isTracked: data.isTracked ?? false,
 			isReferenced: data.isReferenced ?? false,
@@ -575,80 +615,72 @@ const buildFileEntries = async (
 		});
 	};
 
-	for (const file of gitFiles) {
-		upsertFile({
-			canonicalPath: file.canonicalPath,
-			resolvedPath: file.canonicalPath,
-			isDirectory: file.isDirectory,
-			exists: true,
-			status: statusMap.get(file.canonicalPath)?.status,
-			inRepo: true,
-			isTracked: trackedSet.has(file.canonicalPath),
-		});
-	}
+	// 逐一处理每个 git 仓库
+	for (const gitRoot of gitRoots) {
+		const [statusMap, { tracked, files: gitFiles }] = await Promise.all([
+			getGitStatusMap(pi, gitRoot),
+			getGitFiles(pi, gitRoot),
+		]);
 
-	for (const [canonicalPath, statusEntry] of statusMap.entries()) {
-		if (fileMap.has(canonicalPath)) {
-			continue;
+		for (const file of gitFiles) {
+			upsertFile({
+				canonicalPath: file.canonicalPath,
+				resolvedPath: file.canonicalPath,
+				isDirectory: file.isDirectory,
+				exists: true,
+				status: statusMap.get(file.canonicalPath)?.status,
+				gitRoot,
+				inRepo: true,
+				isTracked: tracked.has(file.canonicalPath),
+			});
 		}
 
-		const inRepo =
-			gitRoot !== null &&
-			!path.relative(gitRoot, canonicalPath).startsWith("..") &&
-			!path.isAbsolute(path.relative(gitRoot, canonicalPath));
-
-		upsertFile({
-			canonicalPath,
-			resolvedPath: canonicalPath,
-			isDirectory: statusEntry.isDirectory,
-			exists: statusEntry.exists,
-			status: statusEntry.status,
-			inRepo,
-			isTracked: trackedSet.has(canonicalPath) || statusEntry.status !== "??",
-		});
+		for (const [canonicalPath, statusEntry] of statusMap.entries()) {
+			if (fileMap.has(canonicalPath)) continue;
+			upsertFile({
+				canonicalPath,
+				resolvedPath: canonicalPath,
+				isDirectory: statusEntry.isDirectory,
+				exists: statusEntry.exists,
+				status: statusEntry.status,
+				gitRoot,
+				inRepo: true,
+				isTracked: tracked.has(canonicalPath) || statusEntry.status !== "??",
+			});
+		}
 	}
 
+	// 会话引用
 	const references = collectRecentFileReferences(entries, ctx.cwd, 200).filter(
 		(ref) => ref.exists,
 	);
 	for (const ref of references) {
 		const canonical = toCanonicalPath(ref.path);
 		if (!canonical) continue;
-
-		const inRepo =
-			gitRoot !== null &&
-			!path.relative(gitRoot, canonical.canonicalPath).startsWith("..") &&
-			!path.isAbsolute(path.relative(gitRoot, canonical.canonicalPath));
-
+		const gitRoot = findGitRootForFile(canonical.canonicalPath, gitRoots);
 		upsertFile({
 			canonicalPath: canonical.canonicalPath,
 			resolvedPath: canonical.canonicalPath,
 			isDirectory: canonical.isDirectory,
 			exists: true,
-			status: statusMap.get(canonical.canonicalPath)?.status,
-			inRepo,
-			isTracked: trackedSet.has(canonical.canonicalPath),
+			gitRoot,
+			inRepo: !!gitRoot,
 			isReferenced: true,
 		});
 	}
 
+	// 会话变更（write/edit 工具调用）
 	for (const [canonicalPath, change] of sessionChanges.entries()) {
 		const canonical = toCanonicalPath(canonicalPath);
 		if (!canonical) continue;
-
-		const inRepo =
-			gitRoot !== null &&
-			!path.relative(gitRoot, canonical.canonicalPath).startsWith("..") &&
-			!path.isAbsolute(path.relative(gitRoot, canonical.canonicalPath));
-
+		const gitRoot = findGitRootForFile(canonical.canonicalPath, gitRoots);
 		upsertFile({
 			canonicalPath: canonical.canonicalPath,
 			resolvedPath: canonical.canonicalPath,
 			isDirectory: canonical.isDirectory,
 			exists: true,
-			status: statusMap.get(canonical.canonicalPath)?.status,
-			inRepo,
-			isTracked: trackedSet.has(canonical.canonicalPath),
+			gitRoot,
+			inRepo: !!gitRoot,
 			hasSessionChange: true,
 			lastTimestamp: change.lastTimestamp,
 		});
@@ -675,7 +707,7 @@ const buildFileEntries = async (
 		return a.displayPath.localeCompare(b.displayPath);
 	});
 
-	return { files, gitRoot };
+	return { files, gitRoots };
 };
 
 type EditCheckResult = {
@@ -1447,7 +1479,7 @@ const showFileSelector = async (
 	ctx: ExtensionContext,
 	files: FileEntry[],
 	selectedPath?: string | null,
-	gitRoot?: string | null,
+	gitRoots: string[] = [],
 ): Promise<{ selected: FileEntry[]; quickAction: "diff" | null }> => {
 	const selectedPaths = new Set<string>();
 	const allItems = buildSelectItems(files, selectedPaths);
@@ -1601,7 +1633,7 @@ const showFileSelector = async (
 								(entry) => entry.canonicalPath === focused.value,
 							);
 							const canDiff =
-								file?.isTracked && !file.isDirectory && Boolean(gitRoot);
+								file?.isTracked && !file.isDirectory && gitRoots.length > 0;
 							if (!canDiff) {
 								ctx.ui.notify(
 									"Diff is only available for tracked files",
@@ -1657,8 +1689,11 @@ const runFileBrowser = async (
 	}
 
 	log.info("/files 命令启动");
-	const { files, gitRoot } = await buildFileEntries(pi, ctx);
-	log.debug("文件列表构建完成", { 文件数: files.length, 有Git仓库: !!gitRoot });
+	const { files, gitRoots } = await buildFileEntries(pi, ctx);
+	log.info("文件列表构建完成", {
+		文件数: files.length,
+		git仓库数: gitRoots.length,
+	});
 	if (files.length === 0) {
 		ctx.ui.notify("No files found", "info");
 		return;
@@ -1670,7 +1705,7 @@ const runFileBrowser = async (
 			ctx,
 			files,
 			lastSelectedPath,
-			gitRoot,
+			gitRoots,
 		);
 		if (selected.length === 0) {
 			ctx.ui.notify("Files cancelled", "info");
@@ -1684,7 +1719,8 @@ const runFileBrowser = async (
 
 		// 单个文件快速 diff（ctrl+shift+d）
 		if (quickAction === "diff" && selected.length === 1) {
-			await openDiff(pi, ctx, selected[0], gitRoot);
+			const fileGitRoot = selected[0].gitRoot ?? null;
+			await openDiff(pi, ctx, selected[0], fileGitRoot);
 			continue;
 		}
 
@@ -1694,7 +1730,7 @@ const runFileBrowser = async (
 		 * - fileDiff（进行 diff 对比）: 恰好选中 2 个文件，且都不是目录
 		 */
 		const allHaveChanges =
-			Boolean(gitRoot) &&
+			gitRoots.length > 0 &&
 			selected.every(
 				(f) =>
 					!f.isDirectory &&
@@ -1711,7 +1747,7 @@ const runFileBrowser = async (
 			canFileDiff,
 			allCanQuickLook,
 			selectedCount: selected.length,
-			gitRoot: !!gitRoot,
+			git仓库数: gitRoots.length,
 			selectedFiles: selected.map((f) => ({
 				file: f.displayPath,
 				isTracked: f.isTracked,
@@ -1766,7 +1802,7 @@ const runFileBrowser = async (
 					break;
 				case "viewChanges":
 					log.info("操作: viewChanges", { 文件: file.displayPath });
-					await openDiff(pi, ctx, file, gitRoot);
+					await openDiff(pi, ctx, file, file.gitRoot ?? null);
 					break;
 				case "fileDiff":
 					// fileDiff 只有 2 个文件时出现，直接对两者对比
@@ -1799,8 +1835,11 @@ const runDiffBrowser = async (
 	}
 
 	log.info("/diff 命令启动");
-	const { files, gitRoot } = await buildFileEntries(pi, ctx);
-	log.debug("文件列表构建完成", { 文件数: files.length, 有Git仓库: !!gitRoot });
+	const { files, gitRoots } = await buildFileEntries(pi, ctx);
+	log.info("文件列表构建完成", {
+		文件数: files.length,
+		git仓库数: gitRoots.length,
+	});
 
 	if (files.length === 0) {
 		ctx.ui.notify("No files found", "info");
@@ -1813,7 +1852,7 @@ const runDiffBrowser = async (
 			ctx,
 			files,
 			lastSelectedPath,
-			gitRoot,
+			gitRoots,
 		);
 		if (selected.length === 0) {
 			log.info("/diff 用户取消选择");
@@ -1826,16 +1865,16 @@ const runDiffBrowser = async (
 		}
 
 		const diffable = selected.filter(
-			(f) => f.isTracked && !f.isDirectory && Boolean(gitRoot),
+			(f) => f.isTracked && !f.isDirectory && gitRoots.length > 0,
 		);
 		const nonDiffable = selected.filter(
-			(f) => !(f.isTracked && !f.isDirectory && Boolean(gitRoot)),
+			(f) => !(f.isTracked && !f.isDirectory && gitRoots.length > 0),
 		);
 
 		if (diffable.length > 0) {
 			log.info("/diff: 直接打开 diff", { 文件数: diffable.length });
 			for (const file of diffable) {
-				await openDiff(pi, ctx, file, gitRoot);
+				await openDiff(pi, ctx, file, file.gitRoot ?? null);
 			}
 			if (nonDiffable.length === 0) return;
 		}
