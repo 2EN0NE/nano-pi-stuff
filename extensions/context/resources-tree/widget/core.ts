@@ -12,22 +12,34 @@ import { buildPromptLines } from "./prompt.js";
 
 export const WIDGET_KEY = "resources-tree-tools";
 
-// ── Timer ─────────────────────────────────────────────────────
+// ── Debounced scheduling (coalesces rapid event bursts) ─────
 
-export function startTimer(ctx: ExtensionContext): void {
-	stopTimer();
-	if (state.refreshIntervalMs <= 0 || !state.widgetVisible) return;
-	state.refreshTimer = setInterval(
-		() => updateWidget(ctx),
-		state.refreshIntervalMs,
-	);
+/** The pending timeout handle, saved so it can be cancelled on shutdown. */
+let pendingUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleUpdate(ctx: ExtensionContext): void {
+	if (state.updateScheduled) return;
+	state.updateScheduled = true;
+	// setTimeout(0) coalesces all synchronous events in the current
+	// macrotask batch before actually rendering. Tool call bursts
+	// (tool_call + tool_execution_start per tool) collapse into one update.
+	pendingUpdateTimeout = setTimeout(() => {
+		pendingUpdateTimeout = null;
+		state.updateScheduled = false;
+		updateWidget(ctx);
+	}, 0);
 }
 
-export function stopTimer(): void {
-	if (state.refreshTimer) {
-		clearInterval(state.refreshTimer);
-		state.refreshTimer = null;
+/**
+ * Cancel a pending scheduled update. Safe to call even when none is pending.
+ * Used on session_shutdown to prevent stale ctx access after teardown.
+ */
+export function cancelScheduledUpdate(): void {
+	if (pendingUpdateTimeout !== null) {
+		clearTimeout(pendingUpdateTimeout);
+		pendingUpdateTimeout = null;
 	}
+	state.updateScheduled = false;
 }
 
 // ── Widget lifecycle ─────────────────────────────────────────
@@ -58,12 +70,11 @@ export function updateWidget(ctx: ExtensionContext): void {
 export function showWidget(ctx: ExtensionContext): void {
 	state.widgetVisible = true;
 	updateWidget(ctx);
-	startTimer(ctx);
 }
 
 export function hideWidget(ctx: ExtensionContext): void {
 	state.widgetVisible = false;
-	stopTimer();
+	cancelScheduledUpdate();
 	ctx.ui.setWidget(WIDGET_KEY, undefined);
 }
 

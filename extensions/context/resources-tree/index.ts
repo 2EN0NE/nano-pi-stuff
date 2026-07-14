@@ -4,8 +4,9 @@ import { loadAllSkillsFromFs, scanAllResources } from "./scanner.js";
 import { setHeader } from "./header.js";
 import {
 	updateWidget,
+	scheduleUpdate,
+	cancelScheduledUpdate,
 	showWidget,
-	stopTimer,
 	toggleCollapsed,
 } from "./widget/core.js";
 import { openSettings } from "./widget/settings.js";
@@ -274,11 +275,11 @@ export default function (pi: ExtensionAPI): void {
 				...state.recentToolNames.filter((n) => n !== name),
 			].slice(0, 3);
 		}
-		updateWidget(ctx);
+		if (ctx.hasUI) scheduleUpdate(ctx);
 	});
 
 	pi.on("tool_execution_start", async (_event, ctx) => {
-		updateWidget(ctx);
+		if (ctx.hasUI) scheduleUpdate(ctx);
 	});
 
 	// ── Provider payload verification (ground truth) ────────────────
@@ -300,11 +301,11 @@ export default function (pi: ExtensionAPI): void {
 			});
 		}
 		state.xmlSkillCount = actualCount;
-		if (ctx.hasUI) updateWidget(ctx);
+		if (ctx.hasUI) scheduleUpdate(ctx);
 	});
 
 	pi.on("session_shutdown", async () => {
-		stopTimer();
+		cancelScheduledUpdate();
 	});
 
 	// ── Command & Shortcut ──────────────────────────────────────

@@ -6,7 +6,7 @@ import {
 	SettingsList,
 } from "@earendil-works/pi-tui";
 import { state } from "../state.js";
-import { showWidget, hideWidget, updateWidget, startTimer } from "./core.js";
+import { showWidget, hideWidget, updateWidget } from "./core.js";
 
 /** Open the settings panel. */
 export function openSettings(ctx: ExtensionContext): void {
@@ -24,12 +24,6 @@ export function openSettings(ctx: ExtensionContext): void {
 				label: "Panel mode",
 				currentValue: state.widgetCollapsed ? "COLLAPSED" : "EXPANDED",
 				values: ["EXPANDED", "COLLAPSED"],
-			},
-			{
-				id: "interval",
-				label: "Refresh interval",
-				currentValue: `${state.refreshIntervalMs / 1000}s`,
-				values: ["1s", "2s", "3s", "5s", "10s", "30s", "60s"],
 			},
 		];
 		const container = new Container();
@@ -55,12 +49,6 @@ export function openSettings(ctx: ExtensionContext): void {
 				} else if (id === "collapsed") {
 					state.widgetCollapsed = v === "COLLAPSED";
 					updateWidget(ctx);
-				} else if (id === "interval") {
-					const s = Number(v.replace("s", ""));
-					if (Number.isFinite(s) && s >= 1 && s <= 60) {
-						state.refreshIntervalMs = s * 1000;
-						if (state.widgetVisible) startTimer(ctx);
-					}
 				}
 			},
 			() => done(undefined),

@@ -21,8 +21,8 @@ export const state = {
 	// ── Widget state ────────────────────────────────────────────────
 	widgetVisible: true,
 	widgetCollapsed: true,
-	refreshIntervalMs: 2000,
-	refreshTimer: null as ReturnType<typeof setInterval> | null,
+	/** Flag to coalesce rapid event-triggered updates into one render */
+	updateScheduled: false,
 
 	// ── Cached header ───────────────────────────────────────────────
 	cachedHeader: [] as string[],
