@@ -9,7 +9,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { showConfirm } from "@zenone/pi-selector";
+import { showConfirmDestructive } from "@zenone/pi-selector";
 import { createLogger } from "@zenone/pi-logger";
 
 const log = createLogger("permission-gate");
@@ -55,7 +55,11 @@ export default function (pi: ExtensionAPI) {
 
 		// ── Confirm via shared selector ────────────────────────────────
 		const summary = summarizeCommand(command);
-		const allowed = await showConfirm(ctx, "⚠️  Dangerous Command", command);
+		const allowed = await showConfirmDestructive(
+			ctx,
+			"⚠️  Dangerous Command",
+			command,
+		);
 
 		// ── Supplementary info to LLM ──────────────────────────────────
 		if (allowed) {

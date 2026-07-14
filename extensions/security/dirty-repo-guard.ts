@@ -53,6 +53,7 @@ async function checkDirtyRepo(
 			{ value: "proceed", label: "Yes, proceed anyway" },
 			{ value: "cancel", label: "No, let me commit first" },
 		],
+		{ mode: "warning" },
 	);
 
 	if (choice?.value !== "proceed") {

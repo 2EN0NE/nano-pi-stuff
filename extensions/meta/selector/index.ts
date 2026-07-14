@@ -46,7 +46,13 @@
  */
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import {
+	Key,
+	matchesKey,
+	truncateToWidth,
+	visibleWidth,
+	wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 
 // ============================================================
 // 类型定义
@@ -71,6 +77,8 @@ export interface SelectOptions {
 	otherPlaceholder?: string;
 	/** 额外详细信息（在标题和选项之间显示），支持多行文本 */
 	detail?: string;
+	/** 视觉模式: default=普通, warning=告警, danger=危险 */
+	mode?: "default" | "warning" | "danger";
 }
 
 // ============================================================
@@ -81,7 +89,8 @@ interface SelectorState {
 	selectedIndex: number;
 	inputMode: boolean;
 	inputText: string;
-	detailExpanded: boolean;
+	/** true 时所有内容自动换行而非截断 */
+	wrapMode: boolean;
 }
 
 // ============================================================
@@ -112,7 +121,7 @@ export async function showSelect<T = string>(
 			selectedIndex: 0,
 			inputMode: false,
 			inputText: "",
-			detailExpanded: false,
+			wrapMode: false,
 		};
 
 		// ---- 设置 dialog 状态 ----
@@ -124,10 +133,39 @@ export async function showSelect<T = string>(
 		// ============================================================
 		function render(width: number): string[] {
 			const lines: string[] = [];
+			// 始终截断（用于分隔线等结构元素）
 			const add = (s: string) => lines.push(truncateToWidth(s, width));
+			// 根据 wrapMode 自动换行或截断；contIndent 指定续行缩进前缀（纯文本，无 ANSI）
+			const addContent = (s: string, contIndent?: string) => {
+				if (state.wrapMode) {
+					const indentWidth = contIndent ? visibleWidth(contIndent) : 0;
+					const available =
+						indentWidth > 0 ? Math.max(10, width - indentWidth) : width;
+					const wrapped = wrapTextWithAnsi(s, available);
+					if (wrapped.length > 1 && contIndent) {
+						lines.push(wrapped[0]);
+						for (let i = 1; i < wrapped.length; i++) {
+							lines.push(contIndent + wrapped[i]);
+						}
+					} else {
+						lines.push(...wrapped);
+					}
+				} else {
+					lines.push(truncateToWidth(s, width));
+				}
+			};
+
+			// ---- 根据 mode 选择颜色 ----
+			const borderColor =
+				opts?.mode === "danger"
+					? "error"
+					: opts?.mode === "warning"
+						? "warning"
+						: "accent";
+			const selectColor = borderColor;
 
 			// ---- 顶部分隔线 ----
-			add(theme.fg("accent", "─".repeat(width)));
+			add(theme.fg(borderColor, "─".repeat(width)));
 
 			// ---- 标题 ----
 			add(theme.fg("text", theme.bold(` ${title}`)));
@@ -139,19 +177,22 @@ export async function showSelect<T = string>(
 				const maxCollapsed = 6;
 				const isLong = detailLines.length > maxCollapsed;
 				const showLines =
-					state.detailExpanded || !isLong
+					state.wrapMode || !isLong
 						? detailLines
 						: detailLines.slice(0, maxCollapsed);
 
 				// 缩进显示
+				const detailIndent = " │ ";
 				for (const dl of showLines) {
-					add(theme.fg("muted", ` │ ${truncateToWidth(dl, width - 4)}`));
+					addContent(theme.fg("muted", `${detailIndent}${dl}`), detailIndent);
 				}
-				if (isLong) {
-					const hint = state.detailExpanded
-						? "  ... (Ctrl+O 收起)"
-						: `  ... (Ctrl+O 展开全文, 共 ${detailLines.length} 行)`;
-					add(theme.fg("dim", hint));
+				if (isLong && !state.wrapMode) {
+					add(
+						theme.fg(
+							"dim",
+							`  ... (Ctrl+O 换行显示, 共 ${detailLines.length} 行)`,
+						),
+					);
 				}
 				add("");
 			}
@@ -160,21 +201,19 @@ export async function showSelect<T = string>(
 			for (let i = 0; i < options.length; i++) {
 				const opt = options[i];
 				const isSelected = i === state.selectedIndex;
-				const prefix = isSelected ? theme.fg("accent", " › ") : "   ";
-				const color = isSelected ? "accent" : "text";
-				add(prefix + theme.fg(color, opt.label));
+				const prefix = isSelected ? theme.fg(selectColor, " › ") : "   ";
+				const color = isSelected ? selectColor : "text";
+				addContent(prefix + theme.fg(color, opt.label), "   ");
 				if (opt.description) {
-					add(
-						`     ${theme.fg("muted", truncateToWidth(opt.description, width - 6))}`,
-					);
+					addContent(`     ${theme.fg("muted", opt.description)}`, "     ");
 				}
 			}
 
 			// ---- allowOther 选项 ----
 			if (allowOther) {
 				const isOther = state.selectedIndex === options.length;
-				const prefix = isOther ? theme.fg("accent", " › ") : "   ";
-				const color = isOther ? "accent" : "muted";
+				const prefix = isOther ? theme.fg(selectColor, " › ") : "   ";
+				const color = isOther ? selectColor : "muted";
 				add(prefix + theme.fg(color, "✎ 自定义输入..."));
 			}
 
@@ -198,22 +237,14 @@ export async function showSelect<T = string>(
 				add(theme.fg("dim", " Enter 确认  ·  Esc 取消补充"));
 			} else {
 				// === 选择模式：底部快捷键提示（浅色） ===
-				const detailLines_len = opts?.detail
-					? opts.detail.split("\n").length
-					: 0;
-				const isLongDetail = detailLines_len > 6;
-				let hint = " ↑↓ 选择  ·  Enter 确认";
-				if (isLongDetail) {
-					hint += state.detailExpanded
-						? "  ·  Ctrl+O 收起"
-						: "  ·  Ctrl+O 展开";
-				}
-				hint += "  ·  Tab 补充  ·  Esc 取消";
+				const hint = state.wrapMode
+					? " ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 退出换行  ·  Tab 补充  ·  Esc 取消"
+					: " ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 换行展开  ·  Tab 补充  ·  Esc 取消";
 				add(theme.fg("dim", hint));
 			}
 
 			// ---- 底部分隔线 ----
-			add(theme.fg("accent", "─".repeat(width)));
+			add(theme.fg(borderColor, "─".repeat(width)));
 
 			return lines;
 		}
@@ -286,14 +317,11 @@ export async function showSelect<T = string>(
 				return;
 			}
 
-			// Ctrl+O 展开/收起详细信息（类似代码折叠的快捷键）
-			if (matchesKey(data, Key.ctrl("o")) && opts?.detail) {
-				const detailLines = opts.detail.split("\n");
-				if (detailLines.length > 6) {
-					state = { ...state, detailExpanded: !state.detailExpanded };
-					tui.requestRender();
-					return;
-				}
+			// Ctrl+O 切换换行模式：开启后所有内容自动换行替代截断
+			if (matchesKey(data, Key.ctrl("o"))) {
+				state = { ...state, wrapMode: !state.wrapMode };
+				tui.requestRender();
+				return;
 			}
 
 			// Enter → 确认选择
@@ -353,11 +381,13 @@ export function isSelecting(): boolean {
 /**
  * 显示一个简单的确认对话框（是/否），可配合 Tab 补充理由。
  * @param _message 作为 detail 显示在选项上方。
+ * @param mode 视觉模式（默认 default）
  */
 export async function showConfirm(
 	ctx: ExtensionContext,
 	title: string,
-	_message: string,
+	message: string,
+	mode?: "default" | "warning" | "danger",
 ): Promise<boolean> {
 	if (!ctx.hasUI) return false;
 
@@ -368,10 +398,22 @@ export async function showConfirm(
 			{ value: false, label: "否" },
 			{ value: true, label: "是" },
 		],
-		{ detail: _message },
+		{ detail: message, mode },
 	);
 
 	return result?.value === true;
+}
+
+/**
+ * 显示危险操作确认对话框（红色危险模式）。
+ * 语义等同于 showConfirm，但边框渲染为红色 error 色。
+ */
+export async function showConfirmDestructive(
+	ctx: ExtensionContext,
+	title: string,
+	message: string,
+): Promise<boolean> {
+	return showConfirm(ctx, title, message, "danger");
 }
 
 // ============================================================
