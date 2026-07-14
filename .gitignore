@@ -5,6 +5,7 @@ node_modules
 .vscode/
 .DS_Store
 test/results/
+openspec/
 
 # pi-lens — runtime caches and work state (regenerated automatically)
 .pi-lens/
@@ -13,3 +14,4 @@ test/results/
 scripts/sync-to-local-pi.log
 
 .worktrees/
+**/dist/
