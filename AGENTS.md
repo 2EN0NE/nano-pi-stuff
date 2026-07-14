@@ -342,21 +342,42 @@ if (live) tracker.importRawState(live);
 
 本仓库的 extension、skill、theme、prompt 开发使用 `scripts/sync-to-local-pi.ts` 管理同步。
 
+### Profile 架构：全局 vs 项目隔离
+
+本仓库使用两个互斥 Profile 避免 flag/tool 注册冲突：
+
+| Profile | 目标 | 范围 | 说明 |
+|---------|------|------|------|
+| `user-install` | `~/.pi/agent/` | 高成熟度日常插件 | 所有项目共用（selector、pi-logger、安全插件等） |
+| `project` | `.pi/` | 项目特定 / 低成熟度插件 | 本项目独有（custom-compaction、resources-tree 等） |
+
+**核心原则**：user-install级别的插件安装应该与其他项目级的 Profile 插件互斥，避免项目里pi启动时重复注册报错。
+
 ### 工作要求
 
 - **所有扩展/技能/主题的开发和测试**必须通过该工具管理，禁止手动复制文件到目标目录
 - **开发流程**：在源目录编码 → 内联模式同步到测试目录 → 在 Pi 中测试 → 通过后同步到用户目录
 - **最终交付**：开发完成后，必须同步到 `~/.pi/agent/`，完成 UAT 测试确认无误
-- **Profile 配置**：修改 `scripts/sync-profiles.yaml` 时需保证 `exclude` 列表准确，不同 Profile 用途清晰
+- **Profile 配置**：修改 `scripts/sync-profiles.yaml` 时需保证两个 Profile 的 `extensions` 互斥。新增扩展时：
+  - 判断它是否达到全局通用成熟度 → 加入 `user-install` 的 extensions 列表
+  - 如果否（项目特定/低成熟度）→ 确保 `user-install` 的 exclude 或列表不包括它
+  - 同时在 `project` 的 exclude 中同步更新
 
 ### 快速参考
 
 ```bash
-# 开发中快速测试（内联模式，指定具体资源和目标）
+# 全量同步（默认：执行所有 profile）
+npx tsx scripts/sync-to-local-pi.ts
+
+# 仅同步单个 profile
+npx tsx scripts/sync-to-local-pi.ts --profile user-install
+npx tsx scripts/sync-to-local-pi.ts --profile project
+
+# 开发中快速测试（内联模式）
 npx tsx scripts/sync-to-local-pi.ts --ext foo --target ./.pi/test
 
-# 完成开发后部署到用户目录
-npx tsx scripts/sync-to-local-pi.ts --profile user-install
+# 预览所有 profile 的变更
+npx tsx scripts/sync-to-local-pi.ts --dry-run
 ```
 
 详细用法参考 [docs/sync-tool.md](docs/sync-tool.md)。

@@ -190,12 +190,12 @@ function printHelp(): void {
 Profile-driven sync tool for pi.dev resources.
 
 MODES (choose one):
-  Profile mode (default):   --profile <name>  or  --all
+  Profile mode:             --profile <name>  (single)  or  default (all profiles)
   Inline mode:              --ext <name> --target <dir>  (and/or --skill, --theme, --prompt)
 
 Options:
   --profile <name>   -p   Sync only the named profile
-  --all              -a   Sync all defined profiles
+  --all              -a   Sync all defined profiles (default when no --profile)
   --dry-run          -n   Preview only, no writes
   --config <path>    -c   Path to YAML config (default: scripts/sync-profiles.yaml)
 
@@ -209,9 +209,9 @@ Inline mode options:
   -h, --help              Show this help
 
 Examples:
-  npx tsx scripts/sync-to-local-pi.ts                     # default profile (full-project)
-  npx tsx scripts/sync-to-local-pi.ts --profile user-install  # global install
-  npx tsx scripts/sync-to-local-pi.ts --all --dry-run          # preview all profiles
+  npx tsx scripts/sync-to-local-pi.ts                     # all profiles (default)
+  npx tsx scripts/sync-to-local-pi.ts --profile user-install  # single profile
+  npx tsx scripts/sync-to-local-pi.ts --dry-run               # preview all profiles
   npx tsx scripts/sync-to-local-pi.ts --ext sandbox --target ./.pi/test
   npx tsx scripts/sync-to-local-pi.ts --ext sandbox --ext pi-logger --target ~/.pi/agent
 `);
@@ -331,10 +331,11 @@ function selectProfiles(
 		return [{ name: opts.profile, profile: config.profiles[opts.profile] }];
 	}
 
-	// Default: use first profile
-	const firstName = profileNames[0];
-	console.log(`No profile specified, using default: "${firstName}"`);
-	return [{ name: firstName, profile: config.profiles[firstName] }];
+	// Default: run all profiles (equivalent to --all)
+	return profileNames.map((name) => ({
+		name,
+		profile: config.profiles[name],
+	}));
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

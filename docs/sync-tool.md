@@ -203,6 +203,7 @@ cd ~/.pi/agent/extensions/sandbox && npm link @zenone/pi-logger
 | 包名 | 源路径 | 说明 |
 |------|--------|------|
 | `@zenone/pi-logger` | `extensions/meta/pi-logger/` | 统一日志系统，所有扩展必须接入 |
+| `@zenone/pi-selector` | `extensions/meta/selector/` | 共享选择器，confir m-destructive、permission-gate 等使用 |
 
 ## 日志
 

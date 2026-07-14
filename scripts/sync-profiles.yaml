@@ -27,44 +27,85 @@
 #   index.ts bridge pointing to dist/index.js for Pi auto-discovery.
 
 profiles:
+  # ── User Global Install ──────────────────────────────────────
+  # 高成熟度、经日常验证的扩展，同步到 ~/.pi/agent/，所有项目共用。
+  user-install:
+    description: "Mature daily-use extensions for all projects"
+    target: "~/.pi/agent"
+    extensions:
+      # ── 基础设施（其他扩展依赖） ──
+      - selector              # @zenone/pi-selector
+      - pi-logger             # @zenone/pi-logger  ⚠ flag: --log-level
+      # ── 安全 / 审计 ──
+      - confirm-destructive   # 破坏性操作二次确认
+      - dirty-repo-guard      # 脏仓库阻止切换
+      - permission-gate       # 危险命令拦截
+      # ── 更精准的工具 ──
+      # ❌ multi-edit 需要 npm 包 diff（仅本项目 node_modules 有），不放 global
+      - structured-output     # terminate 工具  ⚠ tool: structured_output
+      - truncated-tool        # rg 工具          ⚠ tool: rg
+      # ── 自动化 ──
+      - auto-stage-on-exit    # 退出时自动 stage
+      - pi-tmux-status        # tmux 状态通知
+      # ── 验证/评估 ──
+      - review                # /review 代码审查
+      # ── TUI 交互 ──
+      - questionnaire         # 统一问答工具
+      - files                 # 文件浏览器
+      - session-breakdown     # 会话分析日历
+      - whimsical             # 工作提示词（sigma 维度）
+      # ── 上下文组装 ──
+      - custom-compaction     # 自定义压缩策略（配置在 ~/.pi/agent/extensions-data/）
+      - resources-tree        # 资源树面板（自适应当前项目上下文）
+      # ── 元管理 ──
+      - preset                # preset 管理      ⚠ flag: --preset
+      - skills                # /skills 技能管理
+      - tools                 # /tools 工具管理
+      - commands              # /commands 命令列表
+    skills: []
+    themes: ["*"]
+    prompts: []
+
   # ── Project Full Sync ────────────────────────────────────────
-  # Sync everything to the project's .pi directory.
-  # This is the default profile when no --profile is specified.
+  # 同步本项目特有的插件到 .pi/ 目录。
+  # 排除已放 user-install 的全局插件（避免 flag/tool 重复注册），
+  # 以及日常不用或本项目独有的插件。
+  # 剩余的是：未达全局成熟度的插件（protected-paths、input-transform-streaming 等）
+  #          和需要项目 node_modules 的插件（multi-edit）。
   project:
-    description: "Sync all resources to project .pi directory"
+    description: "Project-specific extensions for nano-pi-stuff"
     target: "./.pi"
     extensions: "*"
     skills: "*"
     themes: "*"
     prompts: ["*"]
     exclude:
-      extensions: ["pi-rate-limiter", "sandbox", "file-trigger"]
+      extensions:
+        # 不常用 / 需特殊 setup（两个 profile 都排除）
+        - pi-rate-limiter
+        - sandbox
+        - file-trigger
+        # 已放 user-install 的全局插件（避免冲突）
+        - selector
+        - pi-logger
+        - confirm-destructive
+        - dirty-repo-guard
+        - permission-gate
+        - structured-output
+        - truncated-tool
+        - auto-stage-on-exit
+        - pi-tmux-status
+        - review
+        - questionnaire
+        - files
+        - session-breakdown
+        - whimsical
+        - custom-compaction
+        - resources-tree
+        - preset
+        - skills
+        - tools
+        - commands
       skills: []
       themes: []
       prompts: []
-    npmBuild: ["widget-wrangler", "catch-the-fox"]
-
-  # ── Development Test ──────────────────────────────────────────
-  # Sync a minimal subset to a project-local test directory.
-#  dev-test:
-#    description: "Minimal test environment for extension development"
-#    target: "./.pi/test"
-#    extensions: ["pi-logger", "review"]
-#    skills: []
-#    themes: []
-#    prompts: []
-# exclude not needed for this small profile
-
-# ── User Global Install ──────────────────────────────────────
-# Sync everything (minus heavy/optional items) to ~/.pi/agent/
-# so pi.dev discovers them automatically.
-#  user-install:
-#    description: "Install all resources to user's global pi agent directory"
-#    target: "~/.pi/agent"
-#    extensions: "*"
-#    skills: "*"
-#    themes: "*"
-#    prompts: ["*"]
-#    exclude:
-#      extensions: ["sandbox"] # sandbox needs manual npm install setup
-#      skills: []
