@@ -2,21 +2,20 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""Analyze edit tool invocations in pi session JSONL files.
+"""分析 Pi 会话 JSONL 文件中 Edit 工具的调用情况。
 
-Usage: uv run analyze-edits.py <session.jsonl> [session2.jsonl ...]
+用法: uv run analyze-edits.py <session.jsonl> [session2.jsonl ...]
 
-Reports how many times the Edit tool was invoked via each mode:
-  - single: classic path/oldText/newText
-  - multi(N): multi array with N edits
-  - single+multi(N): top-level edit + multi array (N total)
-  - patch: Codex-style patch
+统计 Edit 工具在每种模式下的调用次数：
+  - single: 经典 path/oldText/newText 模式
+  - multi(N): multi 数组，含 N 条编辑
+  - single+multi(N): 顶层编辑 + multi 数组（共 N 条）
+  - patch: Codex 风格的补丁模式
 
-Also breaks down by file extension.
+同时按文件扩展名分类统计。
 """
 
 import json
-import os
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -24,13 +23,14 @@ from pathlib import Path
 
 
 def base_mode(mode: str) -> str:
+    """提取基本模式（去掉 multi 括号内的数字）。"""
     if mode.startswith("multi(") or mode.startswith("single+multi("):
         return "multi"
     return mode
 
 
 def classify_edit(args: dict) -> tuple[str, list[str]]:
-    """Returns (mode_label, list_of_file_extensions)."""
+    """识别一次 Edit 调用的模式，返回 (模式标识, 文件扩展名列表)。"""
     has_patch = "patch" in args
     has_multi = "multi" in args
     has_single = "path" in args and "oldText" in args
@@ -38,13 +38,13 @@ def classify_edit(args: dict) -> tuple[str, list[str]]:
     paths: list[str] = []
 
     if has_patch:
-        # Parse paths from patch text
+        # 从补丁文本中解析文件路径
         patch_text = args["patch"]
         for line in patch_text.split("\n"):
             line = line.strip()
             for prefix in ("*** Add File: ", "*** Delete File: ", "*** Update File: "):
                 if line.startswith(prefix):
-                    paths.append(line[len(prefix):])
+                    paths.append(line[len(prefix) :])
         return "patch", paths
 
     multi_items = args.get("multi", [])
@@ -66,24 +66,27 @@ def classify_edit(args: dict) -> tuple[str, list[str]]:
 
 
 def get_ext(path: str) -> str:
+    """获取文件扩展名。"""
     ext = Path(path).suffix
-    return ext if ext else "(no ext)"
+    return ext if ext else "(无扩展名)"
 
 
 @dataclass
 class EditCall:
+    """记录一次 Edit 工具调用的信息。"""
+
     mode: str
     extensions: list[str]
     failed: bool
 
 
 def analyze_session(filepath: str) -> list[EditCall]:
-    """Returns list of EditCall for each edit tool invocation."""
-    # First pass: collect edit tool calls and their IDs
+    """分析单个会话文件，返回所有 Edit 工具调用的统计记录。"""
+    # 第一遍：收集所有 Edit 工具调用及其 ID
     calls: list[tuple[str, str, list[str]]] = []  # (toolCallId, mode, exts)
-    tool_call_ids: dict[str, int] = {}  # toolCallId -> index in calls
+    tool_call_ids: dict[str, int] = {}  # toolCallId -> calls 中的索引
 
-    # Also collect tool results to check for errors
+    # 同时收集 tool result，判断是否报错
     tool_results: dict[str, bool] = {}  # toolCallId -> isError
 
     entries = []
@@ -136,17 +139,16 @@ def main():
         all_results.extend(analyze_session(str(sf)))
 
     if not all_results:
-        print("No edit tool calls found.")
+        print("未找到任何 Edit 工具调用。")
         return
 
     total = len(all_results)
     total_failed = sum(1 for r in all_results if r.failed)
 
-    # Count tool calls (not individual edits) by base mode
+    # 按基础模式统计工具调用次数
     mode_calls: Counter[str] = Counter()
     mode_fails: Counter[str] = Counter()
-    # Count tool calls by (base_mode, primary_ext)
-    # For a tool call, we pick the dominant extension
+    # 按 (基础模式, 主扩展名) 统计
     mode_ext_calls: Counter[tuple[str, str]] = Counter()
     mode_ext_fails: Counter[tuple[str, str]] = Counter()
     ext_calls: Counter[str] = Counter()
@@ -158,8 +160,8 @@ def main():
         if r.failed:
             mode_fails[bm] += 1
 
-        # For extension: count one call per unique extension touched
-        exts = set(r.extensions) if r.extensions else {"(no ext)"}
+        # 扩展名统计：每次调用触碰的每个唯一扩展名计一次
+        exts = set(r.extensions) if r.extensions else {"(无扩展名)"}
         for ext in exts:
             mode_ext_calls[(bm, ext)] += 1
             ext_calls[ext] += 1
@@ -167,36 +169,42 @@ def main():
                 mode_ext_fails[(bm, ext)] += 1
                 ext_fails[ext] += 1
 
-    print(f"{'='*60}")
-    print(f"Edit Tool Analysis ({len(session_files)} session(s))")
-    print(f"{'='*60}")
-    print(f"\nTotal edit tool calls: {total}")
-    print(f"Total failures: {total_failed} ({total_failed/total*100:.1f}%)")
+    print(f"{'=' * 60}")
+    print(f"Edit 工具分析报告（{len(session_files)} 个会话文件）")
+    print(f"{'=' * 60}")
+    print(f"\nEdit 工具调用总次数: {total}")
+    print(f"总失败次数: {total_failed} ({total_failed / total * 100:.1f}%)")
 
-    print(f"\n--- By Mode (tool calls) ---")
+    print("\n--- 按模式（工具调用次数）---")
     for mode, count in sorted(mode_calls.items(), key=lambda x: -x[1]):
         pct = count / total * 100
         fails = mode_fails[mode]
         fail_pct = fails / count * 100 if count else 0
-        print(f"  {mode:<12s} {count:>4d}  ({pct:5.1f}%)   fail: {fails:>3d} ({fail_pct:5.1f}%)")
+        print(
+            f"  {mode:<12s} {count:>4d}  ({pct:5.1f}%)   失败: {fails:>3d} ({fail_pct:5.1f}%)"
+        )
 
-    print(f"\n--- By Extension (tool calls) ---")
+    print("\n--- 按扩展名（工具调用次数）---")
     for ext, count in sorted(ext_calls.items(), key=lambda x: -x[1]):
         fails = ext_fails[ext]
         fail_pct = fails / count * 100 if count else 0
-        print(f"  {ext:<12s} {count:>4d}   fail: {fails:>3d} ({fail_pct:5.1f}%)")
+        print(f"  {ext:<12s} {count:>4d}   失败: {fails:>3d} ({fail_pct:5.1f}%)")
 
-    # Pivot table
+    # 交叉表
     all_modes = sorted(mode_calls.keys(), key=lambda m: -mode_calls[m])
     all_exts = sorted(ext_calls.keys(), key=lambda e: -ext_calls[e])
 
     col_w = 12
     ext_w = max(12, *(len(e) for e in all_exts))
 
-    print(f"\n--- Extension × Mode (tool calls / failures) ---")
-    header = f"  {'extension':<{ext_w}s}" + "".join(f" {m:>{col_w}s}" for m in all_modes) + f" {'total':>{col_w}s}"
+    print("\n--- 扩展名 × 模式（工具调用数 / 失败数）---")
+    header = (
+        f"  {'扩展名':<{ext_w}s}"
+        + "".join(f" {m:>{col_w}s}" for m in all_modes)
+        + f" {'合计':>{col_w}s}"
+    )
     print(header)
-    print(f"  {'-'*(len(header)-2)}")
+    print(f"  {'-' * (len(header) - 2)}")
     for ext in all_exts:
         row = f"  {ext:<{ext_w}s}"
         row_total = 0
@@ -211,9 +219,9 @@ def main():
         cell = f"{row_total}" if row_total_f == 0 else f"{row_total} ({row_total_f}✗)"
         row += f" {cell:>{col_w}s}"
         print(row)
-    # totals row
-    print(f"  {'-'*(len(header)-2)}")
-    row = f"  {'TOTAL':<{ext_w}s}"
+    # 合计行
+    print(f"  {'-' * (len(header) - 2)}")
+    row = f"  {'合计':<{ext_w}s}"
     grand = 0
     grand_f = 0
     for m in all_modes:
