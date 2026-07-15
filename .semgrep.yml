@@ -1,0 +1,398 @@
+# ──────────────────────────────────────────────────────
+# Semgrep 最佳实践规则集 — nano-pi-stuff
+# ──────────────────────────────────────────────────────
+# 分层设计：
+#   ERROR   — 合并前必须修复（CI 可阻止）
+#   WARNING — 需要修复但不会阻止（审阅门控）
+#   INFO    — 通知性检查（不要求行动）
+#
+# 分类：security / correctness / naming / maintainability / logging
+# ──────────────────────────────────────────────────────
+
+rules:
+    # ══════════════════════════════════════════════════════
+    # 1. 安全性 — 阻止危险模式
+    # ══════════════════════════════════════════════════════
+
+    # --- 代码执行 ---
+    - id: security.no-eval
+      pattern: eval(...)
+      message: >-
+          eval() 带来注入风险。请使用显式解析器、JSON.parse，或受限的 allowlist。
+      languages: [javascript, typescript]
+      severity: ERROR
+      metadata:
+          category: security
+          subcategory: code-execution
+          cwe: 'CWE-95'
+          owasp: 'A03:2021 – Injection'
+          confidence: high
+
+    - id: security.no-function-constructor
+      patterns:
+          - pattern-either:
+                - pattern: new Function(...)
+                - pattern: Function(...)
+      message: >-
+          不要使用 Function 构造函数——它在运行时编译字符串，与 eval() 有相同的注入风险。
+      languages: [javascript, typescript]
+      severity: ERROR
+      metadata:
+          category: security
+          subcategory: code-execution
+          cwe: 'CWE-95'
+          confidence: high
+
+    # --- Shell 注入 ---
+    - id: security.no-os-system
+      patterns:
+          - pattern-either:
+                - pattern: execSync(...)
+                - pattern: exec(...)
+                - pattern: spawn(...)
+      message: >-
+          exec/spawn 直接传递字符串会引入 shell 注入风险。
+          如果必须使用，请使用 spawn() 并传入参数数组（而非拼接字符串）。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: security
+          subcategory: shell-injection
+          cwe: 'CWE-78'
+          owasp: 'A03:2021 – Injection'
+          confidence: medium
+      paths:
+          include:
+              - '**/extensions/**/*.ts'
+              - '**/scripts/**/*.ts'
+
+    # --- 路径遍历 ---
+    - id: security.path-join-user-input
+      pattern-either:
+          - pattern: path.join(...)
+          - pattern: path.resolve(...)
+      message: >-
+          path.join()/resolve() 与用户输入拼接可能导致路径遍历。
+          使用 path.resolve() 规范化后，用 startsWith() 验证结果在允许范围内。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: security
+          subcategory: path-traversal
+          cwe: 'CWE-22'
+          confidence: low
+      paths:
+          include:
+              - '**/extensions/**/*.ts'
+
+    # --- 硬编码密钥 ---
+    - id: security.no-hardcoded-secrets
+      pattern-regex: >-
+          (?i)(password|secret|api[_-]?key|token|credential|auth)\s*[:=]\s*["'][^"']{8,}["']
+      message: >-
+          潜在的硬编码密钥。请改用环境变量 (process.env) 或安全存储。
+      languages: [javascript, typescript]
+      severity: ERROR
+      metadata:
+          category: security
+          subcategory: secrets
+          cwe: 'CWE-798'
+          owasp: 'A07:2021 – Identification and Authentication Failures'
+          confidence: medium
+
+    # --- 不安全的正则表达式（ReDoS） ---
+    - id: security.redos-dangerous-regex
+      pattern-regex: \/\^?\(\.\*\)\+\/
+      message: >-
+          潜在的不安全正则表达式模式可能被利用导致 ReDoS（正则拒绝服务攻击）。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: security
+          subcategory: redos
+          cwe: 'CWE-1333'
+          confidence: low
+
+    # ══════════════════════════════════════════════════════
+    # 2. 正确性 — 常见缺陷
+    # ══════════════════════════════════════════════════════
+
+    # --- 未处理的 Promise ---
+    - id: correctness.no-unhandled-promise
+      patterns:
+          - pattern: $P.then(...)
+          - pattern-not: $P.then(...).catch(...)
+      message: >-
+          .then() 链没有对应的 .catch()。每个 Promise 链都必须处理错误。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: correctness
+          subcategory: error-handling
+          confidence: medium
+
+    # --- 缺少 await（常见异步方法） ---
+    - id: correctness.missing-await-in-async
+      pattern-either:
+          - pattern: |
+                async function $FUNC(...) {
+                  ...
+                  fs.readFile(...)
+                  ...
+                }
+          - pattern: |
+                async function $FUNC(...) {
+                  ...
+                  fs.writeFile(...)
+                  ...
+                }
+          - pattern: |
+                async function $FUNC(...) {
+                  ...
+                  fs.access(...)
+                  ...
+                }
+          - pattern: |
+                async function $FUNC(...) {
+                  ...
+                  fs.stat(...)
+                  ...
+                }
+      message: >-
+          异步函数中调用了 fs 异步方法但缺少 await。这可能是一个错误。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: correctness
+          subcategory: async-await
+          confidence: low
+      paths:
+          include:
+              - '**/extensions/**/*.ts'
+
+    # --- == 而非 === ---
+    - id: correctness.use-strict-equality
+      patterns:
+          - pattern: $X == $Y
+          - pattern-not: $X == null
+      message: >-
+          使用 ==（宽松相等）可能导致意外类型转换。请使用 ===（严格相等）。
+          （允许 == null，因为它是检查 null/undefined 的惯用方式）
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: correctness
+          subcategory: type-coercion
+          confidence: high
+
+    # --- try 块中没有 await ---
+    - id: correctness.try-without-await
+      patterns:
+          - pattern: |
+                try {
+                  ...
+                } catch ($ERR) {
+                  ...
+                }
+          - pattern-not: |
+                try {
+                  ...
+                  await ...
+                  ...
+                } catch ($ERR) {
+                  ...
+                }
+      message: >-
+          try 块内没有 await 表达式——仅同步错误可以使用 try/catch 捕获。请确认正确性。
+      languages: [javascript, typescript]
+      severity: INFO
+      metadata:
+          category: correctness
+          subcategory: error-handling
+          confidence: low
+
+    # ══════════════════════════════════════════════════════
+    # 3. Pi 生态特定规则
+    # ══════════════════════════════════════════════════════
+
+    # --- pi-logger：禁止裸 console.log ---
+    - id: pi.no-bare-console-log
+      pattern-either:
+          - pattern: console.log(...)
+          - pattern: console.error(...)
+          - pattern: console.warn(...)
+      message: >-
+          使用裸 console.log/error/warn。所有扩展必须通过 @zenone/pi-logger 的 createLogger() 提供日志。
+      languages: [javascript, typescript]
+      severity: ERROR
+      metadata:
+          category: maintainability
+          subcategory: logging-compliance
+          fix: >-
+              替换为：import { createLogger } from "@zenone/pi-logger";
+              const log = createLogger("your-extension-name");
+              log.info(...) / log.error(...) / log.warn(...)
+          confidence: high
+      paths:
+          include:
+              - '**/extensions/**/*.ts'
+
+    # --- pi-logger：导入但未实例化 ---
+    - id: pi.logger-imported-but-unused
+      patterns:
+          - pattern: import { createLogger } from "@zenone/pi-logger"
+          - pattern-not: const $LOG = createLogger(...)
+      message: >-
+          导入了 createLogger 但未检测到 const log = createLogger(...) 实例化。
+          请创建日志器并通过 log.info/warn/error/debug 记录所有日志。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: maintainability
+          subcategory: logging-compliance
+          confidence: high
+      paths:
+          include:
+              - '**/extensions/**/*.ts'
+
+    # --- pi-logger：日志中避免字符串拼接 ---
+    - id: pi.logger-use-structured-interpolation
+      pattern-either:
+          - pattern: $LOG.info($X + $Y)
+          - pattern: $LOG.error($X + $Y)
+          - pattern: $LOG.warn($X + $Y)
+          - pattern: $LOG.debug($X + $Y)
+      message: >-
+          日志中使用字符串拼接（+）。请改用结构化插值：
+          $LOG.info("message with %s", value) 以获得更好的性能和结构化日志。
+      languages: [javascript, typescript]
+      severity: INFO
+      metadata:
+          category: maintainability
+          subcategory: logging-compliance
+          fix: '替换为结构化插值：$LOG.info("message: %s", value)'
+          confidence: medium
+      paths:
+          include:
+              - '**/extensions/**/*.ts'
+
+    # ══════════════════════════════════════════════════════
+    # 4. Shell 脚本（测试）/ bash 规则
+    # ══════════════════════════════════════════════════════
+
+    # --- 使用 $(which pi) 而非 npx pi ---
+    - id: shell.use-which-pi-not-npx
+      pattern: npx pi
+      message: >-
+          在 e2e 测试中使用 npx pi。npx pi 可能不支持 -a/-e/--no-session 参数。
+          请使用 $(which pi) 代替。
+      languages: [bash]
+      severity: ERROR
+      metadata:
+          category: correctness
+          subcategory: pi-cli
+          confidence: high
+      paths:
+          include:
+              - '**/test/**/*.sh'
+
+    # --- shell：不可达的 exit ---
+    - id: shell.unreachable-exit
+      pattern: |
+          exit $CODE
+          ...
+      message: >-
+          exit 后跟有不可达代码。请在 exit 后直接结束或删除后续语句。
+      languages: [bash]
+      severity: WARNING
+      metadata:
+          category: correctness
+          subcategory: control-flow
+          confidence: high
+      paths:
+          include:
+              - '**/test/**/*.sh'
+              - '**/scripts/**/*.sh'
+
+    # --- shell：避免未加引号的变量（rm 场景） ---
+    - id: shell.unquoted-variable-expansion
+      pattern-either:
+          - pattern: rm -rf $X
+          - pattern: rm -r $X
+      message: >-
+          rm 中使用未加引号的变量。请使用引号："$X" 以防空格导致意外的文件传递。
+      languages: [bash]
+      severity: WARNING
+      metadata:
+          category: correctness
+          subcategory: shell-safety
+          confidence: high
+      paths:
+          include:
+              - '**/test/**/*.sh'
+              - '**/scripts/**/*.sh'
+
+    # ══════════════════════════════════════════════════════
+    # 5. 可维护性 / 代码质量
+    # ══════════════════════════════════════════════════════
+
+    # --- 空的 catch 块 ---
+    - id: maintainability.empty-catch-block
+      patterns:
+          - pattern: |
+                catch ($ERR) {}
+      message: >-
+          空的 catch 块会静默吞掉错误。请至少记录日志或重新抛出。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: maintainability
+          subcategory: error-handling
+          confidence: high
+
+    # --- 使用 ES module import 语法的一致性 ---
+    - id: maintainability.no-require
+      pattern: require(...)
+      message: >-
+          检测到 CommonJS require()。此项目使用 ES module (type: "module")，
+          请使用 import 语法。
+      languages: [javascript, typescript]
+      severity: WARNING
+      metadata:
+          category: maintainability
+          subcategory: module-system
+          confidence: high
+      paths:
+          include:
+              - '**/extensions/**/*.ts'
+
+    # --- 检测 TODO/FIXME/HACK ---
+    - id: maintainability.detect-todo-comments
+      pattern-regex: (?i)//\s*(TODO|FIXME|HACK|XXX)\b
+      message: >-
+          检测到 TODO/FIXME/HACK/XXX 注释。如果对合并来说不够明确，请转为 issue。
+      languages: [javascript, typescript]
+      severity: INFO
+      metadata:
+          category: maintainability
+          subcategory: comments
+          confidence: high
+
+    # ══════════════════════════════════════════════════════
+    # 6. TypeScript 特定规则
+    # ══════════════════════════════════════════════════════
+
+    # --- 非空断言 ---
+    - id: typescript.non-null-assertion-usage
+      pattern: $EXPR!
+      message: >-
+          使用了非空断言 (!)。请考虑进行显式的 null 值检查或使用可选链式调用。
+      languages: [typescript]
+      severity: WARNING
+      metadata:
+          category: correctness
+          subcategory: null-safety
+          confidence: medium
+      paths:
+          include:
+              - '**/extensions/**/*.ts'

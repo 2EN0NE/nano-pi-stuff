@@ -1,0 +1,78 @@
+name: CI
+
+on:
+    push:
+        branches: [main, master]
+    pull_request:
+        branches: [main, master]
+
+jobs:
+    # ── Formatting ──
+    format:
+        name: Prettier
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            - run: npm ci
+            - run: npm run format:check
+
+    # ── Type checking (non-blocking — pi API version mismatch) ──
+    typecheck:
+        name: TypeScript
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            - run: npm ci
+            - run: npm run typecheck
+
+    # ── Linting (non-blocking — 10 pre-existing errors in sub-packages) ──
+    lint:
+        name: ESLint
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            - run: npm ci
+            - run: npm run lint
+
+    # ── SAST ──
+    semgrep:
+        name: Semgrep
+        runs-on: ubuntu-latest
+        container:
+            image: semgrep/semgrep:latest
+        steps:
+            - uses: actions/checkout@v4
+            - name: Semgrep ERROR (blocks merge)
+              run: |
+                  semgrep --config .semgrep.yml \
+                    --exclude 'node_modules/**' \
+                    --exclude '.pi/**' \
+                    --exclude '.git/**' \
+                    --metrics=off \
+                    --no-git-ignore \
+                    --error \
+                    --severity ERROR
+            - name: Semgrep WARNING (report only)
+              if: always()
+              run: |
+                  semgrep --config .semgrep.yml \
+                    --exclude 'node_modules/**' \
+                    --exclude '.pi/**' \
+                    --exclude '.git/**' \
+                    --metrics=off \
+                    --no-git-ignore \
+                    --severity WARNING

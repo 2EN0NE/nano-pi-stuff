@@ -1,0 +1,39 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ES2022",
+		"moduleResolution": "bundler",
+		"lib": ["ES2022"],
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"esModuleInterop": true,
+		"allowImportingTsExtensions": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"forceConsistentCasingInFileNames": true,
+		"noUnusedLocals": false,
+		"noUnusedParameters": false,
+		"noFallthroughCasesInSwitch": true,
+
+		"paths": {
+			"@zenone/pi-logger": ["./extensions/meta/pi-logger/api.ts"],
+			"@zenone/pi-logger/types": ["./extensions/meta/pi-logger/types.ts"],
+			"@zenone/pi-selector": ["./extensions/meta/selector/index.ts"]
+		}
+	},
+	"include": ["extensions/**/*.ts", "scripts/**/*.ts"],
+	"exclude": [
+		"node_modules",
+		"dist",
+		".pi",
+		"extensions/*/node_modules",
+		"extensions/tui/recap",
+		"extensions/tui/catch-the-fox",
+		"extensions/tui/widget-wrangler",
+		"extensions/security/secret-firewall",
+		"extensions/context/smart-context",
+		"extensions/verification/ci-watch",
+		"extensions/auto/cloud-sessions"
+	]
+}
