@@ -311,6 +311,7 @@ async function handleMultiQuestion(
 		let supplementText = '';
 		let customInputMode = false;
 		let customInputQuestionId: string | null = null;
+		let wrapMode = false;
 		let cachedLines: string[] | undefined;
 		const answers = new Map<string, Answer>();
 
@@ -329,6 +330,8 @@ async function handleMultiQuestion(
 
 		// ── isSelecting signal ──
 		(globalThis as any).__piTmuxDialogState = { isSelecting: true };
+		const dialogCb = (globalThis as any).__piOnDialogChange;
+		if (dialogCb) dialogCb(true);
 
 		// ── Helpers ──
 
@@ -555,6 +558,13 @@ async function handleMultiQuestion(
 				return;
 			}
 
+			// Ctrl+Shift+O toggle wrap/expand mode
+			if (matchesKey(data, Key.ctrlShift('o'))) {
+				wrapMode = !wrapMode;
+				refresh();
+				return;
+			}
+
 			// Cancel entire questionnaire
 			if (matchesKey(data, Key.escape)) {
 				submit(true);
@@ -573,8 +583,8 @@ async function handleMultiQuestion(
 			const add = (s: string) => lines.push(truncateToWidth(s, width));
 			// For content that should wrap (option descriptions)
 			const addContent = (s: string, contIndent?: string) => {
-				if (contIndent) {
-					const indentWidth = visibleWidth(contIndent);
+				if (wrapMode || contIndent) {
+					const indentWidth = contIndent ? visibleWidth(contIndent) : 0;
 					const available = indentWidth > 0 ? Math.max(10, width - indentWidth) : width;
 					const wrapped = wrapTextWithAnsi(s, available);
 					if (wrapped.length > 1 && contIndent) {
@@ -716,7 +726,7 @@ async function handleMultiQuestion(
 				add(
 					theme.fg(
 						'dim',
-						' ↑ ↓ select · ← → switch question · Tab add supplement · Enter confirm · Esc cancel',
+						' ↑ ↓ select · ← → switch question · Tab supplement · Ctrl+Shift+O expand · Enter confirm · Esc cancel',
 					),
 				);
 			}
@@ -734,6 +744,8 @@ async function handleMultiQuestion(
 			handleInput,
 			dispose: () => {
 				(globalThis as any).__piTmuxDialogState = { isSelecting: false };
+				const cb = (globalThis as any).__piOnDialogChange;
+				if (cb) cb(false);
 			},
 		};
 	});
