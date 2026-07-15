@@ -7,7 +7,7 @@
 正例：如设置logger为所有模块提供日志支撑，logger体系创建或用法修改后，要问用户是否检查AGENTS.md是否涉及这一块的说明，是否要把extensions创建要求更新；
 反例：创建一个展示辅助模块（不影响其他模块），在未询问我的建议的情况下，就擅自把这个功能的说明加入了AGENTS.md或README.md
 
-### 2. 完成任务后，要把端到端集成测试完成，再回复最后结果
+### 2. 完成任务后，要把端到端集成测试完成，同步到该去的地方让用户测试
 
 详见技能 [`e2e-test`](skills/e2e-test/SKILL.md)，测试基础设施在 [`test/`](test/)。
 
@@ -16,7 +16,7 @@
 1. 用 `bash test/scripts/run-e2e.sh --ext <name>` 或 `--skill <name>` 执行对应模块测试
 2. 查看 `test/results/<latest>/summary.md` 了解测试结果
 3. 对标记为 `[REVIEW]` 的用例，逐条读取日志进行 AI 衡量（≤20 条全部判断，>20 条需用户手动比对）
-4. 确认所有用例通过或已了解非标结果后，再告知用户"已完成"
+4. 确认所有用例通过或已了解非标结果后，再将插件根据sync-to-local-pi脚本同步到该去的地方，以便用户能够测试，最后才告知用户"已完成"
 
 常用命令：
 
@@ -110,6 +110,14 @@ log.error('错误');
 > 使得 jiti（pi 的扩展加载器）可以解析 `import { createLogger } from "@zenone/pi-logger"`。
 
 日志输出由 pi-logger 的配置文件统一管控（`pi-logger.json`），扩展本身无需关心输出目的地和级别过滤。详细说明见 [skills/pi-logger/SKILL.md](skills/pi-logger/SKILL.md)
+
+### 扩展的配置文件设计
+
+扩展的配置文件都放在~/.pi/agent/extensions-data/{plugin-name}目录下，让用户可以集中管理，也能直观的知悉这个配置文件与插件的关系。
+
+### 扩展的快捷键设计
+
+建议以alt（option)+插件英文首字母或关联字母为插件相关快捷键，一个插件不应占用太多快捷键，建议一个插件有众多功能都需要分配快捷键时，采用二级组合按键的形式进行设计。
 
 ### 测试辅助扩展（跨扩展交互测试）
 
