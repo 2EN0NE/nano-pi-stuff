@@ -796,6 +796,9 @@ function copyDir(sourceDir: string, targetDir: string): void {
 
 	const entries = readdirSync(sourceDir, { withFileTypes: true });
 	for (const entry of entries) {
+		// Skip node_modules, .git, etc. to avoid symlink/directory copy errors
+		if (entry.isDirectory() && IGNORE_DIRS.has(entry.name)) continue;
+
 		const srcPath = join(sourceDir, entry.name);
 		const tgtPath = join(targetDir, entry.name);
 
