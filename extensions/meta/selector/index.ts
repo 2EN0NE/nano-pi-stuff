@@ -180,7 +180,12 @@ export async function showSelect<T = string>(
 					addContent(theme.fg('muted', `${detailIndent}${dl}`), detailIndent);
 				}
 				if (isLong && !state.wrapMode) {
-					add(theme.fg('dim', `  ... (Ctrl+O 换行显示, 共 ${detailLines.length} 行)`));
+					add(
+						theme.fg(
+							'dim',
+							`  ... (Ctrl+Shift+O 换行显示, 共 ${detailLines.length} 行)`,
+						),
+					);
 				}
 				add('');
 			}
@@ -225,8 +230,8 @@ export async function showSelect<T = string>(
 			} else {
 				// === 选择模式：底部快捷键提示（浅色） ===
 				const hint = state.wrapMode
-					? ' ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 退出换行  ·  Tab 补充  ·  Esc 取消'
-					: ' ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 换行展开  ·  Tab 补充  ·  Esc 取消';
+					? ' ↑↓ 选择  ·  Enter 确认  ·  Ctrl+Shift+O 退出换行  ·  Tab 补充  ·  Esc 取消'
+					: ' ↑↓ 选择  ·  Enter 确认  ·  Ctrl+Shift+O 换行展开  ·  Tab 补充  ·  Esc 取消';
 				add(theme.fg('dim', hint));
 			}
 
@@ -303,8 +308,8 @@ export async function showSelect<T = string>(
 				return;
 			}
 
-			// Ctrl+O 切换换行模式：开启后所有内容自动换行替代截断
-			if (matchesKey(data, Key.ctrl('o'))) {
+			// Ctrl+Shift+O 切换换行模式：开启后所有内容自动换行替代截断
+			if (matchesKey(data, Key.ctrlShift('o'))) {
 				state = { ...state, wrapMode: !state.wrapMode };
 				tui.requestRender();
 				return;

@@ -4,7 +4,7 @@
  * Each question is presented via the shared @zenone/pi-selector, which provides:
  * - ↑↓ option navigation, Enter to confirm, Esc to cancel
  * - Tab supplement input (extra info to LLM)
- * - Ctrl+O to expand/collapse long detail
+ * - Ctrl+Shift+O to expand/collapse long detail
  * - isSelecting() signal for tmux border color integration
  */
 
