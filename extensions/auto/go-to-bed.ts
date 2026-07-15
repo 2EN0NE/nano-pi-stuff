@@ -1,15 +1,15 @@
-import type { ExtensionAPI, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, ToolCallEventResult } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("go-to-bed");
+const log = createLogger('go-to-bed');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 // "After midnight" usually means late-night usage. Default window: 00:00-05:59 local time.
 const QUIET_HOURS_START = 0;
 const QUIET_HOURS_END = 6; // exclusive
 
-const CONFIRM_PHRASE = "confirm-that-we-continue-after-midnight";
+const CONFIRM_PHRASE = 'confirm-that-we-continue-after-midnight';
 const CONFIRM_COMMAND = `echo ${CONFIRM_PHRASE}`;
 
 function isQuietHours(now: Date): boolean {
@@ -22,13 +22,13 @@ function isQuietHours(now: Date): boolean {
 }
 
 function formatLocalTime(now: Date): string {
-	return now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function getNightKey(now: Date): string {
 	const yyyy = String(now.getFullYear());
-	const mm = String(now.getMonth() + 1).padStart(2, "0");
-	const dd = String(now.getDate()).padStart(2, "0");
+	const mm = String(now.getMonth() + 1).padStart(2, '0');
+	const dd = String(now.getDate()).padStart(2, '0');
 	return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -87,12 +87,12 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 		confirmedNightKey = getNightKey(now);
 	};
 
-	pi.on("before_agent_start", async () => {
-		log.debug("event: before_agent_start");
+	pi.on('before_agent_start', async () => {
+		log.debug('event: before_agent_start');
 		const now = new Date();
 		const localTime = formatLocalTime(now);
 		const nightKey = getNightKey(now);
-		const quietHoursLabel = `${String(QUIET_HOURS_START).padStart(2, "0")}:00-${String(QUIET_HOURS_END).padStart(2, "0")}:00`;
+		const quietHoursLabel = `${String(QUIET_HOURS_START).padStart(2, '0')}:00-${String(QUIET_HOURS_END).padStart(2, '0')}:00`;
 
 		if (!isQuietHours(now)) {
 			confirmedNightKey = null;
@@ -101,14 +101,14 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 				quietGuardActive = false;
 				return {
 					message: {
-						customType: "go-to-bed",
+						customType: 'go-to-bed',
 						content: `Quiet hours ended at ${localTime}. Late-night guard is now disabled.`,
 						display: false,
 						details: {
 							localTime,
 							quietHours: quietHoursLabel,
 							ended: true,
-							kind: "ended",
+							kind: 'ended',
 						},
 					},
 				};
@@ -123,7 +123,7 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 			policyInjectedNightKey = nightKey;
 			return {
 				message: {
-					customType: "go-to-bed",
+					customType: 'go-to-bed',
 					content: buildPolicyMessage(quietHoursLabel, confirmed),
 					display: false,
 					details: {
@@ -132,7 +132,7 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 						confirmCommand: CONFIRM_COMMAND,
 						confirmed,
 						ended: false,
-						kind: "policy",
+						kind: 'policy',
 						nightKey,
 					},
 				},
@@ -140,8 +140,8 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
-		log.debug("event: tool_call");
+	pi.on('tool_call', async (event): Promise<ToolCallEventResult | void> => {
+		log.debug('event: tool_call');
 		const now = new Date();
 		if (!isQuietHours(now)) {
 			confirmedNightKey = null;
@@ -152,9 +152,9 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 			return;
 		}
 
-		if (event.toolName === "bash") {
+		if (event.toolName === 'bash') {
 			const input = event.input as { command?: unknown } | undefined;
-			const command = typeof input?.command === "string" ? input.command : "";
+			const command = typeof input?.command === 'string' ? input.command : '';
 			if (isConfirmationCommand(command)) {
 				markConfirmedFor(now);
 				return;
@@ -172,14 +172,14 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 		};
 	});
 
-	pi.on("tool_result", async (event) => {
-		log.debug("event: tool_result");
-		if (event.toolName !== "bash") {
+	pi.on('tool_result', async (event) => {
+		log.debug('event: tool_result');
+		if (event.toolName !== 'bash') {
 			return;
 		}
 
 		const input = event.input as { command?: unknown } | undefined;
-		const command = typeof input?.command === "string" ? input.command : "";
+		const command = typeof input?.command === 'string' ? input.command : '';
 		if (!isConfirmationCommand(command)) {
 			return;
 		}
@@ -187,8 +187,8 @@ export default function goToBedExtension(pi: ExtensionAPI) {
 		return {
 			content: [
 				{
-					type: "text",
-					text: "Late-night continuation confirmed for this night. Proceed, but keep encouraging the user to rest.",
+					type: 'text',
+					text: 'Late-night continuation confirmed for this night. Proceed, but keep encouraging the user to rest.',
 				},
 			],
 		};

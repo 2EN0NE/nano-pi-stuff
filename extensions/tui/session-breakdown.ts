@@ -15,11 +15,8 @@
  * - Brightness: selected metric per day (log-scaled)
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-import { BorderedLoader } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { BorderedLoader } from '@earendil-works/pi-coding-agent';
 import {
 	Key,
 	matchesKey,
@@ -27,38 +24,33 @@ import {
 	type TUI,
 	truncateToWidth,
 	visibleWidth,
-} from "@earendil-works/pi-tui";
-import os from "node:os";
-import path from "node:path";
-import fs from "node:fs/promises";
-import { createReadStream, type Dirent } from "node:fs";
-import readline from "node:readline";
-import { createLogger } from "@zenone/pi-logger";
+} from '@earendil-works/pi-tui';
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import { createReadStream, type Dirent } from 'node:fs';
+import readline from 'node:readline';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("session-breakdown");
+const log = createLogger('session-breakdown');
 
 type ModelKey = string; // `${provider}/${model}`
 type CwdKey = string; // normalized cwd path
 type DowKey = string; // "Mon", "Tue", etc.
 type TodKey = string; // "after-midnight", "morning", "afternoon", "evening", "night"
-type BreakdownView = "model" | "cwd" | "dow" | "tod";
+type BreakdownView = 'model' | 'cwd' | 'dow' | 'tod';
 
-function sliceByColumn(
-	line: string,
-	startCol: number,
-	length: number,
-	strict = false,
-): string {
-	if (length <= 0) return "";
+function sliceByColumn(line: string, startCol: number, length: number, strict = false): string {
+	if (length <= 0) return '';
 	const endCol = startCol + length;
-	const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-	let result = "";
+	const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+	let result = '';
 	let currentCol = 0;
 	let i = 0;
-	let pendingAnsi = "";
+	let pendingAnsi = '';
 
 	while (i < line.length) {
-		if (line[i] === "\x1b") {
+		if (line[i] === '\x1b') {
 			const match =
 				/^\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[PX^_][^\x1b]*(?:\x1b\\)|[@-_])/.exec(
 					line.slice(i),
@@ -74,7 +66,7 @@ function sliceByColumn(
 			}
 		}
 
-		const nextAnsi = line.indexOf("\x1b", i);
+		const nextAnsi = line.indexOf('\x1b', i);
 		const textEnd = nextAnsi === -1 ? line.length : nextAnsi;
 		for (const { segment } of segmenter.segment(line.slice(i, textEnd))) {
 			const w = visibleWidth(segment);
@@ -83,7 +75,7 @@ function sliceByColumn(
 			if (inRange && fits) {
 				if (pendingAnsi) {
 					result += pendingAnsi;
-					pendingAnsi = "";
+					pendingAnsi = '';
 				}
 				result += segment;
 			}
@@ -97,22 +89,21 @@ function sliceByColumn(
 	return result;
 }
 
-const DOW_NAMES: DowKey[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DOW_NAMES: DowKey[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const TOD_BUCKETS: { key: TodKey; label: string; from: number; to: number }[] =
-	[
-		{ key: "after-midnight", label: "After midnight (0–5)", from: 0, to: 5 },
-		{ key: "morning", label: "Morning (6–11)", from: 6, to: 11 },
-		{ key: "afternoon", label: "Afternoon (12–16)", from: 12, to: 16 },
-		{ key: "evening", label: "Evening (17–21)", from: 17, to: 21 },
-		{ key: "night", label: "Night (22–23)", from: 22, to: 23 },
-	];
+const TOD_BUCKETS: { key: TodKey; label: string; from: number; to: number }[] = [
+	{ key: 'after-midnight', label: 'After midnight (0–5)', from: 0, to: 5 },
+	{ key: 'morning', label: 'Morning (6–11)', from: 6, to: 11 },
+	{ key: 'afternoon', label: 'Afternoon (12–16)', from: 12, to: 16 },
+	{ key: 'evening', label: 'Evening (17–21)', from: 17, to: 21 },
+	{ key: 'night', label: 'Night (22–23)', from: 22, to: 23 },
+];
 
 function todBucketForHour(hour: number): TodKey {
 	for (const b of TOD_BUCKETS) {
 		if (hour >= b.from && hour <= b.to) return b.key;
 	}
-	return "after-midnight";
+	return 'after-midnight';
 }
 
 function todBucketLabel(key: TodKey): string {
@@ -210,12 +201,12 @@ interface BreakdownData {
 	};
 }
 
-const SESSION_ROOT = path.join(os.homedir(), ".pi", "agent", "sessions");
+const SESSION_ROOT = path.join(os.homedir(), '.pi', 'agent', 'sessions');
 const RANGE_DAYS = [7, 30, 90] as const;
 
-type MeasurementMode = "sessions" | "messages" | "tokens";
+type MeasurementMode = 'sessions' | 'messages' | 'tokens';
 
-type BreakdownProgressPhase = "scan" | "parse" | "finalize";
+type BreakdownProgressPhase = 'scan' | 'parse' | 'finalize';
 
 interface BreakdownProgressState {
 	phase: BreakdownProgressPhase;
@@ -228,8 +219,8 @@ interface BreakdownProgressState {
 function setBorderedLoaderMessage(loader: BorderedLoader, message: string) {
 	// BorderedLoader wraps a (Cancellable)Loader which supports setMessage(),
 	// but it doesn't expose it publicly. Access the inner loader for progress updates.
-	const inner = (loader as any)["loader"]; // eslint-disable-line @typescript-eslint/no-explicit-any
-	if (inner && typeof inner.setMessage === "function") {
+	const inner = (loader as any)['loader']; // eslint-disable-line @typescript-eslint/no-explicit-any
+	if (inner && typeof inner.setMessage === 'function') {
 		inner.setMessage(message);
 	}
 }
@@ -300,15 +291,15 @@ function bold(text: string): string {
 }
 
 function formatCount(n: number): string {
-	if (!Number.isFinite(n) || n === 0) return "0";
+	if (!Number.isFinite(n) || n === 0) return '0';
 	if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
 	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
 	if (n >= 10_000) return `${(n / 1_000).toFixed(1)}K`;
-	return n.toLocaleString("en-US");
+	return n.toLocaleString('en-US');
 }
 
 function formatUsd(cost: number): string {
-	if (!Number.isFinite(cost)) return "$0.00";
+	if (!Number.isFinite(cost)) return '$0.00';
 	if (cost >= 1) return `$${cost.toFixed(2)}`;
 	if (cost >= 0.1) return `$${cost.toFixed(3)}`;
 	return `$${cost.toFixed(4)}`;
@@ -326,11 +317,11 @@ function abbreviatePath(p: string, maxWidth = 40): string {
 	const home = os.homedir();
 	let display = p;
 	if (display.startsWith(home)) {
-		display = "~" + display.slice(home.length);
+		display = '~' + display.slice(home.length);
 	}
 	if (display.length <= maxWidth) return display;
 
-	const parts = display.split("/").filter(Boolean);
+	const parts = display.split('/').filter(Boolean);
 	// Always keep the first part (~ or root indicator) and try to keep as many trailing parts as possible
 	if (parts.length <= 2) return display;
 
@@ -338,7 +329,7 @@ function abbreviatePath(p: string, maxWidth = 40): string {
 	// Try keeping last N parts, increasing until it fits
 	for (let keep = parts.length - 1; keep >= 1; keep--) {
 		const tail = parts.slice(parts.length - keep);
-		const candidate = prefix + "/…/" + tail.join("/");
+		const candidate = prefix + '/…/' + tail.join('/');
 		if (candidate.length <= maxWidth || keep === 1) return candidate;
 	}
 	return display;
@@ -346,18 +337,18 @@ function abbreviatePath(p: string, maxWidth = 40): string {
 
 function padRight(s: string, n: number): string {
 	const delta = n - s.length;
-	return delta > 0 ? s + " ".repeat(delta) : s;
+	return delta > 0 ? s + ' '.repeat(delta) : s;
 }
 
 function padLeft(s: string, n: number): string {
 	const delta = n - s.length;
-	return delta > 0 ? " ".repeat(delta) + s : s;
+	return delta > 0 ? ' '.repeat(delta) + s : s;
 }
 
 function toLocalDayKey(d: Date): string {
 	const yyyy = d.getFullYear();
-	const mm = String(d.getMonth() + 1).padStart(2, "0");
-	const dd = String(d.getDate()).padStart(2, "0");
+	const mm = String(d.getMonth() + 1).padStart(2, '0');
+	const dd = String(d.getDate()).padStart(2, '0');
 	return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -383,12 +374,9 @@ function mondayIndex(date: Date): number {
 	return (date.getDay() + 6) % 7;
 }
 
-function modelKeyFromParts(
-	provider?: unknown,
-	model?: unknown,
-): ModelKey | null {
-	const p = typeof provider === "string" ? provider.trim() : "";
-	const m = typeof model === "string" ? model.trim() : "";
+function modelKeyFromParts(provider?: unknown, model?: unknown): ModelKey | null {
+	const p = typeof provider === 'string' ? provider.trim() : '';
+	const m = typeof model === 'string' ? model.trim() : '';
 	if (!p && !m) return null;
 	if (!p) return m;
 	if (!m) return p;
@@ -396,7 +384,7 @@ function modelKeyFromParts(
 }
 
 function normalizedLowerString(value: unknown): string {
-	return typeof value === "string" ? value.trim().toLowerCase() : "";
+	return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
 function isFauxModelReference(parts: {
@@ -409,18 +397,16 @@ function isFauxModelReference(parts: {
 	// and default model ids like "faux-1".  It can emit token estimates, but those are
 	// synthetic and should not affect real session usage breakdowns.
 	const api = normalizedLowerString(parts.api);
-	if (api === "faux" || api.startsWith("faux:")) return true;
-	if (normalizedLowerString(parts.provider) === "faux") return true;
+	if (api === 'faux' || api.startsWith('faux:')) return true;
+	if (normalizedLowerString(parts.provider) === 'faux') return true;
 
 	const model = normalizedLowerString(parts.model ?? parts.modelId);
-	return model === "faux" || model.startsWith("faux-");
+	return model === 'faux' || model.startsWith('faux-');
 }
 
 function parseSessionStartFromFilename(name: string): Date | null {
 	// Example: 2026-02-02T21-52-28-774Z_<uuid>.jsonl
-	const m = name.match(
-		/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z_/,
-	);
+	const m = name.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z_/);
 	if (!m) return null;
 	const iso = `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`;
 	const d = new Date(iso);
@@ -450,14 +436,14 @@ function extractProviderModelAndUsage(obj: any): {
 function extractCostTotal(usage: any): number {
 	if (!usage) return 0;
 	const c = usage?.cost;
-	if (typeof c === "number") return Number.isFinite(c) ? c : 0;
-	if (typeof c === "string") {
+	if (typeof c === 'number') return Number.isFinite(c) ? c : 0;
+	if (typeof c === 'string') {
 		const n = Number(c);
 		return Number.isFinite(n) ? n : 0;
 	}
 	const t = c?.total;
-	if (typeof t === "number") return Number.isFinite(t) ? t : 0;
-	if (typeof t === "string") {
+	if (typeof t === 'number') return Number.isFinite(t) ? t : 0;
+	if (typeof t === 'string') {
 		const n = Number(t);
 		return Number.isFinite(n) ? n : 0;
 	}
@@ -477,8 +463,8 @@ function extractTokensTotal(usage: any): number {
 	if (!usage) return 0;
 
 	const readNum = (v: any): number => {
-		if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-		if (typeof v === "string") {
+		if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+		if (typeof v === 'string') {
 			const n = Number(v);
 			return Number.isFinite(n) ? n : 0;
 		}
@@ -542,7 +528,7 @@ async function walkSessionFiles(
 				stack.push(p);
 				continue;
 			}
-			if (!ent.isFile() || !ent.name.endsWith(".jsonl")) continue;
+			if (!ent.isFile() || !ent.name.endsWith('.jsonl')) continue;
 
 			// Prefer filename timestamp, else fall back to mtime.
 			const startedAt = parseSessionStartFromFilename(ent.name);
@@ -588,7 +574,7 @@ async function parseSessionFile(
 	const messagesByModel = new Map<ModelKey, number>();
 	const tokensByModel = new Map<ModelKey, number>();
 
-	const stream = createReadStream(filePath, { encoding: "utf8" });
+	const stream = createReadStream(filePath, { encoding: 'utf8' });
 	const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
 	try {
@@ -606,18 +592,18 @@ async function parseSessionFile(
 				continue;
 			}
 
-			if (obj?.type === "session") {
-				if (!startedAt && typeof obj?.timestamp === "string") {
+			if (obj?.type === 'session') {
+				if (!startedAt && typeof obj?.timestamp === 'string') {
 					const d = new Date(obj.timestamp);
 					if (Number.isFinite(d.getTime())) startedAt = d;
 				}
-				if (typeof obj?.cwd === "string" && obj.cwd.trim()) {
+				if (typeof obj?.cwd === 'string' && obj.cwd.trim()) {
 					cwd = obj.cwd.trim();
 				}
 				continue;
 			}
 
-			if (obj?.type === "model_change") {
+			if (obj?.type === 'model_change') {
 				if (
 					isFauxModelReference({
 						api: obj.api,
@@ -639,13 +625,11 @@ async function parseSessionFile(
 				continue;
 			}
 
-			if (obj?.type !== "message") continue;
+			if (obj?.type !== 'message') continue;
 
-			const { api, provider, model, modelId, usage } =
-				extractProviderModelAndUsage(obj);
+			const { api, provider, model, modelId, usage } = extractProviderModelAndUsage(obj);
 			const explicitMk =
-				modelKeyFromParts(provider, model) ??
-				modelKeyFromParts(provider, modelId);
+				modelKeyFromParts(provider, model) ?? modelKeyFromParts(provider, modelId);
 			if (isFauxModelReference({ api, provider, model, modelId })) {
 				currentModel = null;
 				currentModelIsFaux = true;
@@ -653,7 +637,7 @@ async function parseSessionFile(
 			}
 			if (!explicitMk && currentModelIsFaux) continue;
 
-			const mk = explicitMk ?? currentModel ?? "unknown";
+			const mk = explicitMk ?? currentModel ?? 'unknown';
 			if (explicitMk) {
 				currentModel = explicitMk;
 				currentModelIsFaux = false;
@@ -680,10 +664,7 @@ async function parseSessionFile(
 		stream.destroy();
 	}
 
-	if (
-		!startedAt ||
-		(messages === 0 && modelsUsed.size === 0 && tokens === 0 && totalCost === 0)
-	)
+	if (!startedAt || (messages === 0 && modelsUsed.size === 0 && tokens === 0 && totalCost === 0))
 		return null;
 	const dayKeyLocal = toLocalDayKey(startedAt);
 	const dow = DOW_NAMES[mondayIndex(startedAt)];
@@ -806,14 +787,8 @@ function addSessionToRange(range: RangeAgg, session: ParsedSession): void {
 	if (cwd) {
 		day.sessionsByCwd.set(cwd, (day.sessionsByCwd.get(cwd) ?? 0) + 1);
 		range.cwdSessions.set(cwd, (range.cwdSessions.get(cwd) ?? 0) + 1);
-		day.messagesByCwd.set(
-			cwd,
-			(day.messagesByCwd.get(cwd) ?? 0) + session.messages,
-		);
-		range.cwdMessages.set(
-			cwd,
-			(range.cwdMessages.get(cwd) ?? 0) + session.messages,
-		);
+		day.messagesByCwd.set(cwd, (day.messagesByCwd.get(cwd) ?? 0) + session.messages);
+		range.cwdMessages.set(cwd, (range.cwdMessages.get(cwd) ?? 0) + session.messages);
 		day.tokensByCwd.set(cwd, (day.tokensByCwd.get(cwd) ?? 0) + session.tokens);
 		range.cwdTokens.set(cwd, (range.cwdTokens.get(cwd) ?? 0) + session.tokens);
 		day.costByCwd.set(cwd, (day.costByCwd.get(cwd) ?? 0) + session.totalCost);
@@ -823,34 +798,23 @@ function addSessionToRange(range: RangeAgg, session: ParsedSession): void {
 	// Day-of-week aggregation
 	const dow = session.dow;
 	range.dowSessions.set(dow, (range.dowSessions.get(dow) ?? 0) + 1);
-	range.dowMessages.set(
-		dow,
-		(range.dowMessages.get(dow) ?? 0) + session.messages,
-	);
+	range.dowMessages.set(dow, (range.dowMessages.get(dow) ?? 0) + session.messages);
 	range.dowTokens.set(dow, (range.dowTokens.get(dow) ?? 0) + session.tokens);
 	range.dowCost.set(dow, (range.dowCost.get(dow) ?? 0) + session.totalCost);
 
 	// Time-of-day aggregation
 	const tod = session.tod;
 	day.sessionsByTod.set(tod, (day.sessionsByTod.get(tod) ?? 0) + 1);
-	day.messagesByTod.set(
-		tod,
-		(day.messagesByTod.get(tod) ?? 0) + session.messages,
-	);
+	day.messagesByTod.set(tod, (day.messagesByTod.get(tod) ?? 0) + session.messages);
 	day.tokensByTod.set(tod, (day.tokensByTod.get(tod) ?? 0) + session.tokens);
 	day.costByTod.set(tod, (day.costByTod.get(tod) ?? 0) + session.totalCost);
 	range.todSessions.set(tod, (range.todSessions.get(tod) ?? 0) + 1);
-	range.todMessages.set(
-		tod,
-		(range.todMessages.get(tod) ?? 0) + session.messages,
-	);
+	range.todMessages.set(tod, (range.todMessages.get(tod) ?? 0) + session.messages);
 	range.todTokens.set(tod, (range.todTokens.get(tod) ?? 0) + session.tokens);
 	range.todCost.set(tod, (range.todCost.get(tod) ?? 0) + session.totalCost);
 }
 
-function sortMapByValueDesc<K extends string>(
-	m: Map<K, number>,
-): Array<{ key: K; value: number }> {
+function sortMapByValueDesc<K extends string>(m: Map<K, number>): Array<{ key: K; value: number }> {
 	return [...m.entries()]
 		.map(([key, value]) => ({ key, value }))
 		.sort((a, b) => b.value - a.value);
@@ -943,11 +907,11 @@ function buildDowPalette(): {
 
 // Fixed palette for time-of-day buckets
 const TOD_PALETTE: Map<TodKey, RGB> = new Map([
-	["after-midnight", { r: 100, g: 60, b: 180 }], // deep purple
-	["morning", { r: 255, g: 200, b: 50 }], // golden yellow
-	["afternoon", { r: 64, g: 196, b: 99 }], // green
-	["evening", { r: 47, g: 129, b: 247 }], // blue
-	["night", { r: 60, g: 40, b: 140 }], // dark indigo
+	['after-midnight', { r: 100, g: 60, b: 180 }], // deep purple
+	['morning', { r: 255, g: 200, b: 50 }], // golden yellow
+	['afternoon', { r: 64, g: 196, b: 99 }], // green
+	['evening', { r: 47, g: 129, b: 247 }], // blue
+	['night', { r: 60, g: 40, b: 140 }], // dark indigo
 ]);
 
 function buildTodPalette(): {
@@ -969,52 +933,52 @@ function dayMixedColor(
 	colorMap: Map<string, RGB>,
 	otherColor: RGB,
 	mode: MeasurementMode,
-	view: BreakdownView = "model",
+	view: BreakdownView = 'model',
 ): RGB {
 	const parts: Array<{ color: RGB; weight: number }> = [];
 	let otherWeight = 0;
 
 	let map: Map<string, number>;
-	if (view === "dow") {
+	if (view === 'dow') {
 		// For dow, each day IS a single dow – use the dow color directly
 		const dowKey = DOW_NAMES[mondayIndex(day.date)];
 		const c = colorMap.get(dowKey);
 		return c ?? otherColor;
-	} else if (view === "tod") {
-		if (mode === "tokens") {
+	} else if (view === 'tod') {
+		if (mode === 'tokens') {
 			map =
 				day.tokens > 0
 					? day.tokensByTod
 					: day.messages > 0
 						? day.messagesByTod
 						: day.sessionsByTod;
-		} else if (mode === "messages") {
+		} else if (mode === 'messages') {
 			map = day.messages > 0 ? day.messagesByTod : day.sessionsByTod;
 		} else {
 			map = day.sessionsByTod;
 		}
-	} else if (view === "cwd") {
-		if (mode === "tokens") {
+	} else if (view === 'cwd') {
+		if (mode === 'tokens') {
 			map =
 				day.tokens > 0
 					? day.tokensByCwd
 					: day.messages > 0
 						? day.messagesByCwd
 						: day.sessionsByCwd;
-		} else if (mode === "messages") {
+		} else if (mode === 'messages') {
 			map = day.messages > 0 ? day.messagesByCwd : day.sessionsByCwd;
 		} else {
 			map = day.sessionsByCwd;
 		}
 	} else {
-		if (mode === "tokens") {
+		if (mode === 'tokens') {
 			map =
 				day.tokens > 0
 					? day.tokensByModel
 					: day.messages > 0
 						? day.messagesByModel
 						: day.sessionsByModel;
-		} else if (mode === "messages") {
+		} else if (mode === 'messages') {
 			map = day.messages > 0 ? day.messagesByModel : day.sessionsByModel;
 		} else {
 			map = day.sessionsByModel;
@@ -1033,29 +997,28 @@ function dayMixedColor(
 function graphMetricForRange(
 	range: RangeAgg,
 	mode: MeasurementMode,
-): { kind: "sessions" | "messages" | "tokens"; max: number; denom: number } {
-	if (mode === "tokens") {
+): { kind: 'sessions' | 'messages' | 'tokens'; max: number; denom: number } {
+	if (mode === 'tokens') {
 		const maxTokens = Math.max(0, ...range.days.map((d) => d.tokens));
-		if (maxTokens > 0)
-			return { kind: "tokens", max: maxTokens, denom: Math.log1p(maxTokens) };
+		if (maxTokens > 0) return { kind: 'tokens', max: maxTokens, denom: Math.log1p(maxTokens) };
 		// fall back if tokens aren't available
-		mode = "messages";
+		mode = 'messages';
 	}
 
-	if (mode === "messages") {
+	if (mode === 'messages') {
 		const maxMessages = Math.max(0, ...range.days.map((d) => d.messages));
 		if (maxMessages > 0)
 			return {
-				kind: "messages",
+				kind: 'messages',
 				max: maxMessages,
 				denom: Math.log1p(maxMessages),
 			};
 		// fall back if messages aren't available
-		mode = "sessions";
+		mode = 'sessions';
 	}
 
 	const maxSessions = Math.max(0, ...range.days.map((d) => d.sessions));
-	return { kind: "sessions", max: maxSessions, denom: Math.log1p(maxSessions) };
+	return { kind: 'sessions', max: maxSessions, denom: Math.log1p(maxSessions) };
 }
 
 function weeksForRange(range: RangeAgg): number {
@@ -1074,7 +1037,7 @@ function renderGraphLines(
 	otherColor: RGB,
 	mode: MeasurementMode,
 	options?: { cellWidth?: number; gap?: number },
-	view: BreakdownView = "model",
+	view: BreakdownView = 'model',
 ): string[] {
 	const days = range.days;
 	const start = days[0].date;
@@ -1087,39 +1050,39 @@ function renderGraphLines(
 
 	const cellWidth = Math.max(1, Math.floor(options?.cellWidth ?? 1));
 	const gap = Math.max(0, Math.floor(options?.gap ?? 1));
-	const block = "█".repeat(cellWidth);
-	const gapStr = " ".repeat(gap);
+	const block = '█'.repeat(cellWidth);
+	const gapStr = ' '.repeat(gap);
 
 	const metric = graphMetricForRange(range, mode);
 	const denom = metric.denom;
 
 	// Label only Mon/Wed/Fri like GitHub (saves space)
 	const labelByRow = new Map<number, string>([
-		[0, "Mon"],
-		[2, "Wed"],
-		[4, "Fri"],
+		[0, 'Mon'],
+		[2, 'Wed'],
+		[4, 'Fri'],
 	]);
 
 	const lines: string[] = [];
 	for (let row = 0; row < 7; row++) {
 		const label = labelByRow.get(row);
-		let line = label ? padRight(label, 3) + " " : "    ";
+		let line = label ? padRight(label, 3) + ' ' : '    ';
 
 		for (let w = 0; w < weeks; w++) {
 			const cellDate = addDaysLocal(gridStart, w * 7 + row);
 			const inRange = cellDate >= start && cellDate <= end;
-			const colGap = w < weeks - 1 ? gapStr : "";
+			const colGap = w < weeks - 1 ? gapStr : '';
 			if (!inRange) {
-				line += " ".repeat(cellWidth) + colGap;
+				line += ' '.repeat(cellWidth) + colGap;
 				continue;
 			}
 
 			const key = toLocalDayKey(cellDate);
 			const day = range.dayByKey.get(key);
 			const value =
-				metric.kind === "tokens"
+				metric.kind === 'tokens'
 					? (day?.tokens ?? 0)
-					: metric.kind === "messages"
+					: metric.kind === 'messages'
 						? (day?.messages ?? 0)
 						: (day?.sessions ?? 0);
 
@@ -1144,7 +1107,7 @@ function renderGraphLines(
 }
 
 function displayModelName(modelKey: string): string {
-	const idx = modelKey.indexOf("/");
+	const idx = modelKey.indexOf('/');
 	return idx === -1 ? modelKey : modelKey.slice(idx + 1);
 }
 
@@ -1157,28 +1120,24 @@ function renderLegendItems(
 	for (const mk of orderedModels) {
 		const c = modelColors.get(mk);
 		if (!c) continue;
-		items.push(`${ansiFg(c, "█")} ${displayModelName(mk)}`);
+		items.push(`${ansiFg(c, '█')} ${displayModelName(mk)}`);
 	}
-	items.push(`${ansiFg(otherColor, "█")} other`);
+	items.push(`${ansiFg(otherColor, '█')} other`);
 	return items;
 }
 
 function fitRight(text: string, width: number): string {
-	if (width <= 0) return "";
+	if (width <= 0) return '';
 	let w = visibleWidth(text);
 	let t = text;
 	if (w > width) {
 		t = sliceByColumn(t, w - width, width, true);
 		w = visibleWidth(t);
 	}
-	return " ".repeat(Math.max(0, width - w)) + t;
+	return ' '.repeat(Math.max(0, width - w)) + t;
 }
 
-function renderLegendBlock(
-	leftLabel: string,
-	items: string[],
-	width: number,
-): string[] {
+function renderLegendBlock(leftLabel: string, items: string[], width: number): string[] {
 	if (width <= 0) return [];
 	if (items.length === 0) return [truncateToWidth(leftLabel, width)];
 
@@ -1201,11 +1160,7 @@ function renderLegendBlock(
 	return lines;
 }
 
-function renderModelTable(
-	range: RangeAgg,
-	mode: MeasurementMode,
-	maxRows = 8,
-): string[] {
+function renderModelTable(range: RangeAgg, mode: MeasurementMode, maxRows = 8): string[] {
 	// Keep this relatively narrow: model + selected metric + cost + share.
 	const metric = graphMetricForRange(range, mode);
 	const kind = metric.kind;
@@ -1214,10 +1169,10 @@ function renderModelTable(
 	let total = 0;
 	let label = kind;
 
-	if (kind === "tokens") {
+	if (kind === 'tokens') {
 		perModel = range.modelTokens;
 		total = range.totalTokens;
-	} else if (kind === "messages") {
+	} else if (kind === 'messages') {
 		perModel = range.modelMessages;
 		total = range.totalMessages;
 	} else {
@@ -1228,41 +1183,34 @@ function renderModelTable(
 	const sorted = sortMapByValueDesc(perModel);
 	const rows = sorted.slice(0, maxRows);
 
-	const valueWidth = kind === "tokens" ? 10 : 8;
-	const modelWidth = Math.min(
-		52,
-		Math.max("model".length, ...rows.map((r) => r.key.length)),
-	);
+	const valueWidth = kind === 'tokens' ? 10 : 8;
+	const modelWidth = Math.min(52, Math.max('model'.length, ...rows.map((r) => r.key.length)));
 
 	const lines: string[] = [];
 	lines.push(
-		`${padRight("model", modelWidth)}  ${padLeft(label, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`,
+		`${padRight('model', modelWidth)}  ${padLeft(label, valueWidth)}  ${padLeft('cost', 10)}  ${padLeft('share', 6)}`,
 	);
 	lines.push(
-		`${"-".repeat(modelWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`,
+		`${'-'.repeat(modelWidth)}  ${'-'.repeat(valueWidth)}  ${'-'.repeat(10)}  ${'-'.repeat(6)}`,
 	);
 
 	for (const r of rows) {
 		const value = perModel.get(r.key) ?? 0;
 		const cost = range.modelCost.get(r.key) ?? 0;
-		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
+		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : '0%';
 		lines.push(
 			`${padRight(r.key.slice(0, modelWidth), modelWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
 		);
 	}
 
 	if (sorted.length === 0) {
-		lines.push(dim("(no model data found)"));
+		lines.push(dim('(no model data found)'));
 	}
 
 	return lines;
 }
 
-function renderCwdTable(
-	range: RangeAgg,
-	mode: MeasurementMode,
-	maxRows = 8,
-): string[] {
+function renderCwdTable(range: RangeAgg, mode: MeasurementMode, maxRows = 8): string[] {
 	const metric = graphMetricForRange(range, mode);
 	const kind = metric.kind;
 
@@ -1270,10 +1218,10 @@ function renderCwdTable(
 	let total = 0;
 	let label = kind;
 
-	if (kind === "tokens") {
+	if (kind === 'tokens') {
 		perCwd = range.cwdTokens;
 		total = range.totalTokens;
-	} else if (kind === "messages") {
+	} else if (kind === 'messages') {
 		perCwd = range.cwdMessages;
 		total = range.totalMessages;
 	} else {
@@ -1284,33 +1232,33 @@ function renderCwdTable(
 	const sorted = sortMapByValueDesc(perCwd);
 	const rows = sorted.slice(0, maxRows);
 
-	const valueWidth = kind === "tokens" ? 10 : 8;
+	const valueWidth = kind === 'tokens' ? 10 : 8;
 	const displayPaths = rows.map((r) => abbreviatePath(r.key, 40));
 	const cwdWidth = Math.min(
 		42,
-		Math.max("directory".length, ...displayPaths.map((p) => p.length)),
+		Math.max('directory'.length, ...displayPaths.map((p) => p.length)),
 	);
 
 	const lines: string[] = [];
 	lines.push(
-		`${padRight("directory", cwdWidth)}  ${padLeft(label, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`,
+		`${padRight('directory', cwdWidth)}  ${padLeft(label, valueWidth)}  ${padLeft('cost', 10)}  ${padLeft('share', 6)}`,
 	);
 	lines.push(
-		`${"-".repeat(cwdWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`,
+		`${'-'.repeat(cwdWidth)}  ${'-'.repeat(valueWidth)}  ${'-'.repeat(10)}  ${'-'.repeat(6)}`,
 	);
 
 	for (let i = 0; i < rows.length; i++) {
 		const r = rows[i];
 		const value = perCwd.get(r.key) ?? 0;
 		const cost = range.cwdCost.get(r.key) ?? 0;
-		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
+		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : '0%';
 		lines.push(
 			`${padRight(displayPaths[i].slice(0, cwdWidth), cwdWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
 		);
 	}
 
 	if (sorted.length === 0) {
-		lines.push(dim("(no directory data found)"));
+		lines.push(dim('(no directory data found)'));
 	}
 
 	return lines;
@@ -1320,17 +1268,17 @@ function dowMetricForRange(
 	range: RangeAgg,
 	mode: MeasurementMode,
 ): {
-	kind: "sessions" | "messages" | "tokens";
+	kind: 'sessions' | 'messages' | 'tokens';
 	perDow: Map<DowKey, number>;
 	total: number;
 } {
 	const metric = graphMetricForRange(range, mode);
 	const kind = metric.kind;
 
-	if (kind === "tokens") {
+	if (kind === 'tokens') {
 		return { kind, perDow: range.dowTokens, total: range.totalTokens };
 	}
-	if (kind === "messages") {
+	if (kind === 'messages') {
 		return { kind, perDow: range.dowMessages, total: range.totalMessages };
 	}
 	return { kind, perDow: range.dowSessions, total: range.sessions };
@@ -1345,10 +1293,9 @@ function renderDowDistributionLines(
 	const { kind, perDow, total } = dowMetricForRange(range, mode);
 	const dayWidth = 3;
 	const pctWidth = 4; // "100%"
-	const valueWidth = kind === "tokens" ? 10 : 8;
+	const valueWidth = kind === 'tokens' ? 10 : 8;
 	const showValue = width >= dayWidth + 1 + 10 + 1 + pctWidth + 1 + valueWidth;
-	const fixedWidth =
-		dayWidth + 1 + 1 + pctWidth + (showValue ? 1 + valueWidth : 0);
+	const fixedWidth = dayWidth + 1 + 1 + pctWidth + (showValue ? 1 + valueWidth : 0);
 	const barWidth = Math.max(1, width - fixedWidth);
 	const fallbackColor: RGB = { r: 160, g: 160, b: 160 };
 
@@ -1362,8 +1309,8 @@ function renderDowDistributionLines(
 		const empty = Math.max(0, barWidth - filled);
 
 		const color = dowColors.get(dow) ?? fallbackColor;
-		const filledBar = filled > 0 ? ansiFg(color, "█".repeat(filled)) : "";
-		const emptyBar = empty > 0 ? ansiFg(EMPTY_CELL_BG, "█".repeat(empty)) : "";
+		const filledBar = filled > 0 ? ansiFg(color, '█'.repeat(filled)) : '';
+		const emptyBar = empty > 0 ? ansiFg(EMPTY_CELL_BG, '█'.repeat(empty)) : '';
 		const pct = padLeft(`${Math.round(share * 100)}%`, pctWidth);
 
 		let line = `${padRight(dow, dayWidth)} ${filledBar}${emptyBar} ${pct}`;
@@ -1376,22 +1323,22 @@ function renderDowDistributionLines(
 
 function renderDowTable(range: RangeAgg, mode: MeasurementMode): string[] {
 	const { kind, perDow, total } = dowMetricForRange(range, mode);
-	const valueWidth = kind === "tokens" ? 10 : 8;
+	const valueWidth = kind === 'tokens' ? 10 : 8;
 	const dowWidth = 5; // "day  "
 
 	const lines: string[] = [];
 	lines.push(
-		`${padRight("day", dowWidth)}  ${padLeft(kind, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`,
+		`${padRight('day', dowWidth)}  ${padLeft(kind, valueWidth)}  ${padLeft('cost', 10)}  ${padLeft('share', 6)}`,
 	);
 	lines.push(
-		`${"-".repeat(dowWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`,
+		`${'-'.repeat(dowWidth)}  ${'-'.repeat(valueWidth)}  ${'-'.repeat(10)}  ${'-'.repeat(6)}`,
 	);
 
 	// Always show in Mon–Sun order
 	for (const dow of DOW_NAMES) {
 		const value = perDow.get(dow) ?? 0;
 		const cost = range.dowCost.get(dow) ?? 0;
-		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
+		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : '0%';
 		lines.push(
 			`${padRight(dow, dowWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
 		);
@@ -1407,10 +1354,10 @@ function renderTodTable(range: RangeAgg, mode: MeasurementMode): string[] {
 	let perTod: Map<TodKey, number>;
 	let total = 0;
 
-	if (kind === "tokens") {
+	if (kind === 'tokens') {
 		perTod = range.todTokens;
 		total = range.totalTokens;
-	} else if (kind === "messages") {
+	} else if (kind === 'messages') {
 		perTod = range.todMessages;
 		total = range.totalMessages;
 	} else {
@@ -1418,22 +1365,22 @@ function renderTodTable(range: RangeAgg, mode: MeasurementMode): string[] {
 		total = range.sessions;
 	}
 
-	const valueWidth = kind === "tokens" ? 10 : 8;
+	const valueWidth = kind === 'tokens' ? 10 : 8;
 	const todWidth = 22; // widest label
 
 	const lines: string[] = [];
 	lines.push(
-		`${padRight("time of day", todWidth)}  ${padLeft(kind, valueWidth)}  ${padLeft("cost", 10)}  ${padLeft("share", 6)}`,
+		`${padRight('time of day', todWidth)}  ${padLeft(kind, valueWidth)}  ${padLeft('cost', 10)}  ${padLeft('share', 6)}`,
 	);
 	lines.push(
-		`${"-".repeat(todWidth)}  ${"-".repeat(valueWidth)}  ${"-".repeat(10)}  ${"-".repeat(6)}`,
+		`${'-'.repeat(todWidth)}  ${'-'.repeat(valueWidth)}  ${'-'.repeat(10)}  ${'-'.repeat(6)}`,
 	);
 
 	// Always show in chronological order
 	for (const b of TOD_BUCKETS) {
 		const value = perTod.get(b.key) ?? 0;
 		const cost = range.todCost.get(b.key) ?? 0;
-		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : "0%";
+		const share = total > 0 ? `${Math.round((value / total) * 100)}%` : '0%';
 		lines.push(
 			`${padRight(b.label, todWidth)}  ${padLeft(formatCount(value), valueWidth)}  ${padLeft(formatUsd(cost), 10)}  ${padLeft(share, 6)}`,
 		);
@@ -1444,7 +1391,7 @@ function renderTodTable(range: RangeAgg, mode: MeasurementMode): string[] {
 
 function renderLeftRight(left: string, right: string, width: number): string {
 	const leftW = visibleWidth(left);
-	if (width <= 0) return "";
+	if (width <= 0) return '';
 	if (leftW >= width) return truncateToWidth(left, width);
 
 	const remaining = width - leftW;
@@ -1455,24 +1402,20 @@ function renderLeftRight(left: string, right: string, width: number): string {
 		rightText = sliceByColumn(rightText, rightW - remaining, remaining, true);
 	}
 	const pad = Math.max(0, remaining - visibleWidth(rightText));
-	return left + " ".repeat(pad) + rightText;
+	return left + ' '.repeat(pad) + rightText;
 }
 
-function rangeSummary(
-	range: RangeAgg,
-	days: number,
-	mode: MeasurementMode,
-): string {
+function rangeSummary(range: RangeAgg, days: number, mode: MeasurementMode): string {
 	const avg = range.sessions > 0 ? range.totalCost / range.sessions : 0;
 	const costPart =
 		range.totalCost > 0
 			? `${formatUsd(range.totalCost)} · avg ${formatUsd(avg)}/session`
 			: `$0.0000`;
 
-	if (mode === "tokens") {
+	if (mode === 'tokens') {
 		return `Last ${days} days: ${formatCount(range.sessions)} sessions · ${formatCount(range.totalTokens)} tokens · ${costPart}`;
 	}
-	if (mode === "messages") {
+	if (mode === 'messages') {
 		return `Last ${days} days: ${formatCount(range.sessions)} sessions · ${formatCount(range.totalMessages)} messages · ${costPart}`;
 	}
 	return `Last ${days} days: ${formatCount(range.sessions)} sessions · ${costPart}`;
@@ -1489,25 +1432,20 @@ async function computeBreakdown(
 	const start90 = range90.days[0].date;
 
 	onProgress?.({
-		phase: "scan",
+		phase: 'scan',
 		foundFiles: 0,
 		parsedFiles: 0,
 		totalFiles: 0,
 		currentFile: undefined,
 	});
 
-	const candidates = await walkSessionFiles(
-		SESSION_ROOT,
-		start90,
-		signal,
-		(found) => {
-			onProgress?.({ phase: "scan", foundFiles: found });
-		},
-	);
+	const candidates = await walkSessionFiles(SESSION_ROOT, start90, signal, (found) => {
+		onProgress?.({ phase: 'scan', foundFiles: found });
+	});
 
 	const totalFiles = candidates.length;
 	onProgress?.({
-		phase: "parse",
+		phase: 'parse',
 		foundFiles: totalFiles,
 		totalFiles,
 		parsedFiles: 0,
@@ -1519,7 +1457,7 @@ async function computeBreakdown(
 		if (signal?.aborted) break;
 		parsedFiles += 1;
 		onProgress?.({
-			phase: "parse",
+			phase: 'parse',
 			parsedFiles,
 			totalFiles,
 			currentFile: path.basename(filePath),
@@ -1538,7 +1476,7 @@ async function computeBreakdown(
 		}
 	}
 
-	onProgress?.({ phase: "finalize", currentFile: undefined });
+	onProgress?.({ phase: 'finalize', currentFile: undefined });
 
 	const palette = choosePaletteFromLast30Days(ranges.get(30)!, 4);
 	const cwdPalette = chooseCwdPaletteFromLast30Days(ranges.get(30)!, 4);
@@ -1559,8 +1497,8 @@ class BreakdownComponent implements Component {
 	private tui: TUI;
 	private onDone: () => void;
 	private rangeIndex = 1; // default 30d
-	private measurement: MeasurementMode = "sessions";
-	private view: BreakdownView = "model";
+	private measurement: MeasurementMode = 'sessions';
+	private view: BreakdownView = 'model';
 	private cachedWidth?: number;
 	private cachedLines?: string[];
 
@@ -1578,8 +1516,8 @@ class BreakdownComponent implements Component {
 	handleInput(data: string): void {
 		if (
 			matchesKey(data, Key.escape) ||
-			matchesKey(data, Key.ctrl("c")) ||
-			data.toLowerCase() === "q"
+			matchesKey(data, Key.ctrl('c')) ||
+			data.toLowerCase() === 'q'
 		) {
 			this.onDone();
 			return;
@@ -1587,22 +1525,20 @@ class BreakdownComponent implements Component {
 
 		if (
 			matchesKey(data, Key.tab) ||
-			matchesKey(data, Key.shift("tab")) ||
-			data.toLowerCase() === "t"
+			matchesKey(data, Key.shift('tab')) ||
+			data.toLowerCase() === 't'
 		) {
-			const order: MeasurementMode[] = ["sessions", "messages", "tokens"];
+			const order: MeasurementMode[] = ['sessions', 'messages', 'tokens'];
 			const idx = Math.max(0, order.indexOf(this.measurement));
-			const dir = matchesKey(data, Key.shift("tab")) ? -1 : 1;
-			this.measurement =
-				order[(idx + order.length + dir) % order.length] ?? "sessions";
+			const dir = matchesKey(data, Key.shift('tab')) ? -1 : 1;
+			this.measurement = order[(idx + order.length + dir) % order.length] ?? 'sessions';
 			this.invalidate();
 			this.tui.requestRender();
 			return;
 		}
 
 		const prev = () => {
-			this.rangeIndex =
-				(this.rangeIndex + RANGE_DAYS.length - 1) % RANGE_DAYS.length;
+			this.rangeIndex = (this.rangeIndex + RANGE_DAYS.length - 1) % RANGE_DAYS.length;
 			this.invalidate();
 			this.tui.requestRender();
 		};
@@ -1612,36 +1548,35 @@ class BreakdownComponent implements Component {
 			this.tui.requestRender();
 		};
 
-		if (matchesKey(data, Key.left) || data.toLowerCase() === "h") prev();
-		if (matchesKey(data, Key.right) || data.toLowerCase() === "l") next();
+		if (matchesKey(data, Key.left) || data.toLowerCase() === 'h') prev();
+		if (matchesKey(data, Key.right) || data.toLowerCase() === 'l') next();
 
 		if (
 			matchesKey(data, Key.up) ||
 			matchesKey(data, Key.down) ||
-			data.toLowerCase() === "j" ||
-			data.toLowerCase() === "k"
+			data.toLowerCase() === 'j' ||
+			data.toLowerCase() === 'k'
 		) {
-			const views: BreakdownView[] = ["model", "cwd", "dow", "tod"];
+			const views: BreakdownView[] = ['model', 'cwd', 'dow', 'tod'];
 			const idx = views.indexOf(this.view);
-			const dir =
-				matchesKey(data, Key.up) || data.toLowerCase() === "k" ? -1 : 1;
-			this.view = views[(idx + views.length + dir) % views.length] ?? "model";
+			const dir = matchesKey(data, Key.up) || data.toLowerCase() === 'k' ? -1 : 1;
+			this.view = views[(idx + views.length + dir) % views.length] ?? 'model';
 			this.invalidate();
 			this.tui.requestRender();
 			return;
 		}
 
-		if (data === "1") {
+		if (data === '1') {
 			this.rangeIndex = 0;
 			this.invalidate();
 			this.tui.requestRender();
 		}
-		if (data === "2") {
+		if (data === '2') {
 			this.rangeIndex = 1;
 			this.invalidate();
 			this.tui.requestRender();
 		}
-		if (data === "3") {
+		if (data === '3') {
 			this.rangeIndex = 2;
 			this.invalidate();
 			this.tui.requestRender();
@@ -1672,55 +1607,52 @@ class BreakdownComponent implements Component {
 		};
 
 		const header =
-			`${bold("Session breakdown")}  ${tab(7, 0)}${tab(30, 1)}${tab(90, 2)}  ` +
-			`${metricTab("sessions", "sess")}${metricTab("messages", "msg")}${metricTab("tokens", "tok")}  ` +
-			`${viewTab("model", "model")}${viewTab("cwd", "cwd")}${viewTab("dow", "dow")}${viewTab("tod", "tod")}`;
+			`${bold('Session breakdown')}  ${tab(7, 0)}${tab(30, 1)}${tab(90, 2)}  ` +
+			`${metricTab('sessions', 'sess')}${metricTab('messages', 'msg')}${metricTab('tokens', 'tok')}  ` +
+			`${viewTab('model', 'model')}${viewTab('cwd', 'cwd')}${viewTab('dow', 'dow')}${viewTab('tod', 'tod')}`;
 
 		// Choose colors and legend based on current view
 		let activeColorMap: Map<string, RGB>;
 		let activeOtherColor: RGB = { r: 160, g: 160, b: 160 };
 		const legendItems: string[] = [];
 
-		if (this.view === "model") {
+		if (this.view === 'model') {
 			activeColorMap = this.data.palette.modelColors;
 			activeOtherColor = this.data.palette.otherColor;
 			for (const mk of this.data.palette.orderedModels) {
 				const c = activeColorMap.get(mk);
-				if (c) legendItems.push(`${ansiFg(c, "█")} ${displayModelName(mk)}`);
+				if (c) legendItems.push(`${ansiFg(c, '█')} ${displayModelName(mk)}`);
 			}
-			legendItems.push(`${ansiFg(activeOtherColor, "█")} other`);
-		} else if (this.view === "cwd") {
+			legendItems.push(`${ansiFg(activeOtherColor, '█')} other`);
+		} else if (this.view === 'cwd') {
 			activeColorMap = this.data.cwdPalette.cwdColors;
 			activeOtherColor = this.data.cwdPalette.otherColor;
 			for (const cwd of this.data.cwdPalette.orderedCwds) {
 				const c = activeColorMap.get(cwd);
-				if (c) legendItems.push(`${ansiFg(c, "█")} ${abbreviatePath(cwd, 30)}`);
+				if (c) legendItems.push(`${ansiFg(c, '█')} ${abbreviatePath(cwd, 30)}`);
 			}
-			legendItems.push(`${ansiFg(activeOtherColor, "█")} other`);
-		} else if (this.view === "dow") {
+			legendItems.push(`${ansiFg(activeOtherColor, '█')} other`);
+		} else if (this.view === 'dow') {
 			activeColorMap = this.data.dowPalette.dowColors;
 			for (const dow of this.data.dowPalette.orderedDows) {
 				const c = activeColorMap.get(dow);
-				if (c) legendItems.push(`${ansiFg(c, "█")} ${dow}`);
+				if (c) legendItems.push(`${ansiFg(c, '█')} ${dow}`);
 			}
 		} else {
 			activeColorMap = this.data.todPalette.todColors;
 			for (const tod of this.data.todPalette.orderedTods) {
 				const c = activeColorMap.get(tod);
-				if (c) legendItems.push(`${ansiFg(c, "█")} ${todBucketLabel(tod)}`);
+				if (c) legendItems.push(`${ansiFg(c, '█')} ${todBucketLabel(tod)}`);
 			}
 		}
 
 		const graphDescriptor =
-			this.view === "dow"
-				? `share of ${metric.kind} by weekday`
-				: `${metric.kind}/day`;
+			this.view === 'dow' ? `share of ${metric.kind} by weekday` : `${metric.kind}/day`;
 		const summary =
-			rangeSummary(range, selectedDays, metric.kind) +
-			dim(`   (graph: ${graphDescriptor})`);
+			rangeSummary(range, selectedDays, metric.kind) + dim(`   (graph: ${graphDescriptor})`);
 
 		let graphLines: string[];
-		if (this.view === "dow") {
+		if (this.view === 'dow') {
 			graphLines = renderDowDistributionLines(
 				range,
 				this.measurement,
@@ -1734,8 +1666,7 @@ class BreakdownComponent implements Component {
 			const gap = 1;
 			const graphArea = Math.max(1, width - leftMargin);
 			// Each week column uses: cellWidth + gap. Last column also gets gap (fine; we truncate anyway).
-			const idealCellWidth =
-				Math.floor((graphArea + gap) / Math.max(1, weeks)) - gap;
+			const idealCellWidth = Math.floor((graphArea + gap) / Math.max(1, weeks)) - gap;
 			const cellWidth = Math.min(maxScale, Math.max(1, idealCellWidth));
 
 			graphLines = renderGraphLines(
@@ -1748,27 +1679,22 @@ class BreakdownComponent implements Component {
 			);
 		}
 		const tableLines =
-			this.view === "model"
+			this.view === 'model'
 				? renderModelTable(range, metric.kind, 8)
-				: this.view === "cwd"
+				: this.view === 'cwd'
 					? renderCwdTable(range, metric.kind, 8)
-					: this.view === "dow"
+					: this.view === 'dow'
 						? renderDowTable(range, metric.kind)
 						: renderTodTable(range, metric.kind);
 
 		const lines: string[] = [];
 		lines.push(truncateToWidth(header, width));
-		lines.push(
-			truncateToWidth(
-				dim("←/→ range · ↑/↓ view · tab metric · q to close"),
-				width,
-			),
-		);
-		lines.push("");
+		lines.push(truncateToWidth(dim('←/→ range · ↑/↓ view · tab metric · q to close'), width));
+		lines.push('');
 		lines.push(truncateToWidth(summary, width));
-		lines.push("");
+		lines.push('');
 
-		if (this.view === "dow") {
+		if (this.view === 'dow') {
 			for (const gl of graphLines) lines.push(truncateToWidth(gl, width));
 		} else {
 			// Render legend on the RIGHT of the graph if there is space.
@@ -1780,11 +1706,11 @@ class BreakdownComponent implements Component {
 			if (showSideLegend) {
 				const legendBlock: string[] = [];
 				const legendTitle =
-					this.view === "model"
-						? "Top models (30d palette):"
-						: this.view === "cwd"
-							? "Top directories (30d palette):"
-							: "Time of day:";
+					this.view === 'model'
+						? 'Top models (30d palette):'
+						: this.view === 'cwd'
+							? 'Top directories (30d palette):'
+							: 'Time of day:';
 				legendBlock.push(dim(legendTitle));
 				legendBlock.push(...legendItems);
 				// Fit into 7 rows (same as graph). If too many, show a final "+N more" line.
@@ -1797,38 +1723,35 @@ class BreakdownComponent implements Component {
 						dim(`+${remaining} more`),
 					];
 				}
-				while (legendLines.length < graphLines.length) legendLines.push("");
+				while (legendLines.length < graphLines.length) legendLines.push('');
 
 				const padRightAnsi = (s: string, target: number): string => {
 					const w = visibleWidth(s);
-					return w >= target ? s : s + " ".repeat(target - w);
+					return w >= target ? s : s + ' '.repeat(target - w);
 				};
 
 				for (let i = 0; i < graphLines.length; i++) {
-					const left = padRightAnsi(graphLines[i] ?? "", graphWidth);
-					const right = truncateToWidth(
-						legendLines[i] ?? "",
-						Math.max(0, legendWidth),
-					);
-					lines.push(truncateToWidth(left + " ".repeat(sep) + right, width));
+					const left = padRightAnsi(graphLines[i] ?? '', graphWidth);
+					const right = truncateToWidth(legendLines[i] ?? '', Math.max(0, legendWidth));
+					lines.push(truncateToWidth(left + ' '.repeat(sep) + right, width));
 				}
 			} else {
 				// Fallback: graph only (legend will be shown below).
 				for (const gl of graphLines) lines.push(truncateToWidth(gl, width));
-				lines.push("");
+				lines.push('');
 				// Compact legend below, left-aligned.
 				const legendTitleBelow =
-					this.view === "model"
-						? "Top models (30d palette):"
-						: this.view === "cwd"
-							? "Top directories (30d palette):"
-							: "Time of day:";
+					this.view === 'model'
+						? 'Top models (30d palette):'
+						: this.view === 'cwd'
+							? 'Top directories (30d palette):'
+							: 'Time of day:';
 				lines.push(truncateToWidth(dim(legendTitleBelow), width));
 				for (const it of legendItems) lines.push(truncateToWidth(it, width));
 			}
 		}
 
-		lines.push("");
+		lines.push('');
 		for (const tl of tableLines) lines.push(truncateToWidth(tl, width));
 
 		// Ensure no overly long lines (truncateToWidth already), but keep at least 1 line.
@@ -1841,9 +1764,9 @@ class BreakdownComponent implements Component {
 }
 
 export default function sessionBreakdownExtension(pi: ExtensionAPI) {
-	pi.registerCommand("session-breakdown", {
+	pi.registerCommand('session-breakdown', {
 		description:
-			"Interactive breakdown of last 7/30/90 days of ~/.pi session usage (sessions/messages/tokens + cost by model)",
+			'Interactive breakdown of last 7/30/90 days of ~/.pi session usage (sessions/messages/tokens + cost by model)',
 		handler: async (_args, ctx: ExtensionContext) => {
 			if (!ctx.hasUI) {
 				// Non-interactive fallback: just notify.
@@ -1851,8 +1774,8 @@ export default function sessionBreakdownExtension(pi: ExtensionAPI) {
 				const range = data.ranges.get(30)!;
 				pi.sendMessage(
 					{
-						customType: "session-breakdown",
-						content: `Session breakdown (non-interactive)\n${rangeSummary(range, 30, "sessions")}`,
+						customType: 'session-breakdown',
+						content: `Session breakdown (non-interactive)\n${rangeSummary(range, 30, 'sessions')}`,
 						display: true,
 					},
 					{ triggerTurn: false },
@@ -1861,72 +1784,68 @@ export default function sessionBreakdownExtension(pi: ExtensionAPI) {
 			}
 
 			let aborted = false;
-			const data = await ctx.ui.custom<BreakdownData | null>(
-				(tui, theme, _kb, done) => {
-					const baseMessage = "Analyzing sessions (last 90 days)…";
-					const loader = new BorderedLoader(tui, theme, baseMessage);
+			const data = await ctx.ui.custom<BreakdownData | null>((tui, theme, _kb, done) => {
+				const baseMessage = 'Analyzing sessions (last 90 days)…';
+				const loader = new BorderedLoader(tui, theme, baseMessage);
 
-					const startedAt = Date.now();
-					const progress: BreakdownProgressState = {
-						phase: "scan",
-						foundFiles: 0,
-						parsedFiles: 0,
-						totalFiles: 0,
-						currentFile: undefined,
-					};
+				const startedAt = Date.now();
+				const progress: BreakdownProgressState = {
+					phase: 'scan',
+					foundFiles: 0,
+					parsedFiles: 0,
+					totalFiles: 0,
+					currentFile: undefined,
+				};
 
-					const renderMessage = (): string => {
-						const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-						if (progress.phase === "scan") {
-							return `${baseMessage}  scanning (${formatCount(progress.foundFiles)} files) · ${elapsed}s`;
-						}
-						if (progress.phase === "parse") {
-							return `${baseMessage}  parsing (${formatCount(progress.parsedFiles)}/${formatCount(progress.totalFiles)}) · ${elapsed}s`;
-						}
-						return `${baseMessage}  finalizing · ${elapsed}s`;
-					};
+				const renderMessage = (): string => {
+					const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+					if (progress.phase === 'scan') {
+						return `${baseMessage}  scanning (${formatCount(progress.foundFiles)} files) · ${elapsed}s`;
+					}
+					if (progress.phase === 'parse') {
+						return `${baseMessage}  parsing (${formatCount(progress.parsedFiles)}/${formatCount(progress.totalFiles)}) · ${elapsed}s`;
+					}
+					return `${baseMessage}  finalizing · ${elapsed}s`;
+				};
 
-					let intervalId: NodeJS.Timeout | null = null;
-					const stopTicker = () => {
-						if (intervalId) {
-							clearInterval(intervalId);
-							intervalId = null;
-						}
-					};
+				let intervalId: NodeJS.Timeout | null = null;
+				const stopTicker = () => {
+					if (intervalId) {
+						clearInterval(intervalId);
+						intervalId = null;
+					}
+				};
 
-					// Update every 0.5s so long-running scans show some visible progress.
+				// Update every 0.5s so long-running scans show some visible progress.
+				setBorderedLoaderMessage(loader, renderMessage());
+				intervalId = setInterval(() => {
 					setBorderedLoaderMessage(loader, renderMessage());
-					intervalId = setInterval(() => {
-						setBorderedLoaderMessage(loader, renderMessage());
-					}, 500);
+				}, 500);
 
-					loader.onAbort = () => {
-						aborted = true;
+				loader.onAbort = () => {
+					aborted = true;
+					stopTicker();
+					done(null);
+				};
+
+				computeBreakdown(loader.signal, (update) => Object.assign(progress, update))
+					.then((d) => {
 						stopTicker();
-						done(null);
-					};
+						if (!aborted) done(d);
+					})
+					.catch((err) => {
+						stopTicker();
+						log.error('failed to analyze sessions', err);
+						if (!aborted) done(null);
+					});
 
-					computeBreakdown(loader.signal, (update) =>
-						Object.assign(progress, update),
-					)
-						.then((d) => {
-							stopTicker();
-							if (!aborted) done(d);
-						})
-						.catch((err) => {
-							stopTicker();
-							log.error("failed to analyze sessions", err);
-							if (!aborted) done(null);
-						});
-
-					return loader;
-				},
-			);
+				return loader;
+			});
 
 			if (!data) {
 				ctx.ui.notify(
-					aborted ? "Cancelled" : "Failed to analyze sessions",
-					aborted ? "info" : "error",
+					aborted ? 'Cancelled' : 'Failed to analyze sessions',
+					aborted ? 'info' : 'error',
 				);
 				return;
 			}

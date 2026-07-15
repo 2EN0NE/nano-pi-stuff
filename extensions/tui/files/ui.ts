@@ -4,8 +4,8 @@
  * 文件选择器、操作选择器、diff 面板、变更列表展示等 UI 组件。
  */
 
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { DynamicBorder } from '@earendil-works/pi-coding-agent';
 import {
 	Container,
 	fuzzyFilter,
@@ -16,11 +16,11 @@ import {
 	Spacer,
 	Text,
 	truncateToWidth,
-} from "@earendil-works/pi-tui";
-import { createLogger } from "@zenone/pi-logger";
-import type { ChangeRecord, FileEntry } from "./types.js";
+} from '@earendil-works/pi-tui';
+import { createLogger } from '@zenone/pi-logger';
+import type { ChangeRecord, FileEntry } from './types.js';
 
-const log = createLogger("files:ui");
+const log = createLogger('files:ui');
 
 // ── TUI Offline Toggle ─────────────────────────────────────────────────────
 
@@ -28,14 +28,11 @@ export const toggleTuiOffline = { set: (_v: boolean) => {} };
 
 // ── Build Select Items ─────────────────────────────────────────────────────
 
-export const buildSelectItems = (
-	files: FileEntry[],
-	selectedPaths: Set<string>,
-): SelectItem[] =>
+export const buildSelectItems = (files: FileEntry[], selectedPaths: Set<string>): SelectItem[] =>
 	files.map((file) => {
-		const checkbox = selectedPaths.has(file.canonicalPath) ? "☑ " : "☐ ";
-		const directoryLabel = file.isDirectory ? " [directory]" : "";
-		const statusSuffix = file.status ? ` [${file.status}]` : "";
+		const checkbox = selectedPaths.has(file.canonicalPath) ? '☑ ' : '☐ ';
+		const directoryLabel = file.isDirectory ? ' [directory]' : '';
+		const statusSuffix = file.status ? ` [${file.status}]` : '';
 		return {
 			value: file.canonicalPath,
 			label: `${checkbox}${file.displayPath}${directoryLabel}${statusSuffix}`,
@@ -53,63 +50,43 @@ export const showActionSelector = async (
 		canFileDiff: boolean;
 	},
 ): Promise<
-	| "reveal"
-	| "quicklook"
-	| "open"
-	| "edit"
-	| "addToPrompt"
-	| "viewChanges"
-	| "fileDiff"
-	| null
+	'reveal' | 'quicklook' | 'open' | 'edit' | 'addToPrompt' | 'viewChanges' | 'fileDiff' | null
 > => {
 	const actions: SelectItem[] = [
 		...(options.canViewChanges
-			? [{ value: "viewChanges" as const, label: "查看 git 变更" }]
+			? [{ value: 'viewChanges' as const, label: '查看 git 变更' }]
 			: []),
-		...(options.canFileDiff
-			? [{ value: "fileDiff" as const, label: "进行 diff 对比" }]
-			: []),
-		{ value: "reveal" as const, label: "在 Finder 中显示" },
-		{ value: "open" as const, label: "打开" },
-		{ value: "addToPrompt" as const, label: "添加到提示词" },
+		...(options.canFileDiff ? [{ value: 'fileDiff' as const, label: '进行 diff 对比' }] : []),
+		{ value: 'reveal' as const, label: '在 Finder 中显示' },
+		{ value: 'open' as const, label: '打开' },
+		{ value: 'addToPrompt' as const, label: '添加到提示词' },
 		...(options.canQuickLook
-			? [{ value: "quicklook" as const, label: "Quick Look 预览" }]
+			? [{ value: 'quicklook' as const, label: 'Quick Look 预览' }]
 			: []),
-		...(options.canEdit ? [{ value: "edit" as const, label: "编辑" }] : []),
+		...(options.canEdit ? [{ value: 'edit' as const, label: '编辑' }] : []),
 	];
 
 	const picked = await ctx.ui.custom<
-		| "reveal"
-		| "quicklook"
-		| "open"
-		| "edit"
-		| "addToPrompt"
-		| "viewChanges"
-		| "fileDiff"
-		| null
+		'reveal' | 'quicklook' | 'open' | 'edit' | 'addToPrompt' | 'viewChanges' | 'fileDiff' | null
 	>((tui, theme, _kb, done) => {
 		const container = new Container();
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-		container.addChild(
-			new Text(theme.fg("accent", theme.bold("Choose action"))),
-		);
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
+		container.addChild(new Text(theme.fg('accent', theme.bold('Choose action'))));
 
 		const selectList = new SelectList(actions, actions.length, {
-			selectedPrefix: (text) => theme.fg("accent", text),
-			selectedText: (text) => theme.fg("accent", text),
-			description: (text) => theme.fg("muted", text),
-			scrollInfo: (text) => theme.fg("dim", text),
-			noMatch: (text) => theme.fg("warning", text),
+			selectedPrefix: (text) => theme.fg('accent', text),
+			selectedText: (text) => theme.fg('accent', text),
+			description: (text) => theme.fg('muted', text),
+			scrollInfo: (text) => theme.fg('dim', text),
+			noMatch: (text) => theme.fg('warning', text),
 		});
 
 		selectList.onSelect = (item) => done(item.value as any);
 		selectList.onCancel = () => done(null);
 
 		container.addChild(selectList);
-		container.addChild(
-			new Text(theme.fg("dim", "Press enter to confirm or esc to cancel")),
-		);
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+		container.addChild(new Text(theme.fg('dim', 'Press enter to confirm or esc to cancel')));
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
 
 		return {
 			render(width: number) {
@@ -135,18 +112,16 @@ export const showFileSelector = async (
 	files: FileEntry[],
 	selectedPath?: string | null,
 	gitRoots: string[] = [],
-): Promise<{ selected: FileEntry[]; quickAction: "diff" | null }> => {
+): Promise<{ selected: FileEntry[]; quickAction: 'diff' | null }> => {
 	const selectedPaths = new Set<string>();
 	const allItems = buildSelectItems(files, selectedPaths);
 
-	let quickAction: "diff" | null = null;
+	let quickAction: 'diff' | null = null;
 	const selectionResult = await ctx.ui.custom<string[] | null>(
 		(tui, theme, keybindings, done) => {
 			const container = new Container();
-			container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-			container.addChild(
-				new Text(theme.fg("accent", theme.bold(" Select file(s)")), 0, 0),
-			);
+			container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
+			container.addChild(new Text(theme.fg('accent', theme.bold(' Select file(s)')), 0, 0));
 
 			const searchInput = new Input();
 			container.addChild(searchInput);
@@ -157,14 +132,14 @@ export const showFileSelector = async (
 			container.addChild(
 				new Text(
 					theme.fg(
-						"dim",
-						"Type to filter \u2022 space toggle \u2022 enter confirm \u2022 ctrl+shift+d diff \u2022 esc cancel",
+						'dim',
+						'Type to filter \u2022 space toggle \u2022 enter confirm \u2022 ctrl+shift+d diff \u2022 esc cancel',
 					),
 					0,
 					0,
 				),
 			);
-			container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+			container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
 
 			let filteredItems = allItems;
 			let selectList: SelectList | null = null;
@@ -173,28 +148,22 @@ export const showFileSelector = async (
 				listContainer.clear();
 				if (filteredItems.length === 0) {
 					listContainer.addChild(
-						new Text(theme.fg("warning", "  No matching files"), 0, 0),
+						new Text(theme.fg('warning', '  No matching files'), 0, 0),
 					);
 					selectList = null;
 					return;
 				}
 
-				selectList = new SelectList(
-					filteredItems,
-					Math.min(filteredItems.length, 12),
-					{
-						selectedPrefix: (text) => theme.fg("accent", text),
-						selectedText: (text) => theme.fg("accent", text),
-						description: (text) => theme.fg("muted", text),
-						scrollInfo: (text) => theme.fg("dim", text),
-						noMatch: (text) => theme.fg("warning", text),
-					},
-				);
+				selectList = new SelectList(filteredItems, Math.min(filteredItems.length, 12), {
+					selectedPrefix: (text) => theme.fg('accent', text),
+					selectedText: (text) => theme.fg('accent', text),
+					description: (text) => theme.fg('muted', text),
+					scrollInfo: (text) => theme.fg('dim', text),
+					noMatch: (text) => theme.fg('warning', text),
+				});
 
 				if (selectedPath && !selectedPaths.size) {
-					const index = filteredItems.findIndex(
-						(item) => item.value === selectedPath,
-					);
+					const index = filteredItems.findIndex((item) => item.value === selectedPath);
 					if (index >= 0) {
 						selectList.setSelectedIndex(index);
 					}
@@ -221,7 +190,7 @@ export const showFileSelector = async (
 					? fuzzyFilter(
 							currentItems,
 							query,
-							(item) => `${item.label} ${item.value} ${item.description ?? ""}`,
+							(item) => `${item.label} ${item.value} ${item.description ?? ''}`,
 						)
 					: currentItems;
 				updateList();
@@ -237,7 +206,7 @@ export const showFileSelector = async (
 					container.invalidate();
 				},
 				handleInput(data: string) {
-					if (data === " ") {
+					if (data === ' ') {
 						const focused = selectList?.getSelectedItem();
 						if (focused) {
 							const wasSelected = selectedPaths.has(focused.value);
@@ -246,7 +215,7 @@ export const showFileSelector = async (
 							} else {
 								selectedPaths.add(focused.value);
 							}
-							log.debug("多选切换", {
+							log.debug('多选切换', {
 								文件: focused.value,
 								已选: selectedPaths.size,
 							});
@@ -265,7 +234,7 @@ export const showFileSelector = async (
 						return;
 					}
 
-					if (matchesKey(data, "ctrl+shift+d")) {
+					if (matchesKey(data, 'ctrl+shift+d')) {
 						const focused = selectList?.getSelectedItem();
 						if (focused) {
 							const file = files.find(
@@ -275,26 +244,26 @@ export const showFileSelector = async (
 								file?.isTracked && !file.isDirectory && gitRoots.length > 0;
 							if (!canDiff) {
 								ctx.ui.notify(
-									"Diff is only available for tracked files",
-									"warning",
+									'Diff is only available for tracked files',
+									'warning',
 								);
 								return;
 							}
-							quickAction = "diff";
+							quickAction = 'diff';
 							done([focused.value]);
 							return;
 						}
 					}
 
 					if (
-						keybindings.matches(data, "tui.select.up") ||
-						keybindings.matches(data, "tui.select.down") ||
-						keybindings.matches(data, "tui.select.confirm") ||
-						keybindings.matches(data, "tui.select.cancel")
+						keybindings.matches(data, 'tui.select.up') ||
+						keybindings.matches(data, 'tui.select.down') ||
+						keybindings.matches(data, 'tui.select.confirm') ||
+						keybindings.matches(data, 'tui.select.cancel')
 					) {
 						if (selectList) {
 							selectList.handleInput(data);
-						} else if (keybindings.matches(data, "tui.select.cancel")) {
+						} else if (keybindings.matches(data, 'tui.select.cancel')) {
 							done(null);
 						}
 						tui.requestRender();
@@ -322,46 +291,42 @@ export const showFileSelector = async (
 export const promptDiffDisplayMode = async (
 	ctx: ExtensionContext,
 	inTmux: boolean,
-): Promise<"panel" | "tmux" | null> => {
-	if (!ctx.hasUI) return "panel";
+): Promise<'panel' | 'tmux' | null> => {
+	if (!ctx.hasUI) return 'panel';
 
 	const options: SelectItem[] = [
 		{
-			value: "panel",
-			label: "Pi 原生面板",
-			description: "在 pi 的 TUI 面板中显示 diff 文本",
+			value: 'panel',
+			label: 'Pi 原生面板',
+			description: '在 pi 的 TUI 面板中显示 diff 文本',
 		},
 	];
 	if (inTmux) {
 		options.push({
-			value: "tmux",
-			label: "Tmux 新面板",
-			description: "在 tmux 分屏中打开 vimdiff",
+			value: 'tmux',
+			label: 'Tmux 新面板',
+			description: '在 tmux 分屏中打开 vimdiff',
 		});
 	}
 
-	return ctx.ui.custom<"panel" | "tmux" | null>((tui, theme, _kb, done) => {
+	return ctx.ui.custom<'panel' | 'tmux' | null>((tui, theme, _kb, done) => {
 		const container = new Container();
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-		container.addChild(
-			new Text(theme.fg("accent", theme.bold(" 选择 diff 展示方式")), 0, 0),
-		);
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
+		container.addChild(new Text(theme.fg('accent', theme.bold(' 选择 diff 展示方式')), 0, 0));
 
 		const list = new SelectList(options, options.length, {
-			selectedPrefix: (text) => theme.fg("accent", text),
-			selectedText: (text) => theme.fg("accent", text),
-			description: (text) => theme.fg("muted", text),
-			scrollInfo: (text) => theme.fg("dim", text),
-			noMatch: (text) => theme.fg("warning", text),
+			selectedPrefix: (text) => theme.fg('accent', text),
+			selectedText: (text) => theme.fg('accent', text),
+			description: (text) => theme.fg('muted', text),
+			scrollInfo: (text) => theme.fg('dim', text),
+			noMatch: (text) => theme.fg('warning', text),
 		});
-		list.onSelect = (item) => done(item.value as "panel" | "tmux");
+		list.onSelect = (item) => done(item.value as 'panel' | 'tmux');
 		list.onCancel = () => done(null);
 
 		container.addChild(list);
-		container.addChild(
-			new Text(theme.fg("dim", "enter 确认 \u00b7 esc 取消"), 0, 0),
-		);
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+		container.addChild(new Text(theme.fg('dim', 'enter 确认 \u00b7 esc 取消'), 0, 0));
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
 
 		return {
 			render(w: number) {
@@ -387,37 +352,34 @@ export const showDiffInPiPanel = async (
 ): Promise<void> => {
 	return ctx.ui.custom<void>((_tui, theme, _kb, done) => {
 		const container = new Container();
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-		container.addChild(
-			new Text(theme.fg("accent", theme.bold(` ${title}`)), 0, 0),
-		);
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
+		container.addChild(new Text(theme.fg('accent', theme.bold(` ${title}`)), 0, 0));
 		container.addChild(new Spacer(1));
 
-		const lines = diffContent.split("\n");
+		const lines = diffContent.split('\n');
 		const maxLineWidth = 120;
 		for (const raw of lines) {
-			const line =
-				raw.length > maxLineWidth ? truncateToWidth(raw, maxLineWidth) : raw;
+			const line = raw.length > maxLineWidth ? truncateToWidth(raw, maxLineWidth) : raw;
 			let styled = line;
-			if (line.startsWith("+")) {
-				styled = theme.fg("success", line);
-			} else if (line.startsWith("-")) {
-				styled = theme.fg("error", line);
-			} else if (line.startsWith("@@")) {
-				styled = theme.fg("warning", line);
+			if (line.startsWith('+')) {
+				styled = theme.fg('success', line);
+			} else if (line.startsWith('-')) {
+				styled = theme.fg('error', line);
+			} else if (line.startsWith('@@')) {
+				styled = theme.fg('warning', line);
 			} else if (
-				line.startsWith("diff --git") ||
-				line.startsWith("---") ||
-				line.startsWith("+++")
+				line.startsWith('diff --git') ||
+				line.startsWith('---') ||
+				line.startsWith('+++')
 			) {
-				styled = theme.fg("accent", line);
+				styled = theme.fg('accent', line);
 			}
 			container.addChild(new Text(styled, 0, 0));
 		}
 
 		container.addChild(new Spacer(1));
-		container.addChild(new Text(theme.fg("dim", "按 q 或 esc 关闭"), 0, 0));
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+		container.addChild(new Text(theme.fg('dim', '按 q 或 esc 关闭'), 0, 0));
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
 
 		return {
 			render(w: number) {
@@ -427,7 +389,7 @@ export const showDiffInPiPanel = async (
 				container.invalidate();
 			},
 			handleInput(data: string) {
-				if (data === "q" || data === "Escape") {
+				if (data === 'q' || data === 'Escape') {
 					done(undefined);
 				}
 			},
@@ -443,13 +405,9 @@ export const showChangesUI = async (
 ): Promise<void> => {
 	await ctx.ui.custom<void>((tui, theme, _kb, done) => {
 		const container = new Container();
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
 		container.addChild(
-			new Text(
-				theme.fg("accent", theme.bold(` 变更文件 (${changes.length})`)),
-				0,
-				0,
-			),
+			new Text(theme.fg('accent', theme.bold(` 变更文件 (${changes.length})`)), 0, 0),
 		);
 
 		const searchInput = new Input();
@@ -462,26 +420,26 @@ export const showChangesUI = async (
 		container.addChild(
 			new Text(
 				theme.fg(
-					"dim",
-					"输入过滤 \u00b7 enter 显示路径 \u00b7 esc 关闭 \u00b7 /changes cls 清空",
+					'dim',
+					'输入过滤 \u00b7 enter 显示路径 \u00b7 esc 关闭 \u00b7 /changes cls 清空',
 				),
 				0,
 				0,
 			),
 		);
-		container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+		container.addChild(new DynamicBorder((str) => theme.fg('accent', str)));
 
 		const buildItems = () => {
 			const query = searchInput.getValue();
 			const rawItems = changes.map((c) => {
 				const icon =
-					c.source === "write"
-						? "\u270f\ufe0f"
-						: c.source === "edit"
-							? "\U0001f4dd"
-							: c.source === "bash_result"
-								? "\u2699\ufe0f"
-								: "\U0001f50d";
+					c.source === 'write'
+						? '\u270f\ufe0f'
+						: c.source === 'edit'
+							? '\U0001f4dd'
+							: c.source === 'bash_result'
+								? '\u2699\ufe0f'
+								: '\U0001f50d';
 				let label = `${icon} ${c.display}`;
 				if (c.count > 1) label += ` (x${c.count})`;
 				return {
@@ -505,9 +463,7 @@ export const showChangesUI = async (
 		const updateList = () => {
 			listContainer.clear();
 			if (filtered.length === 0) {
-				listContainer.addChild(
-					new Text(theme.fg("warning", "  无匹配项"), 0, 0),
-				);
+				listContainer.addChild(new Text(theme.fg('warning', '  无匹配项'), 0, 0));
 				selectList = null;
 				return;
 			}
@@ -515,22 +471,22 @@ export const showChangesUI = async (
 			const items = filtered.map((item) => ({
 				...item,
 				label: item.description
-					? `${item.label}  ${theme.fg("dim", truncateToWidth(item.description, 30))}`
+					? `${item.label}  ${theme.fg('dim', truncateToWidth(item.description, 30))}`
 					: item.label,
 			}));
 
 			selectList = new SelectList(items, Math.min(items.length, 15), {
-				selectedPrefix: (text) => theme.fg("accent", text),
-				selectedText: (text) => theme.fg("accent", text),
-				description: (text) => theme.fg("muted", text),
-				scrollInfo: (text) => theme.fg("dim", text),
-				noMatch: (text) => theme.fg("warning", text),
+				selectedPrefix: (text) => theme.fg('accent', text),
+				selectedText: (text) => theme.fg('accent', text),
+				description: (text) => theme.fg('muted', text),
+				scrollInfo: (text) => theme.fg('dim', text),
+				noMatch: (text) => theme.fg('warning', text),
 			});
 			selectList.onSelect = () => {
 				const item = selectList?.getSelectedItem();
 				if (item) {
 					done(undefined);
-					ctx.ui.notify(item.value, "info");
+					ctx.ui.notify(item.value, 'info');
 				}
 			};
 			selectList.onCancel = () => done(undefined);
@@ -547,13 +503,13 @@ export const showChangesUI = async (
 			},
 			handleInput(data: string) {
 				if (
-					_kb?.matches(data, "tui.select.up") ||
-					_kb?.matches(data, "tui.select.down") ||
-					_kb?.matches(data, "tui.select.confirm") ||
-					_kb?.matches(data, "tui.select.cancel")
+					_kb?.matches(data, 'tui.select.up') ||
+					_kb?.matches(data, 'tui.select.down') ||
+					_kb?.matches(data, 'tui.select.confirm') ||
+					_kb?.matches(data, 'tui.select.cancel')
 				) {
 					if (selectList) selectList.handleInput(data);
-					else if (_kb?.matches(data, "tui.select.cancel")) done(undefined);
+					else if (_kb?.matches(data, 'tui.select.cancel')) done(undefined);
 					tui.requestRender();
 					return;
 				}

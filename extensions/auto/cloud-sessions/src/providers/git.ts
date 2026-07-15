@@ -1,22 +1,22 @@
-import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { promisify } from "node:util";
-import type { GitProviderConfig } from "../config.js";
-import { configDir } from "../config.js";
-import { copyInto, listJsonlIn } from "./mirror.js";
-import type { RemoteFile, SyncProvider } from "./types.js";
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import type { GitProviderConfig } from '../config.js';
+import { configDir } from '../config.js';
+import { copyInto, listJsonlIn } from './mirror.js';
+import type { RemoteFile, SyncProvider } from './types.js';
 
 const exec = promisify(execFile);
 
 const nonInteractiveEnv: NodeJS.ProcessEnv = {
 	...process.env,
-	GIT_TERMINAL_PROMPT: "0",
-	GIT_ASKPASS: "",
-	SSH_ASKPASS: "",
-	GCM_INTERACTIVE: "never",
-	GIT_SSH_COMMAND: "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new",
+	GIT_TERMINAL_PROMPT: '0',
+	GIT_ASKPASS: '',
+	SSH_ASKPASS: '',
+	GCM_INTERACTIVE: 'never',
+	GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new',
 };
 
 const nonInteractiveOptions = {
@@ -29,15 +29,15 @@ function isGithubHttpsRepo(repo: string): boolean {
 }
 
 async function resolveGithubToken(): Promise<string> {
-	const fromGh = await exec("gh", ["auth", "token"], { env: process.env })
+	const fromGh = await exec('gh', ['auth', 'token'], { env: process.env })
 		.then(({ stdout }) => stdout.trim())
-		.catch(() => "");
+		.catch(() => '');
 	if (fromGh) return fromGh;
-	return process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+	return process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
 }
 
 export class GitProvider implements SyncProvider {
-	readonly kind = "git";
+	readonly kind = 'git';
 	private readonly repo: string;
 	private readonly branch: string;
 	private readonly remoteName: string;
@@ -48,7 +48,7 @@ export class GitProvider implements SyncProvider {
 		this.repo = config.repo;
 		this.branch = config.branch;
 		this.remoteName = config.remoteName;
-		this.clonePath = join(configDir(), "cloud-sessions", "repo");
+		this.clonePath = join(configDir(), 'cloud-sessions', 'repo');
 	}
 
 	private static askpassSetup = false;
@@ -63,9 +63,9 @@ export class GitProvider implements SyncProvider {
 		// Use GIT_ASKPASS instead of command-line http.extraheader
 		// to avoid exposing the token in the process listing (ps aux).
 		if (!GitProvider.askpassSetup) {
-			const scriptDir = join(configDir(), "cloud-sessions");
+			const scriptDir = join(configDir(), 'cloud-sessions');
 			await mkdir(scriptDir, { recursive: true });
-			const scriptPath = join(scriptDir, "askpass.sh");
+			const scriptPath = join(scriptDir, 'askpass.sh');
 			const scriptContent = `#!/bin/sh
 case "$1" in
   *[Uu]sername*) echo "x-access-token" ;;
@@ -83,8 +83,8 @@ esac
 
 	private async git(args: string[]): Promise<string> {
 		const { stdout } = await exec(
-			"git",
-			["-C", this.clonePath, ...args],
+			'git',
+			['-C', this.clonePath, ...args],
 			nonInteractiveOptions,
 		);
 		return stdout.trim();
@@ -96,16 +96,14 @@ esac
 	}
 
 	private isCloned(): boolean {
-		return existsSync(join(this.clonePath, ".git"));
+		return existsSync(join(this.clonePath, '.git'));
 	}
 
 	async ensureReady(): Promise<void> {
 		if (this.isCloned()) {
-			const currentRemote = await this.git([
-				"remote",
-				"get-url",
-				this.remoteName,
-			]).catch(() => "");
+			const currentRemote = await this.git(['remote', 'get-url', this.remoteName]).catch(
+				() => '',
+			);
 			if (currentRemote && currentRemote !== this.repo) {
 				throw new Error(
 					`cloud-sessions clone at ${this.clonePath} points to ${currentRemote}, not ${this.repo}. ` +
@@ -113,23 +111,19 @@ esac
 				);
 			}
 			await this.configureIdentity();
-			await this.git(["checkout", "-B", this.branch]).catch(() => "");
+			await this.git(['checkout', '-B', this.branch]).catch(() => '');
 			return;
 		}
-		await mkdir(join(configDir(), "cloud-sessions"), { recursive: true });
+		await mkdir(join(configDir(), 'cloud-sessions'), { recursive: true });
 		const auth = await this.authArgs();
 		const cloned = await exec(
-			"git",
-			[...auth, "clone", "--branch", this.branch, this.repo, this.clonePath],
+			'git',
+			[...auth, 'clone', '--branch', this.branch, this.repo, this.clonePath],
 			nonInteractiveOptions,
 		)
 			.then(() => true)
 			.catch(() =>
-				exec(
-					"git",
-					[...auth, "clone", this.repo, this.clonePath],
-					nonInteractiveOptions,
-				)
+				exec('git', [...auth, 'clone', this.repo, this.clonePath], nonInteractiveOptions)
 					.then(() => true)
 					.catch(() => false),
 			);
@@ -141,28 +135,18 @@ esac
 			);
 		}
 		await this.configureIdentity();
-		await this.git(["checkout", "-B", this.branch]).catch(() => "");
+		await this.git(['checkout', '-B', this.branch]).catch(() => '');
 	}
 
 	private async configureIdentity(): Promise<void> {
-		await this.git(["config", "user.name", "pi-cloud-sessions"]).catch(
-			() => "",
-		);
-		await this.git(["config", "user.email", "pi-cloud-sessions@local"]).catch(
-			() => "",
-		);
+		await this.git(['config', 'user.name', 'pi-cloud-sessions']).catch(() => '');
+		await this.git(['config', 'user.email', 'pi-cloud-sessions@local']).catch(() => '');
 	}
 
 	async pull(): Promise<void> {
 		await this.ensureReady();
-		await this.gitNetwork(["fetch", this.remoteName, this.branch]).catch(
-			() => "",
-		);
-		await this.git([
-			"reset",
-			"--hard",
-			`${this.remoteName}/${this.branch}`,
-		]).catch(() => "");
+		await this.gitNetwork(['fetch', this.remoteName, this.branch]).catch(() => '');
+		await this.git(['reset', '--hard', `${this.remoteName}/${this.branch}`]).catch(() => '');
 	}
 
 	async listRemote(): Promise<RemoteFile[]> {
@@ -173,18 +157,15 @@ esac
 		return join(this.clonePath, relativePath);
 	}
 
-	async stageFromLocal(
-		relativePath: string,
-		localAbsolutePath: string,
-	): Promise<void> {
+	async stageFromLocal(relativePath: string, localAbsolutePath: string): Promise<void> {
 		await copyInto(this.clonePath, relativePath, localAbsolutePath);
 	}
 
 	async push(message: string): Promise<void> {
-		await this.git(["add", "-A"]);
-		const status = await this.git(["status", "--porcelain"]);
+		await this.git(['add', '-A']);
+		const status = await this.git(['status', '--porcelain']);
 		if (status.length === 0) return;
-		await this.git(["commit", "-m", message]);
-		await this.gitNetwork(["push", this.remoteName, `HEAD:${this.branch}`]);
+		await this.git(['commit', '-m', message]);
+		await this.gitNetwork(['push', this.remoteName, `HEAD:${this.branch}`]);
 	}
 }

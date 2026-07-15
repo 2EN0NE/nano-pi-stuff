@@ -9,14 +9,7 @@
 // Log Levels
 // ============================================================================
 
-export const LOG_LEVELS = [
-	"trace",
-	"debug",
-	"info",
-	"warn",
-	"error",
-	"off",
-] as const;
+export const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'off'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 /** Numeric ordering: lower = more verbose, higher = more severe. "off" = Infinity */
@@ -119,5 +112,5 @@ export interface LoggerRuntimeConfig {
 // Channel name used on EventBus
 // ============================================================================
 
-export const LOG_EVENT_CHANNEL = "log";
-export const LIFECYCLE_SOURCE = "__lifecycle__";
+export const LOG_EVENT_CHANNEL = 'log';
+export const LIFECYCLE_SOURCE = '__lifecycle__';

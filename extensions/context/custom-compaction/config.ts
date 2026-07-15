@@ -19,32 +19,22 @@
  * so session settings always survive reload.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { createLogger } from "@zenone/pi-logger";
-import {
-	type CompactionConfig,
-	type CompactionProfile,
-	createDefaultConfig,
-} from "./types.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { createLogger } from '@zenone/pi-logger';
+import { type CompactionConfig, type CompactionProfile, createDefaultConfig } from './types.js';
 
-const log = createLogger("custom-compaction:config");
+const log = createLogger('custom-compaction:config');
 
 // ── Deterministic config directory ─────────────────────────────
 
 function getConfigDir(): string {
-	return join(
-		homedir(),
-		".pi",
-		"agent",
-		"extensions-data",
-		"custom-compaction",
-	);
+	return join(homedir(), '.pi', 'agent', 'extensions-data', 'custom-compaction');
 }
 
 function getBaseConfigPath(): string {
-	return join(getConfigDir(), "config.json");
+	return join(getConfigDir(), 'config.json');
 }
 
 function getSessionConfigPath(sessionId: string): string {
@@ -69,10 +59,10 @@ export function isSessionConfig(): boolean {
  * Get the config label for display.
  */
 export function getConfigLabel(): string {
-	if (isSessionConfig()) return "session级配置";
+	if (isSessionConfig()) return 'session级配置';
 	const config = loadConfig();
 	const profile = config.profiles[config.activeProfileId];
-	return profile?.name ?? "Default";
+	return profile?.name ?? 'Default';
 }
 
 // ── Config load / save ──────────────────────────────────────────
@@ -88,7 +78,7 @@ export function setSessionId(sessionId: string): void {
 	if (existsSync(sessionPath)) {
 		_activeConfigPath = sessionPath;
 		reloadConfig();
-		log.info("Session config loaded:", sessionPath);
+		log.info('Session config loaded:', sessionPath);
 	} else {
 		reloadConfig();
 	}
@@ -100,9 +90,7 @@ export function setSessionId(sessionId: string): void {
 export function loadConfig(): CompactionConfig {
 	if (_cachedConfig) return _cachedConfig;
 
-	const sessionPath = _activeSessionId
-		? getSessionConfigPath(_activeSessionId)
-		: null;
+	const sessionPath = _activeSessionId ? getSessionConfigPath(_activeSessionId) : null;
 	const basePath = getBaseConfigPath();
 	const activePath =
 		sessionPath && existsSync(sessionPath)
@@ -115,22 +103,22 @@ export function loadConfig(): CompactionConfig {
 
 	try {
 		if (existsSync(activePath)) {
-			const raw = readFileSync(activePath, "utf-8");
+			const raw = readFileSync(activePath, 'utf-8');
 			const parsed = JSON.parse(raw) as CompactionConfig;
 
-			if (!parsed.profiles || typeof parsed.profiles !== "object") {
+			if (!parsed.profiles || typeof parsed.profiles !== 'object') {
 				throw new Error("Invalid config: missing or invalid 'profiles'");
 			}
 			if (!parsed.activeProfileId || !parsed.profiles[parsed.activeProfileId]) {
-				parsed.activeProfileId = Object.keys(parsed.profiles)[0] ?? "default";
+				parsed.activeProfileId = Object.keys(parsed.profiles)[0] ?? 'default';
 			}
 
 			_cachedConfig = parsed;
-			log.info("Config loaded from", activePath);
+			log.info('Config loaded from', activePath);
 			return parsed;
 		}
 	} catch (err) {
-		log.warn("Failed to load config from", activePath, String(err));
+		log.warn('Failed to load config from', activePath, String(err));
 	}
 
 	const config = createDefaultConfig();
@@ -143,7 +131,7 @@ export function loadConfig(): CompactionConfig {
  */
 export function saveConfig(config: CompactionConfig): boolean {
 	if (!_activeSessionId) {
-		log.warn("No session ID set, cannot save session-specific config");
+		log.warn('No session ID set, cannot save session-specific config');
 		return false;
 	}
 
@@ -153,13 +141,13 @@ export function saveConfig(config: CompactionConfig): boolean {
 		const dir = dirname(targetPath);
 		if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-		writeFileSync(targetPath, JSON.stringify(config, null, 2), "utf-8");
+		writeFileSync(targetPath, JSON.stringify(config, null, 2), 'utf-8');
 		_cachedConfig = config;
 		_activeConfigPath = targetPath;
-		log.info("Config saved to", targetPath);
+		log.info('Config saved to', targetPath);
 		return true;
 	} catch (err) {
-		log.error("Failed to save config to", targetPath, String(err));
+		log.error('Failed to save config to', targetPath, String(err));
 		return false;
 	}
 }
@@ -179,9 +167,7 @@ export function reloadConfig(): CompactionConfig {
 export function getActiveConfigPath(): string {
 	if (_activeConfigPath) return _activeConfigPath;
 	const basePath = getBaseConfigPath();
-	const sessionPath = _activeSessionId
-		? getSessionConfigPath(_activeSessionId)
-		: null;
+	const sessionPath = _activeSessionId ? getSessionConfigPath(_activeSessionId) : null;
 	return sessionPath && existsSync(sessionPath) ? sessionPath : basePath;
 }
 
@@ -197,7 +183,7 @@ export function getActiveProfile(): CompactionProfile {
 
 	const defaultProfile = createDefaultConfig().profiles.default;
 	config.profiles.default = defaultProfile;
-	config.activeProfileId = "default";
+	config.activeProfileId = 'default';
 	saveConfig(config);
 	return defaultProfile;
 }

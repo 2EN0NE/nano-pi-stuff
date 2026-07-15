@@ -1,44 +1,33 @@
-import {
-	readdir,
-	stat,
-	mkdir,
-	copyFile,
-	utimes,
-	readFile,
-} from "node:fs/promises";
-import type { Dirent } from "node:fs";
-import { existsSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { dirname, join, relative } from "node:path";
-import type { RemoteFile } from "./types.js";
+import { readdir, stat, mkdir, copyFile, utimes, readFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { dirname, join, relative } from 'node:path';
+import type { RemoteFile } from './types.js';
 
 async function hashFile(absolutePath: string): Promise<string> {
 	const content = await readFile(absolutePath);
-	return createHash("sha256").update(content).digest("hex");
+	return createHash('sha256').update(content).digest('hex');
 }
 
-async function walk(
-	dir: string,
-	root: string,
-	out: RemoteFile[],
-): Promise<void> {
+async function walk(dir: string, root: string, out: RemoteFile[]): Promise<void> {
 	let entries: Dirent[];
 	try {
 		entries = await readdir(dir, { withFileTypes: true });
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
 		throw new Error(`Failed to read mirror directory: ${dir}`, {
 			cause: error,
 		});
 	}
 	for (const entry of entries) {
-		if (entry.name === ".git") continue;
+		if (entry.name === '.git') continue;
 		const full = join(dir, entry.name);
 		if (entry.isDirectory()) {
 			await walk(full, root, out);
 			continue;
 		}
-		if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+		if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
 		const info = await stat(full);
 		out.push({
 			relativePath: relative(root, full),

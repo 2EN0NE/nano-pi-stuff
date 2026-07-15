@@ -1,20 +1,20 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
-import { createLogger } from "@zenone/pi-logger";
-import { createRouter } from "./router.js";
-import { createCompressor } from "./compression/pipeline.js";
-import { createContentStore } from "./compression/store.js";
-import { createSummarizer } from "./compression/haiku-summarize.js";
-import { getDiagnostics } from "./host-ai.js";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { Type } from 'typebox';
+import { createLogger } from '@zenone/pi-logger';
+import { createRouter } from './router.js';
+import { createCompressor } from './compression/pipeline.js';
+import { createContentStore } from './compression/store.js';
+import { createSummarizer } from './compression/haiku-summarize.js';
+import { getDiagnostics } from './host-ai.js';
 import {
 	resolveProfile,
 	builtinProfiles,
 	configFilePath,
 	clearCache,
 	type ModelProfile,
-} from "./config.js";
+} from './config.js';
 
-const log = createLogger("smart-context");
+const log = createLogger('smart-context');
 
 export default function (pi: ExtensionAPI) {
 	const router = createRouter(pi);
@@ -23,76 +23,62 @@ export default function (pi: ExtensionAPI) {
 	const compressor = createCompressor({ store, summarizer });
 
 	let enabled = true;
-	const debug = process.env.SMART_CONTEXT_DEBUG === "1";
+	const debug = process.env.SMART_CONTEXT_DEBUG === '1';
 
-	pi.on("before_agent_start", async (event, ctx) => {
+	pi.on('before_agent_start', async (event, ctx) => {
 		if (!enabled) {
-			log.debug("Routing skipped (disabled)");
+			log.debug('Routing skipped (disabled)');
 			return;
 		}
 		try {
-			ctx.ui.setWorkingMessage("Routing...");
+			ctx.ui.setWorkingMessage('Routing...');
 			const model = await router.pick(event.prompt, ctx);
 			if (!model) {
-				log.info("No route — keeping current model");
-				if (debug)
-					ctx.ui.notify(
-						"smart-context: no route (keeping current model)",
-						"info",
-					);
+				log.info('No route — keeping current model');
+				if (debug) ctx.ui.notify('smart-context: no route (keeping current model)', 'info');
 				return;
 			}
 			const resolved = ctx.modelRegistry.find(model.provider, model.model);
 			if (!resolved) {
-				log.warn("Route target not found in registry", {
+				log.warn('Route target not found in registry', {
 					provider: model.provider,
 					model: model.model,
 				});
 				if (debug)
 					ctx.ui.notify(
 						`smart-context: model ${model.provider}/${model.model} not found`,
-						"warning",
+						'warning',
 					);
 				return;
 			}
 			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(resolved);
 			if (!auth.ok || !auth.apiKey) {
-				log.warn("Route target auth failed", {
+				log.warn('Route target auth failed', {
 					provider: model.provider,
 					model: model.model,
 				});
 				if (debug)
 					ctx.ui.notify(
 						`smart-context: no auth for ${model.provider}/${model.model}`,
-						"warning",
+						'warning',
 					);
 				return;
 			}
 			await pi.setModel(resolved);
-			log.info(
-				"Model switched | provider=%s model=%s",
-				model.provider,
-				model.model,
-			);
+			log.info('Model switched | provider=%s model=%s', model.provider, model.model);
 			if (debug)
-				ctx.ui.notify(
-					`smart-context: routed → ${model.provider}/${model.model}`,
-					"info",
-				);
+				ctx.ui.notify(`smart-context: routed → ${model.provider}/${model.model}`, 'info');
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			log.error("Routing error", { error: msg, diagnostics: getDiagnostics() });
-			ctx.ui.notify(
-				`smart-context routing error: ${msg} [${getDiagnostics()}]`,
-				"warning",
-			);
+			log.error('Routing error', { error: msg, diagnostics: getDiagnostics() });
+			ctx.ui.notify(`smart-context routing error: ${msg} [${getDiagnostics()}]`, 'warning');
 		} finally {
 			ctx.ui.setWorkingMessage();
 		}
 	});
 
-	pi.on("context", async (event, ctx) => {
-		ctx.ui.setWorkingMessage("Compressing...");
+	pi.on('context', async (event, ctx) => {
+		ctx.ui.setWorkingMessage('Compressing...');
 		const before = JSON.stringify(event.messages).length;
 		try {
 			const messages = await compressor.compress(event.messages as any[], ctx);
@@ -100,7 +86,7 @@ export default function (pi: ExtensionAPI) {
 			const saved = before - after;
 			if (saved > 0) {
 				log.info(
-					"Context compressed | before=%s after=%s saved=%s ratio=%s%%",
+					'Context compressed | before=%s after=%s saved=%s ratio=%s%%',
 					before,
 					after,
 					saved,
@@ -113,20 +99,13 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	pi.on("tool_result", async (event) => {
-		if (
-			event.toolName !== "bash" &&
-			event.toolName !== "read" &&
-			event.toolName !== "grep"
-		) {
+	pi.on('tool_result', async (event) => {
+		if (event.toolName !== 'bash' && event.toolName !== 'read' && event.toolName !== 'grep') {
 			return;
 		}
-		const compressed = compressor.compressToolResult(
-			event.toolName,
-			event.content as any[],
-		);
+		const compressed = compressor.compressToolResult(event.toolName, event.content as any[]);
 		if (compressed) {
-			log.debug("Tool result compressed on the fly", {
+			log.debug('Tool result compressed on the fly', {
 				tool: event.toolName,
 			});
 			return { content: compressed } as any;
@@ -134,12 +113,11 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerTool({
-		name: "recover_context",
-		label: "Recover Context",
+		name: 'recover_context',
+		label: 'Recover Context',
 		description:
 			'Recover the full original content of a message that was compressed/summarized in the conversation context. Pass the id shown in a recover_context("id") hint.',
-		promptSnippet:
-			"Recover full original text of a compressed message by its id",
+		promptSnippet: 'Recover full original text of a compressed message by its id',
 		promptGuidelines: [
 			'Use recover_context when a compressed or summarized message lacks detail you need and shows a recover_context("id") hint.',
 		],
@@ -152,96 +130,91 @@ export default function (pi: ExtensionAPI) {
 			_toolCallId,
 			params,
 		): Promise<{
-			content: { type: "text"; text: string }[];
+			content: { type: 'text'; text: string }[];
 			details: Record<string, unknown>;
 		}> {
 			const stored = store.get(params.id);
 			if (!stored) {
 				return {
-					content: [
-						{ type: "text", text: `No stored content for id "${params.id}".` },
-					],
+					content: [{ type: 'text', text: `No stored content for id "${params.id}".` }],
 					details: {},
 				};
 			}
 			return {
-				content: [{ type: "text", text: stored.original }],
+				content: [{ type: 'text', text: stored.original }],
 				details: { id: stored.id, chars: stored.chars, role: stored.role },
 			};
 		},
 	});
 
-	pi.registerCommand("smart-context-toggle", {
-		description: "Enable or disable smart-context model routing",
+	pi.registerCommand('smart-context-toggle', {
+		description: 'Enable or disable smart-context model routing',
 		handler: async (_args, ctx) => {
 			enabled = !enabled;
-			ctx.ui.notify(
-				`smart-context routing ${enabled ? "enabled" : "disabled"}`,
-				"info",
-			);
+			ctx.ui.notify(`smart-context routing ${enabled ? 'enabled' : 'disabled'}`, 'info');
 		},
 	});
 
-	pi.registerCommand("smart-context", {
-		description: "Show smart-context compression stats and current profile",
+	pi.registerCommand('smart-context', {
+		description: 'Show smart-context compression stats and current profile',
 		handler: async (_args, ctx) => {
 			const s = compressor.getStats();
 			const profile = resolveProfile(ctx.cwd);
 			ctx.ui.notify(
-				`[${enabled ? "on" : "off"}] profile=${_activeProfileName(profile)} ` +
+				`[${enabled ? 'on' : 'off'}] profile=${_activeProfileName(profile)} ` +
 					`Saved ${s.totalSaved} chars (${s.ratio}% avg) | turns ${s.turnsProcessed} | ` +
 					`classifier ${s.haikuCalls} calls / ${s.haikuCacheHits} cached | recoverable ${s.storedItems}`,
-				"info",
+				'info',
 			);
 		},
 	});
 
-	pi.registerCommand("smart-context-profile", {
+	pi.registerCommand('smart-context-profile', {
 		description:
-			"List or switch smart-context profiles (balanced, fast, quality, or custom). " +
-			"Usage: /smart-context-profile          → list profiles\n" +
+			'List or switch smart-context profiles (balanced, fast, quality, or custom). ' +
+			'Usage: /smart-context-profile          → list profiles\n' +
 			"       /smart-context-profile balanced → switch to 'balanced'",
 		handler: async (args, ctx) => {
 			const profiles = builtinProfiles();
 
 			// args is a raw string — trim it to get the profile name (if any)
-			const profileArg = typeof args === "string" ? args.trim() : "";
+			const profileArg = typeof args === 'string' ? args.trim() : '';
 
 			if (!profileArg) {
 				const current = resolveProfile(ctx.cwd);
 				const names = Object.keys(profiles);
 				ctx.ui.notify(
-					`Available profiles: ${names.join(", ")}\n` +
+					`Available profiles: ${names.join(', ')}\n` +
 						`Current: ${_activeProfileName(current)}\n` +
-						`Config: ${configFilePath(ctx.cwd) ?? "<none>"}\n` +
+						`Config: ${configFilePath(ctx.cwd) ?? '<none>'}\n` +
 						`To switch: /smart-context-profile {profileName}`,
-					"info",
+					'info',
 				);
 				return;
 			}
 
 			if (!profiles[profileArg]) {
 				ctx.ui.notify(
-					`Unknown profile "${profileArg}". Available: ${Object.keys(profiles).join(", ")}`,
-					"warning",
+					`Unknown profile "${profileArg}". Available: ${Object.keys(profiles).join(', ')}`,
+					'warning',
 				);
 				return;
 			}
 
 			// Write the profile selection to the config file
-			const fs = await import("node:fs");
+			const fs = await import('node:fs');
 			const cfgPath = configFilePath(ctx.cwd);
 			if (!cfgPath) {
 				ctx.ui.notify(
-					"No .pi/smart-context.json found; cannot persist profile selection.",
-					"warning",
+					'No .pi/smart-context.json found; cannot persist profile selection.',
+					'warning',
 				);
 				return;
 			}
 
 			let config: Record<string, unknown> = {};
 			try {
-				config = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+				config = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
 			} catch {
 				// file doesn't exist or is invalid — start fresh
 			}
@@ -252,7 +225,7 @@ export default function (pi: ExtensionAPI) {
 			delete config.routing;
 			delete config.largeContext;
 
-			fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2) + "\n");
+			fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2) + '\n');
 			clearCache();
 
 			const p = resolveProfile(ctx.cwd);
@@ -264,7 +237,7 @@ export default function (pi: ExtensionAPI) {
 					`medium  → ${p.routing.medium.provider}/${p.routing.medium.model}\n` +
 					`complex → ${p.routing.complex.provider}/${p.routing.complex.model}\n` +
 					`largeContext → ${p.largeContext.model.provider}/${p.largeContext.model.model}`,
-				"info",
+				'info',
 			);
 		},
 	});
@@ -289,5 +262,5 @@ function _activeProfileName(profile: ModelProfile): string {
 			return name;
 		}
 	}
-	return "custom";
+	return 'custom';
 }

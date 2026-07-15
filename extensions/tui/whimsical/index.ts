@@ -9,31 +9,24 @@
  * The most anomalous dimension determines the message pool.
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-import {
-	computeSigma,
-	pickWorstDimension,
-	computeColorLevel,
-} from "./sigma.js";
-import type { ColorLevel } from "./sigma.js";
-import { MetricsTracker } from "./metrics.js";
+import { computeSigma, pickWorstDimension, computeColorLevel } from './sigma.js';
+import type { ColorLevel } from './sigma.js';
+import { MetricsTracker } from './metrics.js';
 import {
 	appendSession,
 	loadSessions,
 	saveLiveState,
 	loadLiveState,
 	deleteLiveState,
-} from "./session-store.js";
-import type { SessionMetrics } from "./session-store.js";
-import { DIMENSION_KEYS, pickMessage } from "./messages.js";
-import type { DimensionKey } from "./messages.js";
+} from './session-store.js';
+import type { SessionMetrics } from './session-store.js';
+import { DIMENSION_KEYS, pickMessage } from './messages.js';
+import type { DimensionKey } from './messages.js';
 
-const log = createLogger("whimsical");
+const log = createLogger('whimsical');
 
 /**
  * Build a lookup of { dimension → historical values } from all past sessions.
@@ -79,7 +72,7 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 		saveLiveState({
 			sessionId,
 			timestamp: Date.now(),
-			cwd: sessionCwd ?? "",
+			cwd: sessionCwd ?? '',
 			...raw,
 		});
 	}
@@ -126,11 +119,11 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 		for (const dim of DIMENSION_KEYS) {
 			const history = loadedHistory[dim];
 			const current =
-				dim === "avgTurnsPerQuestion"
+				dim === 'avgTurnsPerQuestion'
 					? snapshot.avgTurnsPerQuestion
-					: dim === "thinkingSteps"
+					: dim === 'thinkingSteps'
 						? snapshot.thinkingSteps
-						: dim === "userQuestions"
+						: dim === 'userQuestions'
 							? snapshot.userQuestions
 							: snapshot.toolTypesUsed;
 			results[dim] = computeSigma(history, current);
@@ -139,14 +132,11 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 		// Pick the most anomalous dimension
 		const worst = pickWorstDimension(results, DIMENSION_KEYS);
 		if (!worst) {
-			ctx.ui.setWorkingMessage("工作中...");
+			ctx.ui.setWorkingMessage('工作中...');
 			return;
 		}
 
-		const msg = pickMessage(
-			worst.dimension as DimensionKey,
-			worst.result.level,
-		);
+		const msg = pickMessage(worst.dimension as DimensionKey, worst.result.level);
 
 		// Compute max color level across all dimensions
 		let maxColorLevel: ColorLevel = 0;
@@ -157,18 +147,18 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 
 		// Map color level to theme color name
 		const colorNames: Record<ColorLevel, string> = {
-			0: "thinkingOff",
-			1: "thinkingMinimal",
-			2: "thinkingLow",
-			3: "thinkingMedium",
-			4: "thinkingHigh",
-			5: "thinkingXhigh",
+			0: 'thinkingOff',
+			1: 'thinkingMinimal',
+			2: 'thinkingLow',
+			3: 'thinkingMedium',
+			4: 'thinkingHigh',
+			5: 'thinkingXhigh',
 		};
 		const coloredMsg = ctx.ui.theme.fg(colorNames[maxColorLevel] as any, msg);
 
 		// Structured info log — fires only when metrics actually change
 		log.info(
-			"whimsical:refresh dimension=%s level=%d zScore=%s colorLevel=%d colorName=%s message=%s thinkingSteps=%d avgTurns=%s questions=%d tools=%d",
+			'whimsical:refresh dimension=%s level=%d zScore=%s colorLevel=%d colorName=%s message=%s thinkingSteps=%d avgTurns=%s questions=%d tools=%d',
 			worst.dimension,
 			worst.result.level,
 			worst.result.zScore.toFixed(3),
@@ -191,8 +181,8 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 	// 1. Load historical data and reset tracker at session start.
 	//    Also restore any mid-session live state from a previous extension
 	//    incarnation (survives /reload, pi -r, or any re-initialization).
-	pi.on("session_start", async (_event, ctx) => {
-		log.debug("event: session_start");
+	pi.on('session_start', async (_event, ctx) => {
+		log.debug('event: session_start');
 
 		sessionId = ctx.sessionManager.getSessionId();
 		sessionCwd = ctx.cwd;
@@ -209,7 +199,7 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 				toolTypes: live.toolTypes,
 			});
 			log.info(
-				"whimsical:restore sessionId=%s thinkingSteps=%d userQuestions=%d agentTurns=%d toolTypes=%d",
+				'whimsical:restore sessionId=%s thinkingSteps=%d userQuestions=%d agentTurns=%d toolTypes=%d',
 				sessionId,
 				live.thinkingSteps,
 				live.userQuestions,
@@ -222,7 +212,7 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 		const sessions = await loadSessions();
 		loadedHistory = buildHistoryLookup(sessions);
 		log.info(
-			"whimsical:history sessions=%d thinkingSteps=%d avgTurns=%d questions=%d tools=%d",
+			'whimsical:history sessions=%d thinkingSteps=%d avgTurns=%d questions=%d tools=%d',
 			sessions.length,
 			loadedHistory.thinkingSteps.length,
 			loadedHistory.avgTurnsPerQuestion.length,
@@ -232,23 +222,23 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 	});
 
 	// 2. Track user input (questions) — only human-typed questions
-	pi.on("input", (event, _ctx) => {
-		if (event.source !== "interactive") return;
+	pi.on('input', (event, _ctx) => {
+		if (event.source !== 'interactive') return;
 		tracker.incrementUserQuestions();
 		scheduleRefresh();
 	});
 
 	// 3. Track tool executions (for distinct tool types)
-	pi.on("tool_execution_start", (event) => {
+	pi.on('tool_execution_start', (event) => {
 		tracker.recordToolType(event.toolName);
 		scheduleRefresh();
 	});
 
 	// 4. Track thinking steps via message_update events
-	pi.on("message_update", (event) => {
+	pi.on('message_update', (event) => {
 		if (
-			event.message.role === "assistant" &&
-			event.assistantMessageEvent?.type === "thinking_start"
+			event.message.role === 'assistant' &&
+			event.assistantMessageEvent?.type === 'thinking_start'
 		) {
 			tracker.incrementThinkingSteps();
 			scheduleRefresh();
@@ -256,15 +246,15 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 	});
 
 	// 5. On turn_start: set a working message
-	pi.on("turn_start", (_event, ctx) => {
-		log.debug("event: turn_start");
+	pi.on('turn_start', (_event, ctx) => {
+		log.debug('event: turn_start');
 		currentCtx = ctx;
 		refreshMessage(ctx);
 	});
 
 	// 6. On turn_end: track turns, persist checkpoint, clear message
-	pi.on("turn_end", (_event, ctx) => {
-		log.debug("event: turn_end");
+	pi.on('turn_end', (_event, ctx) => {
+		log.debug('event: turn_end');
 		tracker.incrementAgentTurns();
 		cancelRefresh();
 		currentCtx = null;
@@ -273,8 +263,8 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 	});
 
 	// 7. On session shutdown: persist metrics
-	pi.on("session_shutdown", async (_event, ctx) => {
-		log.debug("event: session_shutdown");
+	pi.on('session_shutdown', async (_event, ctx) => {
+		log.debug('event: session_shutdown');
 		shuttingDown = true;
 		cancelRefresh();
 		currentCtx = null;
@@ -290,7 +280,7 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 			});
 			await deleteLiveState(sessionId); // Clean up mid-session state
 			log.info(
-				"whimsical:persist sessionId=%s thinkingSteps=%d avgTurns=%s questions=%d tools=%d",
+				'whimsical:persist sessionId=%s thinkingSteps=%d avgTurns=%s questions=%d tools=%d',
 				sessionId,
 				metrics.thinkingSteps,
 				metrics.avgTurnsPerQuestion.toFixed(3),

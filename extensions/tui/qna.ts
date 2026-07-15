@@ -7,14 +7,14 @@
  * 3. Loads the result into the editor for user to fill in answers
  */
 
-import { complete, type UserMessage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { BorderedLoader } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import { complete, type UserMessage } from '@earendil-works/pi-ai';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { BorderedLoader } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("qna");
+const log = createLogger('qna');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 const SYSTEM_PROMPT = `You are a question extractor. Given text from a conversation, extract any questions that need answering and format them for the user to fill in.
 
@@ -33,17 +33,17 @@ A:
 Keep questions in the order they appeared. Be concise.`;
 
 export default function (pi: ExtensionAPI) {
-	log.debug("registerCommand: qna");
-	pi.registerCommand("qna", {
-		description: "Extract questions from last assistant message into editor",
+	log.debug('registerCommand: qna');
+	pi.registerCommand('qna', {
+		description: 'Extract questions from last assistant message into editor',
 		handler: async (_args, ctx) => {
-			if (ctx.mode !== "tui") {
-				ctx.ui.notify("qna requires interactive mode", "error");
+			if (ctx.mode !== 'tui') {
+				ctx.ui.notify('qna requires interactive mode', 'error');
 				return;
 			}
 
 			if (!ctx.model) {
-				ctx.ui.notify("No model selected", "error");
+				ctx.ui.notify('No model selected', 'error');
 				return;
 			}
 
@@ -53,18 +53,21 @@ export default function (pi: ExtensionAPI) {
 
 			for (let i = branch.length - 1; i >= 0; i--) {
 				const entry = branch[i];
-				if (entry.type === "message") {
+				if (entry.type === 'message') {
 					const msg = entry.message;
-					if ("role" in msg && msg.role === "assistant") {
-						if (msg.stopReason !== "stop") {
-							ctx.ui.notify(`Last assistant message incomplete (${msg.stopReason})`, "error");
+					if ('role' in msg && msg.role === 'assistant') {
+						if (msg.stopReason !== 'stop') {
+							ctx.ui.notify(
+								`Last assistant message incomplete (${msg.stopReason})`,
+								'error',
+							);
 							return;
 						}
 						const textParts = msg.content
-							.filter((c): c is { type: "text"; text: string } => c.type === "text")
+							.filter((c): c is { type: 'text'; text: string } => c.type === 'text')
 							.map((c) => c.text);
 						if (textParts.length > 0) {
-							lastAssistantText = textParts.join("\n");
+							lastAssistantText = textParts.join('\n');
 							break;
 						}
 					}
@@ -72,24 +75,30 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (!lastAssistantText) {
-				ctx.ui.notify("No assistant messages found", "error");
+				ctx.ui.notify('No assistant messages found', 'error');
 				return;
 			}
 
 			// Run extraction with loader UI
 			const result = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
-				const loader = new BorderedLoader(tui, theme, `Extracting questions using ${ctx.model!.id}...`);
+				const loader = new BorderedLoader(
+					tui,
+					theme,
+					`Extracting questions using ${ctx.model!.id}...`,
+				);
 				loader.onAbort = () => done(null);
 
 				// Do the work
 				const doExtract = async () => {
 					const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model!);
 					if (!auth.ok || !auth.apiKey) {
-						throw new Error(auth.ok ? `No API key for ${ctx.model!.provider}` : auth.error);
+						throw new Error(
+							auth.ok ? `No API key for ${ctx.model!.provider}` : auth.error,
+						);
 					}
 					const userMessage: UserMessage = {
-						role: "user",
-						content: [{ type: "text", text: lastAssistantText! }],
+						role: 'user',
+						content: [{ type: 'text', text: lastAssistantText! }],
 						timestamp: Date.now(),
 					};
 
@@ -99,14 +108,14 @@ export default function (pi: ExtensionAPI) {
 						{ apiKey: auth.apiKey, headers: auth.headers, signal: loader.signal },
 					);
 
-					if (response.stopReason === "aborted") {
+					if (response.stopReason === 'aborted') {
 						return null;
 					}
 
 					return response.content
-						.filter((c): c is { type: "text"; text: string } => c.type === "text")
+						.filter((c): c is { type: 'text'; text: string } => c.type === 'text')
 						.map((c) => c.text)
-						.join("\n");
+						.join('\n');
 				};
 
 				doExtract()
@@ -117,12 +126,12 @@ export default function (pi: ExtensionAPI) {
 			});
 
 			if (result === null) {
-				ctx.ui.notify("Cancelled", "info");
+				ctx.ui.notify('Cancelled', 'info');
 				return;
 			}
 
 			ctx.ui.setEditorText(result);
-			ctx.ui.notify("Questions loaded. Edit and submit when ready.", "info");
+			ctx.ui.notify('Questions loaded. Edit and submit when ready.', 'info');
 		},
 	});
 }

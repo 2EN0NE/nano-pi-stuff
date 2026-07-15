@@ -36,6 +36,6 @@ export PI_ENABLE_AWAY_RECAP=0
 
 ```json
 {
-  "packages": ["npm:@zenone/pi-recap"]
+	"packages": ["npm:@zenone/pi-recap"]
 }
 ```

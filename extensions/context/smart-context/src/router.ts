@@ -1,14 +1,9 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
-import { getComplete } from "./host-ai.js";
-import {
-	loadConfig,
-	configFilePath,
-	type Complexity,
-	type ModelRef,
-} from "./config.js";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
+import { getComplete } from './host-ai.js';
+import { loadConfig, configFilePath, type Complexity, type ModelRef } from './config.js';
 
-const log = createLogger("smart-context:router");
+const log = createLogger('smart-context:router');
 
 const CLASSIFICATION_PROMPT = `你是一个编码助手的任务复杂度分类器。基于最近的对话上下文和用户的最新消息，对 TASK 复杂度（而非消息复杂度）进行分类。
 
@@ -32,8 +27,8 @@ export function createRouter(_pi: ExtensionAPI) {
 			log.info(
 				`Router pick started | cwd=%s cfg=%s tokens=%s threshold=%s classifier=%s/%s`,
 				ctx.cwd,
-				configFilePath(ctx.cwd) ?? "<none>",
-				usage?.tokens ?? "n/a",
+				configFilePath(ctx.cwd) ?? '<none>',
+				usage?.tokens ?? 'n/a',
 				config.largeContext.thresholdTokens,
 				config.classifier.provider,
 				config.classifier.model,
@@ -54,10 +49,7 @@ export function createRouter(_pi: ExtensionAPI) {
 
 			// ── 分类器调用 ──
 			const { classifier } = config;
-			const model = ctx.modelRegistry.find(
-				classifier.provider,
-				classifier.model,
-			);
+			const model = ctx.modelRegistry.find(classifier.provider, classifier.model);
 			if (!model) {
 				log.warn(
 					`Classifier model not in registry | provider=%s model=%s`,
@@ -81,7 +73,7 @@ export function createRouter(_pi: ExtensionAPI) {
 			const complete = await getComplete();
 			if (!complete) {
 				log.error(`Host pi-ai complete() not resolvable`);
-				throw new Error("could not resolve host pi-ai complete()");
+				throw new Error('could not resolve host pi-ai complete()');
 			}
 
 			const recentContext = buildRecentContext(ctx);
@@ -93,10 +85,10 @@ export function createRouter(_pi: ExtensionAPI) {
 
 			const messages = [
 				{
-					role: "user" as const,
+					role: 'user' as const,
 					content: [
 						{
-							type: "text" as const,
+							type: 'text' as const,
 							text: `${recentContext}\n\n用户最新消息: "${prompt}"\n\n对 TASK 复杂度进行分类：`,
 						},
 					],
@@ -112,14 +104,11 @@ export function createRouter(_pi: ExtensionAPI) {
 
 			const answer = response.content
 				.filter(
-					(c: {
-						type: string;
-						text?: string;
-					}): c is { type: "text"; text: string } =>
-						c.type === "text" && typeof c.text === "string",
+					(c: { type: string; text?: string }): c is { type: 'text'; text: string } =>
+						c.type === 'text' && typeof c.text === 'string',
 				)
 				.map((c: { text: string }) => c.text.trim().toLowerCase())
-				.join("");
+				.join('');
 
 			const complexity = parseComplexity(answer);
 			const chosen = config.routing[complexity];
@@ -142,14 +131,14 @@ const PER_MESSAGE_CHAR_CAP = 300;
 
 function buildRecentContext(ctx: any): string {
 	const entries = ctx.sessionManager?.getEntries?.();
-	if (!entries || entries.length === 0) return "暂无历史上下文。";
+	if (!entries || entries.length === 0) return '暂无历史上下文。';
 
 	const lines: string[] = [];
 	let budget = CONTEXT_CHAR_BUDGET;
 
 	for (let i = entries.length - 1; i >= 0 && budget > 0; i--) {
 		const entry = entries[i];
-		if (entry.type !== "message") continue;
+		if (entry.type !== 'message') continue;
 		const role = entry.message?.role;
 		const text = extractEntryText(entry);
 		if (!role || !text) continue;
@@ -158,22 +147,20 @@ function buildRecentContext(ctx: any): string {
 		budget -= snippet.length;
 	}
 
-	return lines.length > 0
-		? `截至目前对话（最近优先）:\n${lines.join("\n")}`
-		: "暂无历史上下文。";
+	return lines.length > 0 ? `截至目前对话（最近优先）:\n${lines.join('\n')}` : '暂无历史上下文。';
 }
 
 function extractEntryText(entry: any): string {
 	const msg = entry.message;
-	if (!msg) return "";
-	if (typeof msg.content === "string") return msg.content;
+	if (!msg) return '';
+	if (typeof msg.content === 'string') return msg.content;
 	if (Array.isArray(msg.content)) {
 		return msg.content
-			.filter((c: any) => c.type === "text")
+			.filter((c: any) => c.type === 'text')
 			.map((c: any) => c.text)
-			.join(" ");
+			.join(' ');
 	}
-	return "";
+	return '';
 }
 
 function parseComplexity(answer: string): Complexity {
@@ -182,5 +169,5 @@ function parseComplexity(answer: string): Complexity {
 		.toLowerCase()
 		.match(/\b(trivial|simple|medium|complex)\b/);
 	if (match) return match[1] as Complexity;
-	return "medium";
+	return 'medium';
 }

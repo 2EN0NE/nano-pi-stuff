@@ -50,23 +50,25 @@ Pi 扩展放在 [extensions](extensions) 目录中；修改时请在这里更新
 
 `extensions/` 按功能分为 7 个子目录，新扩展必须归入对应分类，不得放回顶层：
 
-| 目录 | 分类 | 说明 |
-|------|------|------|
-| `tui/` | 交互界面 | 提供终端交互式 UI 的插件（命令面板、选择器、编辑器等） |
-| `context/` | 上下文组装 | 修改/增强/组装 system prompt 或会话上下文的插件 |
-| `security/` | 审计与安全 | 提供安全保护、审计、权限控制的插件 |
-| `auto/` | 自动化 | 自动执行任务的插件，无需或少量用户交互 |
-| `accuracy/` | 更精准强大信息获取与操作工具 | 增强或替换内置工具，提供更强大/精准的操作能力 |
-| `verification/` | 验证与评估 | 代码审查、质量评估、验证检查的插件 |
-| `meta/` | 元插件 | 管理其他插件/工具的插件、管理预设配置的插件，以及提供基础服务的插件。注意这里面的插件设计定位是最基础层的，其他插件可以依赖这里面的插件，这里面的插件应避免依赖其他类别的插件。npm install应把这里面的插件变为本地包，其他插件对其的依赖通过包引用，而不是相对路径引用 |
+| 目录            | 分类                         | 说明                                                                                                                                                                                                                                                                   |
+| --------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tui/`          | 交互界面                     | 提供终端交互式 UI 的插件（命令面板、选择器、编辑器等）                                                                                                                                                                                                                 |
+| `context/`      | 上下文组装                   | 修改/增强/组装 system prompt 或会话上下文的插件                                                                                                                                                                                                                        |
+| `security/`     | 审计与安全                   | 提供安全保护、审计、权限控制的插件                                                                                                                                                                                                                                     |
+| `auto/`         | 自动化                       | 自动执行任务的插件，无需或少量用户交互                                                                                                                                                                                                                                 |
+| `accuracy/`     | 更精准强大信息获取与操作工具 | 增强或替换内置工具，提供更强大/精准的操作能力                                                                                                                                                                                                                          |
+| `verification/` | 验证与评估                   | 代码审查、质量评估、验证检查的插件                                                                                                                                                                                                                                     |
+| `meta/`         | 元插件                       | 管理其他插件/工具的插件、管理预设配置的插件，以及提供基础服务的插件。注意这里面的插件设计定位是最基础层的，其他插件可以依赖这里面的插件，这里面的插件应避免依赖其他类别的插件。npm install应把这里面的插件变为本地包，其他插件对其的依赖通过包引用，而不是相对路径引用 |
 
 **分类原则：**
+
 - 按插件**核心功能**归类，一个插件只放入一个目录
 - 如果插件有多个功能维度，以其主要目的为准
 - 新增扩展时，先判断属于哪个分类，创建对应的 `.ts` 文件或目录放入对应子目录
 - 不允许直接在 `extensions/` 顶层添加文件（顶层仅保留分类子目录）
 
 **开发示例：**
+
 ```bash
 # 添加一个新 TUI 插件
 touch extensions/tui/my-picker.ts
@@ -85,15 +87,15 @@ touch extensions/auto/my-watcher/index.ts
 接入方式：
 
 ```typescript
-import { createLogger } from "@zenone/pi-logger";
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("your-extension-name");
+const log = createLogger('your-extension-name');
 
 // 使用：
-log.info("信息");
-log.debug("详情");
-log.warn("警告");
-log.error("错误");
+log.info('信息');
+log.debug('详情');
+log.warn('警告');
+log.error('错误');
 ```
 
 > ⚠️ **本地依赖说明**：`@zenone/pi-logger` 是一个本地 npm 包，不会发布到 npm registry。
@@ -122,23 +124,23 @@ log.error("错误");
 - 参考模板：
 
 ```typescript
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("my-helper");
+const log = createLogger('my-helper');
 
 export default function (pi: ExtensionAPI) {
-  pi.registerTool({
-    name: "mock_tool",
-    label: "Mock Tool",
-    description: "...",
-    parameters: { type: "object", properties: {}, required: [] },
-    execute: async () => ({
-      content: [{ type: "text", text: "mock result" }],
-      details: undefined,
-    }),
-  });
-  log.info("mock_tool registered");
+	pi.registerTool({
+		name: 'mock_tool',
+		label: 'Mock Tool',
+		description: '...',
+		parameters: { type: 'object', properties: {}, required: [] },
+		execute: async () => ({
+			content: [{ type: 'text', text: 'mock result' }],
+			details: undefined,
+		}),
+	});
+	log.info('mock_tool registered');
 }
 ```
 
@@ -169,6 +171,7 @@ compact() 内部:
 ```
 
 **关键结论：**
+
 - `session_compact` 事件触发时 agent **已断开连接**。在此事件中调用 `pi.sendUserMessage()` → `this.prompt()` **不可靠**（agent 不在线，prompt 和消息发送无法正常处理）。
 - `onComplete` 回调在 `compact()` **完全返回后**触发，此时 agent **已重连**。所有需要与 agent 交互的操作（如 `sendUserMessage`）必须放在 `onComplete` 中。
 - 如果需要捕获触发压缩时的配置状态，使用闭包：`const triggerProfile = profile; ctx.compact({ onComplete: () => { /* 用 triggerProfile */ } })`
@@ -178,18 +181,19 @@ compact() 内部:
 `ctx.isIdle()` 的实现本质是：
 
 ```typescript
-isIdle = () => !this.isStreaming
+isIdle = () => !this.isStreaming;
 ```
 
 关于 `isIdle()` 有几个坑：
 
-| 事件 | isIdle() 状态 | 说明 |
-|------|--------------|------|
-| `turn_end` | `false` | agent 仍在事件循环中 |
-| `agent_end` | **可能仍为 false** | `isStreaming` 标志结束时间 **滞后于** `agent_end` 事件 |
-| `agent_settled` | `true`（除非其他扩展启动新 run） | 这是唯一保证 idle 的事件 |
+| 事件            | isIdle() 状态                    | 说明                                                   |
+| --------------- | -------------------------------- | ------------------------------------------------------ |
+| `turn_end`      | `false`                          | agent 仍在事件循环中                                   |
+| `agent_end`     | **可能仍为 false**               | `isStreaming` 标志结束时间 **滞后于** `agent_end` 事件 |
+| `agent_settled` | `true`（除非其他扩展启动新 run） | 这是唯一保证 idle 的事件                               |
 
 **正确用法：**
+
 - 不要用 `isIdle()` 来判断压缩时机——用 **独立 flag**（如 `compactingInProgress`）做重入保护
 - 要监听 idle 状态用 `agent_settled`，不是 `agent_end`
 - `agent_end` 后虽然 `isIdle()` 可能仍 false，但可以用 `compactingInProgress` flag 防止多实例冲突
@@ -206,8 +210,8 @@ isIdle = () => !this.isStreaming
 const auth = await ctx.modelRegistry.getApiKeyAndHeaders(modelInfo);
 const options: Record<string, unknown> = { maxTokens: 8192, signal };
 if (auth.ok) {
-  if (auth.apiKey) options.apiKey = auth.apiKey;
-  if (auth.headers) options.headers = auth.headers;
+	if (auth.apiKey) options.apiKey = auth.apiKey;
+	if (auth.headers) options.headers = auth.headers;
 }
 const response = await complete(modelInfo, { messages }, options as any);
 ```
@@ -215,17 +219,17 @@ const response = await complete(modelInfo, { messages }, options as any);
 **② `Response.errorMessage` 在 `stopReason: "error"` 时有值**
 
 ```typescript
-if (response.stopReason === "error") {
-  log.error("Model call failed", { errorMessage: response.errorMessage });
+if (response.stopReason === 'error') {
+	log.error('Model call failed', { errorMessage: response.errorMessage });
 }
 ```
 
 ### 5. `npx pi` vs 全局 `pi` 的 CLI 参数差异
 
-| 二进制 | `-a` | `--no-session` | `-e`/`--extension` |
-|--------|------|---------------|-------------------|
-| `$(which pi)` (全局安装) | ✓ | ✓ | ✓ |
-| `npx pi` | 可能不支持 | ✓ | 可能不支持 |
+| 二进制                   | `-a`       | `--no-session` | `-e`/`--extension` |
+| ------------------------ | ---------- | -------------- | ------------------ |
+| `$(which pi)` (全局安装) | ✓          | ✓              | ✓                  |
+| `npx pi`                 | 可能不支持 | ✓              | 可能不支持         |
 
 **e2e 测试必须用 `$(which pi)`**，不能用 `npx pi`。
 
@@ -234,6 +238,7 @@ if (response.stopReason === "error") {
 `pi.sendUserMessage()` 内部调用 `this.prompt()`。当 agent 处于断开状态时（如 `session_compact` 事件期间），`prompt()` 的调用路径不可靠，且错误被 `.catch()` 吞掉（`agent-session.js:1717`），没有失败的信号。
 
 **正确用法**：只在以下时机调用 `sendUserMessage`：
+
 - `onComplete` 回调中（已确认 agent 重连）
 - 普通事件处理器中（确保 agent 在线）
 - 使用 `deliverAs: "followUp"` 作为默认（排队等待当前处理后执行）
@@ -242,13 +247,14 @@ if (response.stopReason === "error") {
 
 从会话历史分析，这是最高频的启动失败模式。通常原因有 3 类：
 
-| 原因 | 典型报错 | 检查方法 |
-|------|---------|---------|
-| **文件未同步** | `Failed to load extension ".../extensions/foo.ts"` | `ls -la .pi/extensions/foo/` 文件是否存在 |
+| 原因               | 典型报错                                                   | 检查方法                                                        |
+| ------------------ | ---------------------------------------------------------- | --------------------------------------------------------------- |
+| **文件未同步**     | `Failed to load extension ".../extensions/foo.ts"`         | `ls -la .pi/extensions/foo/` 文件是否存在                       |
 | **npm 依赖未安装** | `Cannot find module "xxx"` 或 `TS2307: cannot find module` | `ls .pi/extensions/foo/node_modules/` 或 `npm ls`（从扩展目录） |
-| **jiti 缓存陈旧** | 修改后加载旧版本 | `rm -rf node_modules/.cache/jiti` + 重启 pi |
+| **jiti 缓存陈旧**  | 修改后加载旧版本                                           | `rm -rf node_modules/.cache/jiti` + 重启 pi                     |
 
 **调试流程**：
+
 1. 检查目标文件是否存在（尤其是刚用 sync 工具的）
 2. 检查依赖安装（有 `package.json` 的扩展需要 `npm install`）
 3. 清除 jiti 缓存后重试
@@ -258,25 +264,26 @@ if (response.stopReason === "error") {
 
 跨多个扩展项目验证的结论。`/reload` 会导致 jiti 重新加载模块，`import.meta.url` 路径不一致，扩展实例的 in-memory 状态全部重置。
 
-| 策略 | 适用场景 | 实现方式 |
-|------|---------|---------|
-| **配置存入文件** | session 级持久化 | `~/.pi/agent/extensions-data/<name>/<sessionId>.json` |
-| **路径确定性** | 所有文件操作 | 用 `os.homedir()` 拼接路径，**不用** `import.meta.url` |
-| **entry 持久化** | 树状状态（非配置） | `pi.appendEntry()` 写入会话树，`session_start` 时重建 |
+| 策略             | 适用场景           | 实现方式                                               |
+| ---------------- | ------------------ | ------------------------------------------------------ |
+| **配置存入文件** | session 级持久化   | `~/.pi/agent/extensions-data/<name>/<sessionId>.json`  |
+| **路径确定性**   | 所有文件操作       | 用 `os.homedir()` 拼接路径，**不用** `import.meta.url` |
+| **entry 持久化** | 树状状态（非配置） | `pi.appendEntry()` 写入会话树，`session_start` 时重建  |
 
 **示例（配置存入文件）**：
+
 ```typescript
 // session_start 时设置 sessionId
-pi.on("session_start", async (_event, ctx) => {
-  const sid = ctx.sessionManager.getSessionId();
-  if (sid) setSessionId(sid);  // 加载 <sessionId>.json
+pi.on('session_start', async (_event, ctx) => {
+	const sid = ctx.sessionManager.getSessionId();
+	if (sid) setSessionId(sid); // 加载 <sessionId>.json
 });
 
 // /reload 时重新加载
-pi.on("session_start", async (_event, ctx) => {
-  const sid = ctx.sessionManager.getSessionId();
-  if (sid) setSessionId(sid);
-  else reloadConfig();
+pi.on('session_start', async (_event, ctx) => {
+	const sid = ctx.sessionManager.getSessionId();
+	if (sid) setSessionId(sid);
+	else reloadConfig();
 });
 ```
 
@@ -286,13 +293,13 @@ pi.on("session_start", async (_event, ctx) => {
 
 从多个扩展的 e2e 测试中总结：
 
-| 陷阱 | 原因 | 修复 |
-|------|------|------|
-| **日志检查用 stdout** | pi-logger 写文件，非 stdout | 检查 `.pi/logs/<name>_*.log` |
-| **`npx pi` vs `$(which pi)`** | `npx pi` 的参数集可能不同 | 测试脚本用 `$(which pi)` |
-| **print 模式下扩展不加载** | `pi -p` 不触发全部 life cycle | 用 `pi -a --no-session` |
-| **测试数据残留** | 会话文件持久化 | 每次测试前 `rm -rf ~/.pi/agent/sessions/--tmp-*--` |
-| **assert stdout 文本** | TUI/ANSI escape 序列干扰 | grep 模式匹配而非全文比对 |
+| 陷阱                          | 原因                          | 修复                                               |
+| ----------------------------- | ----------------------------- | -------------------------------------------------- |
+| **日志检查用 stdout**         | pi-logger 写文件，非 stdout   | 检查 `.pi/logs/<name>_*.log`                       |
+| **`npx pi` vs `$(which pi)`** | `npx pi` 的参数集可能不同     | 测试脚本用 `$(which pi)`                           |
+| **print 模式下扩展不加载**    | `pi -p` 不触发全部 life cycle | 用 `pi -a --no-session`                            |
+| **测试数据残留**              | 会话文件持久化                | 每次测试前 `rm -rf ~/.pi/agent/sessions/--tmp-*--` |
+| **assert stdout 文本**        | TUI/ANSI escape 序列干扰      | grep 模式匹配而非全文比对                          |
 
 ### 10. 累加式指标追踪器的 checkpoint 设计模式
 
@@ -346,10 +353,10 @@ if (live) tracker.importRawState(live);
 
 本仓库使用两个互斥 Profile 避免 flag/tool 注册冲突：
 
-| Profile | 目标 | 范围 | 说明 |
-|---------|------|------|------|
-| `user-install` | `~/.pi/agent/` | 高成熟度日常插件 | 所有项目共用（selector、pi-logger、安全插件等） |
-| `project` | `.pi/` | 项目特定 / 低成熟度插件 | 本项目独有（custom-compaction、resources-tree 等） |
+| Profile        | 目标           | 范围                    | 说明                                               |
+| -------------- | -------------- | ----------------------- | -------------------------------------------------- |
+| `user-install` | `~/.pi/agent/` | 高成熟度日常插件        | 所有项目共用（selector、pi-logger、安全插件等）    |
+| `project`      | `.pi/`         | 项目特定 / 低成熟度插件 | 本项目独有（custom-compaction、resources-tree 等） |
 
 **核心原则**：user-install级别的插件安装应该与其他项目级的 Profile 插件互斥，避免项目里pi启动时重复注册报错。
 
@@ -359,9 +366,9 @@ if (live) tracker.importRawState(live);
 - **开发流程**：在源目录编码 → 内联模式同步到测试目录 → 在 Pi 中测试 → 通过后同步到用户目录
 - **最终交付**：开发完成后，必须同步到 `~/.pi/agent/`，完成 UAT 测试确认无误
 - **Profile 配置**：修改 `scripts/sync-profiles.yaml` 时需保证两个 Profile 的 `extensions` 互斥。新增扩展时：
-  - 判断它是否达到全局通用成熟度 → 加入 `user-install` 的 extensions 列表
-  - 如果否（项目特定/低成熟度）→ 确保 `user-install` 的 exclude 或列表不包括它
-  - 同时在 `project` 的 exclude 中同步更新
+    - 判断它是否达到全局通用成熟度 → 加入 `user-install` 的 extensions 列表
+    - 如果否（项目特定/低成熟度）→ 确保 `user-install` 的 exclude 或列表不包括它
+    - 同时在 `project` 的 exclude 中同步更新
 
 ### 快速参考
 

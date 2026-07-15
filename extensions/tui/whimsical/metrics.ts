@@ -9,7 +9,7 @@
  * mid-session persistence across extension reloads (/reload, pi -r).
  */
 
-import type { SessionMetrics } from "./session-store.js";
+import type { SessionMetrics } from './session-store.js';
 
 export interface MetricsSnapshot {
 	thinkingSteps: number;

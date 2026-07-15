@@ -9,33 +9,29 @@
  * - recorder 实时跟踪的变更
  */
 
-import { existsSync, statSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	SessionEntry,
-} from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import { existsSync, statSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { ExtensionAPI, ExtensionContext, SessionEntry } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 import type {
 	FileEntry,
 	FileReference,
 	FileToolName,
 	SessionFileChange,
 	ContentBlock,
-} from "./types.js";
+} from './types.js';
 import {
 	findGitRootForFile,
 	getAllGitRoots,
 	getGitFiles,
 	getGitStatusMap,
 	toCanonicalPath,
-} from "./git.js";
-import { getChangePaths } from "./recorder.js";
+} from './git.js';
+import { getChangePaths } from './recorder.js';
 
-const log = createLogger("files:scanner");
+const log = createLogger('files:scanner');
 
 // ── File Reference Extraction ──────────────────────────────────────────────
 
@@ -62,25 +58,18 @@ const extractFileReferencesFromText = (text: string): string[] => {
 };
 
 const extractPathsFromToolArgs = (args: unknown): string[] => {
-	if (!args || typeof args !== "object") {
+	if (!args || typeof args !== 'object') {
 		return [];
 	}
 
 	const refs: string[] = [];
 	const record = args as Record<string, unknown>;
-	const directKeys = [
-		"path",
-		"file",
-		"filePath",
-		"filepath",
-		"fileName",
-		"filename",
-	] as const;
-	const listKeys = ["paths", "files", "filePaths"] as const;
+	const directKeys = ['path', 'file', 'filePath', 'filepath', 'fileName', 'filename'] as const;
+	const listKeys = ['paths', 'files', 'filePaths'] as const;
 
 	for (const key of directKeys) {
 		const value = record[key];
-		if (typeof value === "string") {
+		if (typeof value === 'string') {
 			refs.push(value);
 		}
 	}
@@ -89,7 +78,7 @@ const extractPathsFromToolArgs = (args: unknown): string[] => {
 		const value = record[key];
 		if (Array.isArray(value)) {
 			for (const item of value) {
-				if (typeof item === "string") {
+				if (typeof item === 'string') {
 					refs.push(item);
 				}
 			}
@@ -100,7 +89,7 @@ const extractPathsFromToolArgs = (args: unknown): string[] => {
 };
 
 const extractFileReferencesFromContent = (content: unknown): string[] => {
-	if (typeof content === "string") {
+	if (typeof content === 'string') {
 		return extractFileReferencesFromText(content);
 	}
 
@@ -110,17 +99,17 @@ const extractFileReferencesFromContent = (content: unknown): string[] => {
 
 	const refs: string[] = [];
 	for (const part of content) {
-		if (!part || typeof part !== "object") {
+		if (!part || typeof part !== 'object') {
 			continue;
 		}
 
 		const block = part as ContentBlock;
 
-		if (block.type === "text" && typeof block.text === "string") {
+		if (block.type === 'text' && typeof block.text === 'string') {
 			refs.push(...extractFileReferencesFromText(block.text));
 		}
 
-		if (block.type === "toolCall") {
+		if (block.type === 'toolCall') {
 			refs.push(...extractPathsFromToolArgs(block.arguments));
 		}
 	}
@@ -129,13 +118,13 @@ const extractFileReferencesFromContent = (content: unknown): string[] => {
 };
 
 const extractFileReferencesFromEntry = (entry: SessionEntry): string[] => {
-	if (entry.type === "message") {
-		return "content" in entry.message
+	if (entry.type === 'message') {
+		return 'content' in entry.message
 			? extractFileReferencesFromContent(entry.message.content)
 			: [];
 	}
 
-	if (entry.type === "custom_message") {
+	if (entry.type === 'custom_message') {
 		return extractFileReferencesFromContent(entry.content);
 	}
 
@@ -146,30 +135,26 @@ const extractFileReferencesFromEntry = (entry: SessionEntry): string[] => {
 
 const sanitizeReference = (raw: string): string => {
 	let value = raw.trim();
-	value = value.replace(/^[""'`(<\[]+/, "");
-	value = value.replace(/[>"'`,;).\]]+$/, "");
-	value = value.replace(/[.,;:]+$/, "");
+	value = value.replace(/^[""'`(<\[]+/, '');
+	value = value.replace(/[>"'`,;).\]]+$/, '');
+	value = value.replace(/[.,;:]+$/, '');
 	return value;
 };
 
-const isCommentLikeReference = (value: string): boolean =>
-	value.startsWith("//");
+const isCommentLikeReference = (value: string): boolean => value.startsWith('//');
 
 const stripLineSuffix = (value: string): string => {
-	let result = value.replace(/#L\d+(C\d+)?$/i, "");
-	const lastSeparator = Math.max(
-		result.lastIndexOf("/"),
-		result.lastIndexOf("\\"),
-	);
+	let result = value.replace(/#L\d+(C\d+)?$/i, '');
+	const lastSeparator = Math.max(result.lastIndexOf('/'), result.lastIndexOf('\\'));
 	const segmentStart = lastSeparator >= 0 ? lastSeparator + 1 : 0;
 	const segment = result.slice(segmentStart);
-	const colonIndex = segment.indexOf(":");
-	if (colonIndex >= 0 && /\d/.test(segment[colonIndex + 1] ?? "")) {
+	const colonIndex = segment.indexOf(':');
+	if (colonIndex >= 0 && /\d/.test(segment[colonIndex + 1] ?? '')) {
 		result = result.slice(0, segmentStart + colonIndex);
 		return result;
 	}
 
-	const lastColon = result.lastIndexOf(":");
+	const lastColon = result.lastIndexOf(':');
 	if (lastColon > lastSeparator) {
 		const suffix = result.slice(lastColon + 1);
 		if (/^\d+(?::\d+)?$/.test(suffix)) {
@@ -185,7 +170,7 @@ const normalizeReferencePath = (raw: string, cwd: string): string | null => {
 		return null;
 	}
 
-	if (candidate.startsWith("file://")) {
+	if (candidate.startsWith('file://')) {
 		try {
 			candidate = fileURLToPath(candidate);
 		} catch {
@@ -198,7 +183,7 @@ const normalizeReferencePath = (raw: string, cwd: string): string | null => {
 		return null;
 	}
 
-	if (candidate.startsWith("~")) {
+	if (candidate.startsWith('~')) {
 		candidate = path.join(os.homedir(), candidate.slice(1));
 	}
 
@@ -209,7 +194,7 @@ const normalizeReferencePath = (raw: string, cwd: string): string | null => {
 	candidate = path.normalize(candidate);
 	const root = path.parse(candidate).root;
 	if (candidate.length > root.length) {
-		candidate = candidate.replace(/[\\/]+$/, "");
+		candidate = candidate.replace(/[\\/]+$/, '');
 	}
 
 	return candidate;
@@ -217,11 +202,7 @@ const normalizeReferencePath = (raw: string, cwd: string): string | null => {
 
 // ── Display Path Formatting ────────────────────────────────────────────────
 
-const formatDisplayPath = (
-	absolutePath: string,
-	cwd: string,
-	gitRoot?: string,
-): string => {
+const formatDisplayPath = (absolutePath: string, cwd: string, gitRoot?: string): string => {
 	if (gitRoot) {
 		const normalizedGitRoot = path.resolve(gitRoot);
 		const normalizedCwd = path.resolve(cwd);
@@ -230,10 +211,7 @@ const formatDisplayPath = (
 			absolutePath.startsWith(normalizedGitRoot + path.sep)
 		) {
 			const repoName = path.relative(normalizedCwd, normalizedGitRoot);
-			return path.join(
-				repoName,
-				path.relative(normalizedGitRoot, absolutePath),
-			);
+			return path.join(repoName, path.relative(normalizedGitRoot, absolutePath));
 		}
 	}
 
@@ -300,16 +278,16 @@ const collectSessionFileChanges = (
 	const toolCalls = new Map<string, { path: string; name: FileToolName }>();
 
 	for (const entry of entries) {
-		if (entry.type !== "message") continue;
+		if (entry.type !== 'message') continue;
 		const msg = entry.message;
 
-		if (msg.role === "assistant" && Array.isArray(msg.content)) {
+		if (msg.role === 'assistant' && Array.isArray(msg.content)) {
 			for (const block of msg.content) {
-				if (block.type === "toolCall") {
+				if (block.type === 'toolCall') {
 					const name = block.name as FileToolName;
-					if (name === "write" || name === "edit") {
+					if (name === 'write' || name === 'edit') {
 						const filePath = block.arguments?.path;
-						if (filePath && typeof filePath === "string") {
+						if (filePath && typeof filePath === 'string') {
 							toolCalls.set(block.id, { path: filePath, name });
 						}
 					}
@@ -321,10 +299,10 @@ const collectSessionFileChanges = (
 	const fileMap = new Map<string, SessionFileChange>();
 
 	for (const entry of entries) {
-		if (entry.type !== "message") continue;
+		if (entry.type !== 'message') continue;
 		const msg = entry.message;
 
-		if (msg.role === "toolResult") {
+		if (msg.role === 'toolResult') {
 			const toolCall = toolCalls.get(msg.toolCallId);
 			if (!toolCall) continue;
 
@@ -370,9 +348,7 @@ export const buildFileEntries = async (
 		data: Partial<FileEntry> & { canonicalPath: string; isDirectory: boolean },
 	) => {
 		const existing = fileMap.get(data.canonicalPath);
-		const dp =
-			data.displayPath ??
-			formatDisplayPath(data.canonicalPath, ctx.cwd, data.gitRoot);
+		const dp = data.displayPath ?? formatDisplayPath(data.canonicalPath, ctx.cwd, data.gitRoot);
 
 		if (existing) {
 			fileMap.set(data.canonicalPath, {
@@ -385,12 +361,8 @@ export const buildFileEntries = async (
 				gitRoot: existing.gitRoot ?? data.gitRoot,
 				inRepo: existing.inRepo || data.inRepo === true,
 				isTracked: existing.isTracked || data.isTracked === true,
-				hasSessionChange:
-					existing.hasSessionChange || data.hasSessionChange === true,
-				lastTimestamp: Math.max(
-					existing.lastTimestamp,
-					data.lastTimestamp ?? 0,
-				),
+				hasSessionChange: existing.hasSessionChange || data.hasSessionChange === true,
+				lastTimestamp: Math.max(existing.lastTimestamp, data.lastTimestamp ?? 0),
 			});
 			return;
 		}
@@ -440,7 +412,7 @@ export const buildFileEntries = async (
 				status: statusEntry.status,
 				gitRoot,
 				inRepo: true,
-				isTracked: tracked.has(canonicalPath) || statusEntry.status !== "??",
+				isTracked: tracked.has(canonicalPath) || statusEntry.status !== '??',
 			});
 		}
 	}

@@ -18,41 +18,38 @@
  *   pi -a --no-session -e ./extensions/tools.ts -e ./test/extensions/tools/helpers/ctx-simulator.ts -p "hi"
  */
 
-import type {
-	ExtensionAPI,
-	AgentToolResult,
-} from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, AgentToolResult } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("ctx-simulator");
+const log = createLogger('ctx-simulator');
 
 export default function ctxSimulator(pi: ExtensionAPI) {
 	// Tool 1: registered synchronously (may run before pi-logger is ready)
 	pi.registerTool({
-		name: "ctx_search",
-		label: "CTX Search",
-		description: "Search indexed knowledge base (simulated context-mode tool)",
+		name: 'ctx_search',
+		label: 'CTX Search',
+		description: 'Search indexed knowledge base (simulated context-mode tool)',
 		parameters: {
-			type: "object",
+			type: 'object',
 			properties: {
 				queries: {
-					type: "array",
-					items: { type: "string" },
-					description: "Search queries",
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Search queries',
 				},
 			},
-			required: ["queries"],
+			required: ['queries'],
 		},
 		execute: async (
 			_toolCallId: string,
 			params: { queries?: string[] },
 		): Promise<AgentToolResult<unknown>> => {
-			log.info("ctx_search executed", { queries: params.queries });
+			log.info('ctx_search executed', { queries: params.queries });
 			return {
 				content: [
 					{
-						type: "text" as const,
-						text: `ctx_search results for: ${(params.queries ?? []).join(", ")}`,
+						type: 'text' as const,
+						text: `ctx_search results for: ${(params.queries ?? []).join(', ')}`,
 					},
 				],
 				details: undefined,
@@ -61,49 +58,48 @@ export default function ctxSimulator(pi: ExtensionAPI) {
 	});
 
 	// Log on session_start (pi-logger is definitely ready by then)
-	pi.on("session_start", () => {
-		log.info("ctx_search registered (simulating early connect)");
+	pi.on('session_start', () => {
+		log.info('ctx_search registered (simulating early connect)');
 	});
 
 	// Tool 2: registers after a delay (simulating late MCP connect)
 	setTimeout(() => {
 		pi.registerTool({
-			name: "ctx_execute",
-			label: "CTX Execute",
-			description:
-				"Run code in sandbox (simulated late-registering context-mode tool)",
+			name: 'ctx_execute',
+			label: 'CTX Execute',
+			description: 'Run code in sandbox (simulated late-registering context-mode tool)',
 			parameters: {
-				type: "object",
+				type: 'object',
 				properties: {
 					language: {
-						type: "string",
-						description: "Programming language",
+						type: 'string',
+						description: 'Programming language',
 					},
 					code: {
-						type: "string",
-						description: "Code to execute",
+						type: 'string',
+						description: 'Code to execute',
 					},
 				},
-				required: ["language", "code"],
+				required: ['language', 'code'],
 			},
 			execute: async (
 				_toolCallId: string,
 				params: { language?: string; code?: string },
 			): Promise<AgentToolResult<unknown>> => {
-				log.info("ctx_execute executed", {
+				log.info('ctx_execute executed', {
 					language: params.language,
 				});
 				return {
 					content: [
 						{
-							type: "text" as const,
-							text: `ctx_execute output in ${params.language ?? "unknown"}`,
+							type: 'text' as const,
+							text: `ctx_execute output in ${params.language ?? 'unknown'}`,
 						},
 					],
 					details: undefined,
 				};
 			},
 		});
-		log.info("ctx_execute registered (simulating late connect)");
+		log.info('ctx_execute registered (simulating late connect)');
 	}, 2000);
 }

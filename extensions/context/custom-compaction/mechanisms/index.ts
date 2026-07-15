@@ -13,11 +13,8 @@
  *   });
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-import type { CompactionProfile } from "../types.js";
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import type { CompactionProfile } from '../types.js';
 
 // ── Adapter interface ───────────────────────────────────────────
 
@@ -38,10 +35,7 @@ export interface CompactionAdapter {
 	 * Return true  → adapter handled the compaction (skip default summarize behavior).
 	 * Return false → fall through (may be picked up by another extension or default).
 	 */
-	beforeCompact?: (
-		ctx: ExtensionContext,
-		profile: CompactionProfile,
-	) => Promise<boolean>;
+	beforeCompact?: (ctx: ExtensionContext, profile: CompactionProfile) => Promise<boolean>;
 }
 
 // ── Registry ────────────────────────────────────────────────────

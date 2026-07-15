@@ -1,12 +1,4 @@
-export type FoxState =
-	| "sleep"
-	| "sniff"
-	| "dig"
-	| "run"
-	| "jump"
-	| "caught"
-	| "error"
-	| "sad";
+export type FoxState = 'sleep' | 'sniff' | 'dig' | 'run' | 'jump' | 'caught' | 'error' | 'sad';
 
 export type RGB = readonly [number, number, number];
 
@@ -34,10 +26,10 @@ export function scaleGrid(grid: string[], scale: number): string[] {
 	return Array.from({ length: dstH }, (_, y) => {
 		const srcY = Math.min(Math.floor(y * step), srcH - 1);
 		const srcRow = grid[srcY];
-		let row = "";
+		let row = '';
 		for (let x = 0; x < dstW; x++) {
 			const srcX = Math.min(Math.floor(x * step), srcW - 1);
-			row += srcRow[srcX] ?? ".";
+			row += srcRow[srcX] ?? '.';
 		}
 		return row;
 	});
@@ -64,8 +56,8 @@ export const PALETTE: Record<string, RGB> = {
 const sprite = (source: TemplateStringsArray): string[] =>
 	source.raw[0]
 		.trim()
-		.split("\n")
-		.map((row) => row.trim().replace(/\.+$/, "").padEnd(FOX_WIDTH, "."));
+		.split('\n')
+		.map((row) => row.trim().replace(/\.+$/, '').padEnd(FOX_WIDTH, '.'));
 
 const sideFrames = [
 	sprite`
@@ -525,25 +517,21 @@ const sleepingFrames = [
 type Pixel = readonly [x: number, y: number, color: string];
 
 function setPixels(frame: string[], pixels: Pixel[]): string[] {
-	const result = frame.map((row) => row.split(""));
+	const result = frame.map((row) => row.split(''));
 	for (const [x, y, color] of pixels) {
 		if (x >= 0 && x < FOX_WIDTH && y >= 0 && y < FOX_HEIGHT) {
 			result[y][x] = color;
 		}
 	}
-	return result.map((row) => row.join(""));
+	return result.map((row) => row.join(''));
 }
 
 function removeColors(frame: string[], colors: Set<string>): string[] {
-	return frame.map((row) =>
-		[...row].map((pixel) => (colors.has(pixel) ? "." : pixel)).join(""),
-	);
+	return frame.map((row) => [...row].map((pixel) => (colors.has(pixel) ? '.' : pixel)).join(''));
 }
 
 function shiftFrame(frame: string[], offsetY: number): string[] {
-	const result = Array.from({ length: FOX_HEIGHT }, () =>
-		".".repeat(FOX_WIDTH),
-	);
+	const result = Array.from({ length: FOX_HEIGHT }, () => '.'.repeat(FOX_WIDTH));
 	for (let y = 0; y < FOX_HEIGHT; y += 1) {
 		const destinationY = y + offsetY;
 		if (destinationY >= 0 && destinationY < FOX_HEIGHT) {
@@ -555,113 +543,111 @@ function shiftFrame(frame: string[], offsetY: number): string[] {
 
 const sniffFrames = sideFrames.map((frame, index) =>
 	setPixels(frame, [
-		[1 - (index % 2), 8 - Math.floor(index / 2), "G"],
-		[index === 2 ? 0 : -1, 6, "S"],
+		[1 - (index % 2), 8 - Math.floor(index / 2), 'G'],
+		[index === 2 ? 0 : -1, 6, 'S'],
 	]),
 );
 
 const digFrames = backFrames.map((frame, index) =>
 	setPixels(frame, [
-		[3 + index, 17 - (index % 2), index % 2 === 0 ? "F" : "D"],
-		[20 - index, 18, index % 2 === 0 ? "D" : "F"],
-		[index === 1 ? 2 : 21, 15 + (index % 2), "F"],
+		[3 + index, 17 - (index % 2), index % 2 === 0 ? 'F' : 'D'],
+		[20 - index, 18, index % 2 === 0 ? 'D' : 'F'],
+		[index === 1 ? 2 : 21, 15 + (index % 2), 'F'],
 	]),
 );
 
-const sideWithoutShadow = sideFrames.map((frame) =>
-	removeColors(frame, new Set(["Q"])),
-);
+const sideWithoutShadow = sideFrames.map((frame) => removeColors(frame, new Set(['Q'])));
 
 const runFrames = sideWithoutShadow.map((frame, index) =>
 	setPixels(shiftFrame(frame, index % 2 === 0 ? 0 : -1), [
-		[22 - index, 17 + (index % 2), "Q"],
-		[20 - index, 19, "H"],
+		[22 - index, 17 + (index % 2), 'Q'],
+		[20 - index, 19, 'H'],
 	]),
 );
 
 const jumpOffsets = [0, -2, -4, -2];
 const jumpFrames = sideWithoutShadow.map((frame, index) =>
 	setPixels(shiftFrame(frame, jumpOffsets[index]), [
-		[index < 2 ? 21 : 2, index === 2 ? 5 : 3 + index, "Y"],
-		[index === 2 ? 22 : -1, 9, "Y"],
+		[index < 2 ? 21 : 2, index === 2 ? 5 : 3 + index, 'Y'],
+		[index === 2 ? 22 : -1, 9, 'Y'],
 	]),
 );
 
 const caughtFrames = frontBounceFrames.map((frame, index) =>
 	setPixels(frame, [
-		[index % 2 === 0 ? 3 : 20, 3 + (index % 2), "Y"],
-		[index === 2 ? 21 : 2, 10, "Y"],
+		[index % 2 === 0 ? 3 : 20, 3 + (index % 2), 'Y'],
+		[index === 2 ? 21 : 2, 10, 'Y'],
 	]),
 );
 
 const errorFrames = [
 	setPixels(frontFrames[0], [
-		[20, 1, "R"],
-		[20, 2, "R"],
-		[20, 4, "R"],
+		[20, 1, 'R'],
+		[20, 2, 'R'],
+		[20, 4, 'R'],
 	]),
 	frontFrames[1],
 	setPixels(frontFrames[2], [
-		[20, 1, "R"],
-		[20, 2, "R"],
-		[20, 4, "R"],
+		[20, 1, 'R'],
+		[20, 2, 'R'],
+		[20, 4, 'R'],
 	]),
 	frontFrames[3],
 ];
 
 const sadFrames = [
-	setPixels(frontFrames[2], [[9, 9, "C"]]),
+	setPixels(frontFrames[2], [[9, 9, 'C']]),
 	setPixels(frontFrames[3], [
-		[9, 9, "C"],
-		[14, 9, "C"],
+		[9, 9, 'C'],
+		[14, 9, 'C'],
 	]),
 	setPixels(frontFrames[2], [
-		[9, 10, "C"],
-		[14, 10, "C"],
+		[9, 10, 'C'],
+		[14, 10, 'C'],
 	]),
-	setPixels(frontFrames[3], [[14, 9, "C"]]),
+	setPixels(frontFrames[3], [[14, 9, 'C']]),
 ];
 
 export const ANIMS: Record<FoxState, FoxAnimation> = {
 	sleep: {
-		label: "等你回来…",
+		label: '等你回来…',
 		intervalMs: 700,
 		grids: sleepingFrames,
 	},
 	sniff: {
-		label: "嗅探代码中",
+		label: '嗅探代码中',
 		intervalMs: 280,
 		grids: sniffFrames,
 	},
 	dig: {
-		label: "在代码库里挖掘",
+		label: '在代码库里挖掘',
 		intervalMs: 220,
 		grids: digFrames,
 	},
 	run: {
-		label: "跑起来！",
+		label: '跑起来！',
 		intervalMs: 130,
 		grids: runFrames,
 	},
 	jump: {
-		label: "开心得跳起来！",
+		label: '开心得跳起来！',
 		intervalMs: 160,
 		grids: jumpFrames,
 	},
 	caught: {
-		label: "抓到了！",
+		label: '抓到了！',
 		intervalMs: 170,
-		once: { durationMs: 1600, then: "sleep" },
+		once: { durationMs: 1600, then: 'sleep' },
 		grids: caughtFrames,
 	},
 	error: {
-		label: "哎呀，出错了",
+		label: '哎呀，出错了',
 		intervalMs: 190,
-		once: { durationMs: 1200, then: "sleep" },
+		once: { durationMs: 1200, then: 'sleep' },
 		grids: errorFrames,
 	},
 	sad: {
-		label: "今天不太顺利…",
+		label: '今天不太顺利…',
 		intervalMs: 580,
 		grids: sadFrames,
 	},
@@ -685,7 +671,7 @@ for (const [state, animation] of Object.entries(ANIMS)) {
 				);
 			}
 			for (const pixel of row) {
-				if (pixel !== "." && !paletteKeys.has(pixel)) {
+				if (pixel !== '.' && !paletteKeys.has(pixel)) {
 					throw new Error(
 						`${state} frame ${frameIndex} row ${rowIndex} uses unknown pixel ${pixel}`,
 					);

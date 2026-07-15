@@ -10,17 +10,17 @@
  *   my-extension_20260614.log
  */
 
-import { appendFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import type { LogEvent, LoggerRuntimeConfig } from "../types.js";
+import { appendFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import type { LogEvent, LoggerRuntimeConfig } from '../types.js';
 
 // ============================================================================
 // Pattern formatting
 // ============================================================================
 
 function pad(n: number, width = 2): string {
-	return String(n).padStart(width, "0");
+	return String(n).padStart(width, '0');
 }
 
 function formatTimestamp(ts: number): string {
@@ -38,7 +38,7 @@ function todayDateCompact(): string {
  * Replaces characters unsafe for filenames with underscores.
  */
 function sanitizeSource(source: string): string {
-	return source.replace(/[<>:"/\\|?*.]/g, "_").replace(/\s+/g, "_");
+	return source.replace(/[<>:"/\\|?*.]/g, '_').replace(/\s+/g, '_');
 }
 
 /**
@@ -62,8 +62,8 @@ function formatEvent(event: LogEvent, pattern: string): string {
 		.replace(/%p/g, levelPadded)
 		.replace(/%c/g, event.source)
 		.replace(/%m/g, event.message)
-		.replace(/%n/g, "\n")
-		.replace(/%%/g, "%");
+		.replace(/%n/g, '\n')
+		.replace(/%%/g, '%');
 }
 
 // ============================================================================
@@ -82,9 +82,7 @@ let _state: FileAppenderState | null = null;
 /**
  * Initialize the file appender. Ensures log directory exists.
  */
-export async function initFileAppender(
-	config: LoggerRuntimeConfig,
-): Promise<void> {
+export async function initFileAppender(config: LoggerRuntimeConfig): Promise<void> {
 	const logDir = config.appenders.file.path;
 	if (!existsSync(logDir)) {
 		await mkdir(logDir, { recursive: true });
@@ -103,10 +101,7 @@ export async function initFileAppender(
  *   writeFileLog({ source: "review", ... }, config)
  *   // writes to {logDir}/review_20260614.log
  */
-export async function writeFileLog(
-	event: LogEvent,
-	config: LoggerRuntimeConfig,
-): Promise<void> {
+export async function writeFileLog(event: LogEvent, config: LoggerRuntimeConfig): Promise<void> {
 	const appenderConfig = config.appenders.file;
 	if (!appenderConfig.enabled) return;
 
@@ -128,7 +123,7 @@ export async function writeFileLog(
 
 	const line = formatEvent(event, appenderConfig.pattern);
 	try {
-		await appendFile(logFilePath, line, "utf-8");
+		await appendFile(logFilePath, line, 'utf-8');
 	} catch {
 		// Silently fail on write errors (don't crash the agent)
 	}

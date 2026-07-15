@@ -17,36 +17,36 @@
  *   4. No defaultLevel → use "info"
  */
 
-import type { LogLevel, LoggerConfig, LoggerRuntimeConfig } from "./types.js";
-import { LOG_LEVELS, LOG_LEVEL_ORDER } from "./types.js";
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import type { LogLevel, LoggerConfig, LoggerRuntimeConfig } from './types.js';
+import { LOG_LEVELS, LOG_LEVEL_ORDER } from './types.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 
 // ============================================================================
 // Config file name
 // ============================================================================
 
-const CONFIG_FILE = "pi-logger.json";
+const CONFIG_FILE = 'pi-logger.json';
 
 // ============================================================================
 // Default configuration (embedded in the plugin)
 // ============================================================================
 
 const DEFAULT_CONFIG: LoggerRuntimeConfig = {
-	defaultLevel: "info",
+	defaultLevel: 'info',
 	loggers: {},
 	appenders: {
 		file: {
 			enabled: true,
-			path: join(homedir(), ".pi", "logs"),
-			pattern: "[%d{ISO}] [%p] [%c] %m%n",
-			level: "trace",
+			path: join(homedir(), '.pi', 'logs'),
+			pattern: '[%d{ISO}] [%p] [%c] %m%n',
+			level: 'trace',
 		},
 		console: {
 			enabled: false,
-			level: "info",
+			level: 'info',
 			color: true,
 		},
 	},
@@ -76,17 +76,14 @@ function deepClone(cfg: LoggerRuntimeConfig): LoggerRuntimeConfig {
 function loadConfigFile(path: string): LoggerConfig | null {
 	try {
 		if (!existsSync(path)) return null;
-		const raw = readFileSync(path, "utf-8");
+		const raw = readFileSync(path, 'utf-8');
 		return JSON.parse(raw) as LoggerConfig;
 	} catch {
 		return null;
 	}
 }
 
-function mergeConfig(
-	base: LoggerRuntimeConfig,
-	overlay: LoggerConfig,
-): LoggerRuntimeConfig {
+function mergeConfig(base: LoggerRuntimeConfig, overlay: LoggerConfig): LoggerRuntimeConfig {
 	return {
 		defaultLevel: overlay.defaultLevel ?? base.defaultLevel,
 		loggers: { ...base.loggers, ...overlay.loggers },
@@ -131,15 +128,15 @@ export function resolveLevel(name: string): LogLevel {
 	if (loggers[name] !== undefined) return loggers[name] as LogLevel;
 
 	// 2. Walk up hierarchy
-	const parts = name.split(".");
+	const parts = name.split('.');
 	while (parts.length > 1) {
 		parts.pop();
-		const parent = parts.join(".");
+		const parent = parts.join('.');
 		if (loggers[parent] !== undefined) return loggers[parent] as LogLevel;
 	}
 
 	// 3. Root level
-	if (loggers[""] !== undefined) return loggers[""] as LogLevel;
+	if (loggers[''] !== undefined) return loggers[''] as LogLevel;
 
 	// 4. Default
 	return _runtimeConfig.defaultLevel;
@@ -150,8 +147,7 @@ export function resolveLevel(name: string): LogLevel {
  */
 export function shouldLog(source: string, level: LogLevel): boolean {
 	const configuredLevel = resolveLevel(source);
-	const configuredOrder =
-		LOG_LEVEL_ORDER[configuredLevel] ?? LOG_LEVEL_ORDER.info;
+	const configuredOrder = LOG_LEVEL_ORDER[configuredLevel] ?? LOG_LEVEL_ORDER.info;
 	const eventOrder = LOG_LEVEL_ORDER[level] ?? LOG_LEVEL_ORDER.info;
 	return eventOrder >= configuredOrder;
 }
@@ -159,11 +155,8 @@ export function shouldLog(source: string, level: LogLevel): boolean {
 /**
  * Check whether an appender should receive a log event at the given level.
  */
-export function shouldAppend(
-	appenderLevel: LogLevel | undefined,
-	eventLevel: LogLevel,
-): boolean {
-	const appenderOrder = LOG_LEVEL_ORDER[appenderLevel ?? "trace"];
+export function shouldAppend(appenderLevel: LogLevel | undefined, eventLevel: LogLevel): boolean {
+	const appenderOrder = LOG_LEVEL_ORDER[appenderLevel ?? 'trace'];
 	const eventOrder = LOG_LEVEL_ORDER[eventLevel] ?? LOG_LEVEL_ORDER.info;
 	return eventOrder >= appenderOrder;
 }
@@ -195,7 +188,7 @@ export function loadConfiguration(cwd: string): void {
 	const pluginDir = dirname(fileURLToPath(import.meta.url));
 
 	const bundledPath = join(pluginDir, CONFIG_FILE);
-	const userGlobalPath = join(homedir(), ".pi", "agents", CONFIG_FILE);
+	const userGlobalPath = join(homedir(), '.pi', 'agents', CONFIG_FILE);
 	const projectPath = findConfigUpward(cwd);
 
 	// Load in priority order (later overrides earlier)
@@ -210,7 +203,7 @@ export function loadConfiguration(cwd: string): void {
 	if (userGlobal) merged = mergeConfig(merged, userGlobal);
 
 	// 3) Project-local .pi/ (<project-root>/.pi/pi-logger.json)
-	const dotPiPath = join(cwd, ".pi", CONFIG_FILE);
+	const dotPiPath = join(cwd, '.pi', CONFIG_FILE);
 	const dotPiCfg = loadConfigFile(dotPiPath);
 	if (dotPiCfg) merged = mergeConfig(merged, dotPiCfg);
 
@@ -223,8 +216,8 @@ export function loadConfiguration(cwd: string): void {
 	// If the config specifies a relative path for file appender, resolve it against cwd
 	if (
 		merged.appenders.file.path &&
-		!merged.appenders.file.path.startsWith("/") &&
-		!merged.appenders.file.path.startsWith("~")
+		!merged.appenders.file.path.startsWith('/') &&
+		!merged.appenders.file.path.startsWith('~')
 	) {
 		merged.appenders.file.path = resolve(cwd, merged.appenders.file.path);
 	}
@@ -256,10 +249,9 @@ export function getLoggerLevel(name: string): LogLevel {
 	return resolveLevel(name);
 }
 
-export function setOutputMode(mode: "file" | "console" | "both"): void {
-	_runtimeConfig.appenders.file.enabled = mode === "file" || mode === "both";
-	_runtimeConfig.appenders.console.enabled =
-		mode === "console" || mode === "both";
+export function setOutputMode(mode: 'file' | 'console' | 'both'): void {
+	_runtimeConfig.appenders.file.enabled = mode === 'file' || mode === 'both';
+	_runtimeConfig.appenders.console.enabled = mode === 'console' || mode === 'both';
 }
 
 export function getEffectiveConfig(): LoggerRuntimeConfig {

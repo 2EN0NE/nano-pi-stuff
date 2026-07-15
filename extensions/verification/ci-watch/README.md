@@ -12,19 +12,19 @@ pi install npm:@zenone/pi-ci-watch
 
 ```json
 {
-  "packages": ["npm:@zenone/pi-ci-watch"]
+	"packages": ["npm:@zenone/pi-ci-watch"]
 }
 ```
 
 ## 命令
 
-| 命令 | 描述 |
-|---------|-------------|
-| `/ci-watch <pr>` | 监控 CI 并自动修复失败（最多 3 次尝试） |
-| `/ci-notify <pr>` | 监控 CI 并在完成时通知（不自动修复） |
-| `/ci-auto on\|off` | 每次推送后自动监控（默认：关闭） |
-| `/ci-config <min> <max> <step>` | 配置轮询间隔（秒） |
-| `/ci-config` | 显示当前配置 |
+| 命令                            | 描述                                    |
+| ------------------------------- | --------------------------------------- |
+| `/ci-watch <pr>`                | 监控 CI 并自动修复失败（最多 3 次尝试） |
+| `/ci-notify <pr>`               | 监控 CI 并在完成时通知（不自动修复）    |
+| `/ci-auto on\|off`              | 每次推送后自动监控（默认：关闭）        |
+| `/ci-config <min> <max> <step>` | 配置轮询间隔（秒）                      |
+| `/ci-config`                    | 显示当前配置                            |
 
 ## 工作原理
 

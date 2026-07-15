@@ -1,11 +1,11 @@
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 export interface SecretEntry {
 	name: string;
 	placeholder: string;
 	value: string;
-	source: "env" | "dotenv" | "pattern";
+	source: 'env' | 'dotenv' | 'pattern';
 }
 
 const SENSITIVE_NAME =
@@ -20,24 +20,16 @@ const MIN_VALUE_LENGTH = 8;
 const TRIVIAL_VALUE =
 	/^(true|false|null|undefined|none|localhost|0|1|3000|8080|development|production|staging|test)$/i;
 
-const DOTENV_FILES = [
-	".env",
-	".env.local",
-	".env.development",
-	".env.development.local",
-];
+const DOTENV_FILES = ['.env', '.env.local', '.env.development', '.env.development.local'];
 
 const DOTENV_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/;
 
 function unquote(raw: string): string {
 	const v = raw.trim();
-	if (
-		(v.startsWith('"') && v.endsWith('"')) ||
-		(v.startsWith("'") && v.endsWith("'"))
-	) {
+	if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
 		return v.slice(1, -1);
 	}
-	const hash = v.indexOf(" #");
+	const hash = v.indexOf(' #');
 	return hash >= 0 ? v.slice(0, hash).trim() : v;
 }
 
@@ -50,10 +42,10 @@ function isSensitiveValue(name: string, value: string): boolean {
 }
 
 function toPlaceholder(name: string, taken: Set<string>): string {
-	const shellVar = name.replace(/[^A-Za-z0-9_]/g, "_");
+	const shellVar = name.replace(/[^A-Za-z0-9_]/g, '_');
 	const make = (tag: string) =>
 		`«SECRET ${name}${tag} redacted — the real value is live in your shell env; read it in bash as "$${shellVar}"»`;
-	const base = make("");
+	const base = make('');
 	if (!taken.has(base)) return base;
 	let i = 2;
 	while (taken.has(make(`#${i}`))) i++;
@@ -63,9 +55,9 @@ function toPlaceholder(name: string, taken: Set<string>): string {
 function parseDotenv(path: string): Map<string, string> {
 	const out = new Map<string, string>();
 	try {
-		const text = readFileSync(path, "utf8");
+		const text = readFileSync(path, 'utf8');
 		for (const line of text.split(/\r?\n/)) {
-			if (!line.trim() || line.trim().startsWith("#")) continue;
+			if (!line.trim() || line.trim().startsWith('#')) continue;
 			const m = DOTENV_LINE.exec(line);
 			if (!m) continue;
 			out.set(m[1], unquote(m[2]));
@@ -77,14 +69,11 @@ function parseDotenv(path: string): Map<string, string> {
 }
 
 export function discoverSecrets(cwd: string): SecretEntry[] {
-	const byName = new Map<
-		string,
-		{ value: string; source: SecretEntry["source"] }
-	>();
+	const byName = new Map<string, { value: string; source: SecretEntry['source'] }>();
 
 	for (const [name, value] of Object.entries(process.env)) {
-		if (typeof value === "string" && isSensitiveValue(name, value)) {
-			byName.set(name, { value, source: "env" });
+		if (typeof value === 'string' && isSensitiveValue(name, value)) {
+			byName.set(name, { value, source: 'env' });
 		}
 	}
 
@@ -93,7 +82,7 @@ export function discoverSecrets(cwd: string): SecretEntry[] {
 		if (!existsSync(path)) continue;
 		for (const [name, value] of parseDotenv(path)) {
 			if (isSensitiveValue(name, value) && !byName.has(name)) {
-				byName.set(name, { value, source: "dotenv" });
+				byName.set(name, { value, source: 'dotenv' });
 			}
 		}
 	}

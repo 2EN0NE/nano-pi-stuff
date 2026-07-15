@@ -1,5 +1,5 @@
 /** Resource categories for startup display */
-export type ResourceType = "context" | "skill" | "extension" | "theme";
+export type ResourceType = 'context' | 'skill' | 'extension' | 'theme';
 
 export interface ResourceItem {
 	name: string;
@@ -22,4 +22,4 @@ export interface ContextFileEntry {
 }
 
 /** Widget display mode */
-export type CollapseMode = "collapsed" | "expanded";
+export type CollapseMode = 'collapsed' | 'expanded';

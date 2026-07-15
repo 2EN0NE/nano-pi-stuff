@@ -14,8 +14,8 @@
  * built-in `grep` tool in src/core/tools/grep.ts for a more complete implementation.
  */
 
-import { mkdtemp, writeFile } from "node:fs/promises";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -23,21 +23,23 @@ import {
 	type TruncationResult,
 	truncateHead,
 	withFileMutationQueue,
-} from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
-import { execSync } from "child_process";
-import { tmpdir } from "os";
-import { join } from "path";
-import { Type } from "typebox";
-import { createLogger } from "@zenone/pi-logger";
+} from '@earendil-works/pi-coding-agent';
+import { Text } from '@earendil-works/pi-tui';
+import { execSync } from 'child_process';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { Type } from 'typebox';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("truncated-tool");
+const log = createLogger('truncated-tool');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 const RgParams = Type.Object({
-	pattern: Type.String({ description: "Search pattern (regex)" }),
-	path: Type.Optional(Type.String({ description: "Directory to search (default: current directory)" })),
+	pattern: Type.String({ description: 'Search pattern (regex)' }),
+	path: Type.Optional(
+		Type.String({ description: 'Directory to search (default: current directory)' }),
+	),
 	glob: Type.Optional(Type.String({ description: "File glob pattern, e.g. '*.ts'" })),
 });
 
@@ -52,8 +54,8 @@ interface RgDetails {
 
 export default function (pi: ExtensionAPI) {
 	pi.registerTool({
-		name: "rg",
-		label: "ripgrep",
+		name: 'rg',
+		label: 'ripgrep',
 		// Document the truncation limits in the tool description so the LLM knows
 		description: `Search file contents using ripgrep. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${formatSize(DEFAULT_MAX_BYTES)} (whichever is hit first). If truncated, full output is saved to a temp file.`,
 		parameters: RgParams,
@@ -62,23 +64,23 @@ export default function (pi: ExtensionAPI) {
 			const { pattern, path: searchPath, glob } = params;
 
 			// Build the ripgrep command
-			const args = ["rg", "--line-number", "--color=never"];
-			if (glob) args.push("--glob", glob);
+			const args = ['rg', '--line-number', '--color=never'];
+			if (glob) args.push('--glob', glob);
 			args.push(pattern);
-			args.push(searchPath || ".");
+			args.push(searchPath || '.');
 
 			let output: string;
 			try {
-				output = execSync(args.join(" "), {
+				output = execSync(args.join(' '), {
 					cwd: ctx.cwd,
-					encoding: "utf-8",
+					encoding: 'utf-8',
 					maxBuffer: 100 * 1024 * 1024, // 100MB buffer to capture full output
 				});
 			} catch (err: any) {
 				// ripgrep exits with 1 when no matches found
 				if (err.status === 1) {
 					return {
-						content: [{ type: "text", text: "No matches found" }],
+						content: [{ type: 'text', text: 'No matches found' }],
 						details: { pattern, path: searchPath, glob, matchCount: 0 } as RgDetails,
 					};
 				}
@@ -87,7 +89,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (!output.trim()) {
 				return {
-					content: [{ type: "text", text: "No matches found" }],
+					content: [{ type: 'text', text: 'No matches found' }],
 					details: { pattern, path: searchPath, glob, matchCount: 0 } as RgDetails,
 				};
 			}
@@ -101,7 +103,7 @@ export default function (pi: ExtensionAPI) {
 			});
 
 			// Count matches (each non-empty line with a match)
-			const matchCount = output.split("\n").filter((line) => line.trim()).length;
+			const matchCount = output.split('\n').filter((line) => line.trim()).length;
 
 			const details: RgDetails = {
 				pattern,
@@ -114,10 +116,10 @@ export default function (pi: ExtensionAPI) {
 
 			if (truncation.truncated) {
 				// Save full output to a temp file so LLM can access it if needed
-				const tempDir = await mkdtemp(join(tmpdir(), "pi-rg-"));
-				const tempFile = join(tempDir, "output.txt");
+				const tempDir = await mkdtemp(join(tmpdir(), 'pi-rg-'));
+				const tempFile = join(tempDir, 'output.txt');
 				await withFileMutationQueue(tempFile, async () => {
-					await writeFile(tempFile, output, "utf8");
+					await writeFile(tempFile, output, 'utf8');
 				});
 
 				details.truncation = truncation;
@@ -134,20 +136,20 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			return {
-				content: [{ type: "text", text: resultText }],
+				content: [{ type: 'text', text: resultText }],
 				details,
 			};
 		},
 
 		// Custom rendering of the tool call (shown before/during execution)
 		renderCall(args, theme, _context) {
-			let text = theme.fg("toolTitle", theme.bold("rg "));
-			text += theme.fg("accent", `"${args.pattern}"`);
+			let text = theme.fg('toolTitle', theme.bold('rg '));
+			text += theme.fg('accent', `"${args.pattern}"`);
 			if (args.path) {
-				text += theme.fg("muted", ` in ${args.path}`);
+				text += theme.fg('muted', ` in ${args.path}`);
 			}
 			if (args.glob) {
-				text += theme.fg("dim", ` --glob ${args.glob}`);
+				text += theme.fg('dim', ` --glob ${args.glob}`);
 			}
 			return new Text(text, 0, 0);
 		},
@@ -158,39 +160,39 @@ export default function (pi: ExtensionAPI) {
 
 			// Handle streaming/partial results
 			if (isPartial) {
-				return new Text(theme.fg("warning", "Searching..."), 0, 0);
+				return new Text(theme.fg('warning', 'Searching...'), 0, 0);
 			}
 
 			// No matches
 			if (!details || details.matchCount === 0) {
-				return new Text(theme.fg("dim", "No matches found"), 0, 0);
+				return new Text(theme.fg('dim', 'No matches found'), 0, 0);
 			}
 
 			// Build result display
-			let text = theme.fg("success", `${details.matchCount} matches`);
+			let text = theme.fg('success', `${details.matchCount} matches`);
 
 			// Show truncation warning if applicable
 			if (details.truncation?.truncated) {
-				text += theme.fg("warning", " (truncated)");
+				text += theme.fg('warning', ' (truncated)');
 			}
 
 			// In expanded view, show the actual matches
 			if (expanded) {
 				const content = result.content[0];
-				if (content?.type === "text") {
+				if (content?.type === 'text') {
 					// Show first 20 lines in expanded view, or all if fewer
-					const lines = content.text.split("\n").slice(0, 20);
+					const lines = content.text.split('\n').slice(0, 20);
 					for (const line of lines) {
-						text += `\n${theme.fg("dim", line)}`;
+						text += `\n${theme.fg('dim', line)}`;
 					}
-					if (content.text.split("\n").length > 20) {
-						text += `\n${theme.fg("muted", "... (use read tool to see full output)")}`;
+					if (content.text.split('\n').length > 20) {
+						text += `\n${theme.fg('muted', '... (use read tool to see full output)')}`;
 					}
 				}
 
 				// Show temp file path if truncated
 				if (details.fullOutputPath) {
-					text += `\n${theme.fg("dim", `Full output: ${details.fullOutputPath}`)}`;
+					text += `\n${theme.fg('dim', `Full output: ${details.fullOutputPath}`)}`;
 				}
 			}
 

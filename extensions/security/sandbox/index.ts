@@ -40,23 +40,16 @@
  *
  * Linux also requires: bubblewrap, socat, ripgrep
  */
-import { createLogger } from "@zenone/pi-logger";
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("sandbox");
+const log = createLogger('sandbox');
 
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import {
-	SandboxManager,
-	type SandboxRuntimeConfig,
-} from "@anthropic-ai/sandbox-runtime";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import {
-	type BashOperations,
-	createBashTool,
-	getAgentDir,
-} from "@earendil-works/pi-coding-agent";
+import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { SandboxManager, type SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { type BashOperations, createBashTool, getAgentDir } from '@earendil-works/pi-coding-agent';
 
 interface SandboxConfig extends SandboxRuntimeConfig {
 	enabled?: boolean;
@@ -66,56 +59,53 @@ const DEFAULT_CONFIG: SandboxConfig = {
 	enabled: true,
 	network: {
 		allowedDomains: [
-			"npmjs.org",
-			"*.npmjs.org",
-			"registry.npmjs.org",
-			"registry.yarnpkg.com",
-			"pypi.org",
-			"*.pypi.org",
-			"github.com",
-			"*.github.com",
-			"api.github.com",
-			"raw.githubusercontent.com",
+			'npmjs.org',
+			'*.npmjs.org',
+			'registry.npmjs.org',
+			'registry.yarnpkg.com',
+			'pypi.org',
+			'*.pypi.org',
+			'github.com',
+			'*.github.com',
+			'api.github.com',
+			'raw.githubusercontent.com',
 		],
 		deniedDomains: [],
 	},
 	filesystem: {
-		denyRead: ["~/.ssh", "~/.aws", "~/.gnupg"],
-		allowWrite: [".", "/tmp"],
-		denyWrite: [".env", ".env.*", "*.pem", "*.key"],
+		denyRead: ['~/.ssh', '~/.aws', '~/.gnupg'],
+		allowWrite: ['.', '/tmp'],
+		denyWrite: ['.env', '.env.*', '*.pem', '*.key'],
 	},
 };
 
 function loadConfig(cwd: string): SandboxConfig {
-	const projectConfigPath = join(cwd, ".pi", "sandbox.json");
-	const globalConfigPath = join(getAgentDir(), "extensions", "sandbox.json");
+	const projectConfigPath = join(cwd, '.pi', 'sandbox.json');
+	const globalConfigPath = join(getAgentDir(), 'extensions', 'sandbox.json');
 
 	let globalConfig: Partial<SandboxConfig> = {};
 	let projectConfig: Partial<SandboxConfig> = {};
 
 	if (existsSync(globalConfigPath)) {
 		try {
-			globalConfig = JSON.parse(readFileSync(globalConfigPath, "utf-8"));
+			globalConfig = JSON.parse(readFileSync(globalConfigPath, 'utf-8'));
 		} catch (e) {
-			log.warn("Could not parse %s: %s", globalConfigPath, e);
+			log.warn('Could not parse %s: %s', globalConfigPath, e);
 		}
 	}
 
 	if (existsSync(projectConfigPath)) {
 		try {
-			projectConfig = JSON.parse(readFileSync(projectConfigPath, "utf-8"));
+			projectConfig = JSON.parse(readFileSync(projectConfigPath, 'utf-8'));
 		} catch (e) {
-			log.warn("Could not parse %s: %s", projectConfigPath, e);
+			log.warn('Could not parse %s: %s', projectConfigPath, e);
 		}
 	}
 
 	return deepMerge(deepMerge(DEFAULT_CONFIG, globalConfig), projectConfig);
 }
 
-function deepMerge(
-	base: SandboxConfig,
-	overrides: Partial<SandboxConfig>,
-): SandboxConfig {
+function deepMerge(base: SandboxConfig, overrides: Partial<SandboxConfig>): SandboxConfig {
 	const result: SandboxConfig = { ...base };
 
 	if (overrides.enabled !== undefined) result.enabled = overrides.enabled;
@@ -139,8 +129,7 @@ function deepMerge(
 		extResult.ignoreViolations = extOverrides.ignoreViolations;
 	}
 	if (extOverrides.enableWeakerNestedSandbox !== undefined) {
-		extResult.enableWeakerNestedSandbox =
-			extOverrides.enableWeakerNestedSandbox;
+		extResult.enableWeakerNestedSandbox = extOverrides.enableWeakerNestedSandbox;
 	}
 
 	return result;
@@ -156,10 +145,10 @@ function createSandboxedBashOps(): BashOperations {
 			const wrappedCommand = await SandboxManager.wrapWithSandbox(command);
 
 			return new Promise((resolve, reject) => {
-				const child = spawn("bash", ["-c", wrappedCommand], {
+				const child = spawn('bash', ['-c', wrappedCommand], {
 					cwd,
 					detached: true,
-					stdio: ["ignore", "pipe", "pipe"],
+					stdio: ['ignore', 'pipe', 'pipe'],
 				});
 
 				let timedOut = false;
@@ -170,18 +159,18 @@ function createSandboxedBashOps(): BashOperations {
 						timedOut = true;
 						if (child.pid) {
 							try {
-								process.kill(-child.pid, "SIGKILL");
+								process.kill(-child.pid, 'SIGKILL');
 							} catch {
-								child.kill("SIGKILL");
+								child.kill('SIGKILL');
 							}
 						}
 					}, timeout * 1000);
 				}
 
-				child.stdout?.on("data", onData);
-				child.stderr?.on("data", onData);
+				child.stdout?.on('data', onData);
+				child.stderr?.on('data', onData);
 
-				child.on("error", (err) => {
+				child.on('error', (err) => {
 					if (timeoutHandle) clearTimeout(timeoutHandle);
 					reject(err);
 				});
@@ -189,21 +178,21 @@ function createSandboxedBashOps(): BashOperations {
 				const onAbort = () => {
 					if (child.pid) {
 						try {
-							process.kill(-child.pid, "SIGKILL");
+							process.kill(-child.pid, 'SIGKILL');
 						} catch {
-							child.kill("SIGKILL");
+							child.kill('SIGKILL');
 						}
 					}
 				};
 
-				signal?.addEventListener("abort", onAbort, { once: true });
+				signal?.addEventListener('abort', onAbort, { once: true });
 
-				child.on("close", (code) => {
+				child.on('close', (code) => {
 					if (timeoutHandle) clearTimeout(timeoutHandle);
-					signal?.removeEventListener("abort", onAbort);
+					signal?.removeEventListener('abort', onAbort);
 
 					if (signal?.aborted) {
-						reject(new Error("aborted"));
+						reject(new Error('aborted'));
 					} else if (timedOut) {
 						reject(new Error(`timeout:${timeout}`));
 					} else {
@@ -216,9 +205,9 @@ function createSandboxedBashOps(): BashOperations {
 }
 
 export default function (pi: ExtensionAPI) {
-	pi.registerFlag("no-sandbox", {
-		description: "Disable OS-level sandboxing for bash commands",
-		type: "boolean",
+	pi.registerFlag('no-sandbox', {
+		description: 'Disable OS-level sandboxing for bash commands',
+		type: 'boolean',
 		default: false,
 	});
 
@@ -227,7 +216,7 @@ export default function (pi: ExtensionAPI) {
 		spawnHook: ({ command, cwd, env }) => ({
 			command: `source ~/.profile\n${command}`,
 			cwd,
-			env: { ...env, PI_SPAWN_HOOK: "1" },
+			env: { ...env, PI_SPAWN_HOOK: '1' },
 		}),
 	});
 
@@ -236,7 +225,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		...localBash,
-		label: "bash (sandboxed)",
+		label: 'bash (sandboxed)',
 		async execute(id, params, signal, onUpdate, _ctx) {
 			if (!sandboxEnabled || !sandboxInitialized) {
 				return localBash.execute(id, params, signal, onUpdate);
@@ -249,17 +238,17 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("user_bash", () => {
+	pi.on('user_bash', () => {
 		if (!sandboxEnabled || !sandboxInitialized) return;
 		return { operations: createSandboxedBashOps() };
 	});
 
-	pi.on("session_start", async (_event, ctx) => {
-		const noSandbox = pi.getFlag("no-sandbox") as boolean;
+	pi.on('session_start', async (_event, ctx) => {
+		const noSandbox = pi.getFlag('no-sandbox') as boolean;
 
 		if (noSandbox) {
 			sandboxEnabled = false;
-			ctx.ui.notify("Sandbox disabled via --no-sandbox", "warning");
+			ctx.ui.notify('Sandbox disabled via --no-sandbox', 'warning');
 			return;
 		}
 
@@ -267,14 +256,14 @@ export default function (pi: ExtensionAPI) {
 
 		if (!config.enabled) {
 			sandboxEnabled = false;
-			ctx.ui.notify("Sandbox disabled via config", "info");
+			ctx.ui.notify('Sandbox disabled via config', 'info');
 			return;
 		}
 
 		const platform = process.platform;
-		if (platform !== "darwin" && platform !== "linux") {
+		if (platform !== 'darwin' && platform !== 'linux') {
 			sandboxEnabled = false;
-			ctx.ui.notify(`Sandbox not supported on ${platform}`, "warning");
+			ctx.ui.notify(`Sandbox not supported on ${platform}`, 'warning');
 			return;
 		}
 
@@ -297,23 +286,23 @@ export default function (pi: ExtensionAPI) {
 			const networkCount = config.network?.allowedDomains?.length ?? 0;
 			const writeCount = config.filesystem?.allowWrite?.length ?? 0;
 			ctx.ui.setStatus(
-				"sandbox",
+				'sandbox',
 				ctx.ui.theme.fg(
-					"accent",
+					'accent',
 					`🔒 Sandbox: ${networkCount} domains, ${writeCount} write paths`,
 				),
 			);
-			ctx.ui.notify("Sandbox initialized", "info");
+			ctx.ui.notify('Sandbox initialized', 'info');
 		} catch (err) {
 			sandboxEnabled = false;
 			ctx.ui.notify(
 				`Sandbox initialization failed: ${err instanceof Error ? err.message : err}`,
-				"error",
+				'error',
 			);
 		}
 	});
 
-	pi.on("session_shutdown", async () => {
+	pi.on('session_shutdown', async () => {
 		if (sandboxInitialized) {
 			try {
 				await SandboxManager.reset();
@@ -323,28 +312,28 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	pi.registerCommand("sandbox", {
-		description: "Show sandbox configuration",
+	pi.registerCommand('sandbox', {
+		description: 'Show sandbox configuration',
 		handler: async (_args, ctx) => {
 			if (!sandboxEnabled) {
-				ctx.ui.notify("Sandbox is disabled", "info");
+				ctx.ui.notify('Sandbox is disabled', 'info');
 				return;
 			}
 
 			const config = loadConfig(ctx.cwd);
 			const lines = [
-				"Sandbox Configuration:",
-				"",
-				"Network:",
-				`  Allowed: ${config.network?.allowedDomains?.join(", ") || "(none)"}`,
-				`  Denied: ${config.network?.deniedDomains?.join(", ") || "(none)"}`,
-				"",
-				"Filesystem:",
-				`  Deny Read: ${config.filesystem?.denyRead?.join(", ") || "(none)"}`,
-				`  Allow Write: ${config.filesystem?.allowWrite?.join(", ") || "(none)"}`,
-				`  Deny Write: ${config.filesystem?.denyWrite?.join(", ") || "(none)"}`,
+				'Sandbox Configuration:',
+				'',
+				'Network:',
+				`  Allowed: ${config.network?.allowedDomains?.join(', ') || '(none)'}`,
+				`  Denied: ${config.network?.deniedDomains?.join(', ') || '(none)'}`,
+				'',
+				'Filesystem:',
+				`  Deny Read: ${config.filesystem?.denyRead?.join(', ') || '(none)'}`,
+				`  Allow Write: ${config.filesystem?.allowWrite?.join(', ') || '(none)'}`,
+				`  Deny Write: ${config.filesystem?.denyWrite?.join(', ') || '(none)'}`,
 			];
-			ctx.ui.notify(lines.join("\n"), "info");
+			ctx.ui.notify(lines.join('\n'), 'info');
 		},
 	});
 }

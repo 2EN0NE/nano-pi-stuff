@@ -1,6 +1,6 @@
 ---
 name: mermaid
-description: "创建/编辑 mermaid 图表的必读指南，附带验证工具"
+description: '创建/编辑 mermaid 图表的必读指南，附带验证工具'
 ---
 
 # Mermaid 技能

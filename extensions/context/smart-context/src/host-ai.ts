@@ -1,7 +1,7 @@
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
-import { existsSync, realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { existsSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 type CompleteFn = (
 	model: any,
@@ -15,7 +15,7 @@ type CompleteFn = (
 ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
 let cached: CompleteFn | null | undefined;
-let lastDiag = "";
+let lastDiag = '';
 
 export function getDiagnostics(): string {
 	return lastDiag;
@@ -27,10 +27,7 @@ function collectCandidateDirs(): string[] {
 
 	if (process.argv[1]) seeds.push(process.argv[1]);
 	for (const p of process.argv) {
-		if (
-			typeof p === "string" &&
-			(p.includes("pi-coding-agent") || p.endsWith("/pi"))
-		) {
+		if (typeof p === 'string' && (p.includes('pi-coding-agent') || p.endsWith('/pi'))) {
 			seeds.push(p);
 		}
 	}
@@ -66,10 +63,10 @@ function findCompatEntries(): string[] {
 	const found = new Set<string>();
 
 	const fromDir = (dir: string) => {
-		const base = join(dir, "node_modules", "@earendil-works", "pi-ai", "dist");
-		const compat = join(base, "compat.js");
+		const base = join(dir, 'node_modules', '@earendil-works', 'pi-ai', 'dist');
+		const compat = join(base, 'compat.js');
 		if (existsSync(compat)) found.add(compat);
-		const index = join(base, "index.js");
+		const index = join(base, 'index.js');
 		if (existsSync(index)) found.add(index);
 	};
 
@@ -77,29 +74,28 @@ function findCompatEntries(): string[] {
 
 	try {
 		const req = createRequire(import.meta.url);
-		const pkg = req.resolve("@earendil-works/pi-ai/package.json");
-		const base = join(dirname(pkg), "dist");
-		if (existsSync(join(base, "compat.js"))) found.add(join(base, "compat.js"));
-		if (existsSync(join(base, "index.js"))) found.add(join(base, "index.js"));
+		const pkg = req.resolve('@earendil-works/pi-ai/package.json');
+		const base = join(dirname(pkg), 'dist');
+		if (existsSync(join(base, 'compat.js'))) found.add(join(base, 'compat.js'));
+		if (existsSync(join(base, 'index.js'))) found.add(join(base, 'index.js'));
 	} catch {
 		// ignore
 	}
 
 	return Array.from(found).sort((a, b) => {
 		const score = (p: string) =>
-			(p.includes("pi-coding-agent") ? -100 : 0) +
-			(p.endsWith("compat.js") ? -10 : 0);
+			(p.includes('pi-coding-agent') ? -100 : 0) + (p.endsWith('compat.js') ? -10 : 0);
 		return score(a) - score(b);
 	});
 }
 
 function tag(entry: string): string {
-	const base = entry.endsWith("compat.js") ? "compat" : "index";
-	const loc = entry.includes("pi-coding-agent")
-		? "host"
-		: entry.includes(".pi/npm")
-			? "pi-npm"
-			: "local";
+	const base = entry.endsWith('compat.js') ? 'compat' : 'index';
+	const loc = entry.includes('pi-coding-agent')
+		? 'host'
+		: entry.includes('.pi/npm')
+			? 'pi-npm'
+			: 'local';
 	return `${loc}/${base}`;
 }
 
@@ -107,10 +103,7 @@ export async function getComplete(): Promise<CompleteFn | null> {
 	if (cached !== undefined) return cached;
 
 	const entries = findCompatEntries();
-	const diag: string[] = [
-		`argv1=${process.argv[1] ?? "?"}`,
-		`entries=${entries.length}`,
-	];
+	const diag: string[] = [`argv1=${process.argv[1] ?? '?'}`, `entries=${entries.length}`];
 
 	let found: CompleteFn | null = null;
 
@@ -118,9 +111,9 @@ export async function getComplete(): Promise<CompleteFn | null> {
 		try {
 			const mod = await import(pathToFileURL(entry).href);
 			const completeFn =
-				typeof mod.complete === "function"
+				typeof mod.complete === 'function'
 					? (mod.complete as CompleteFn)
-					: typeof mod.completeSimple === "function"
+					: typeof mod.completeSimple === 'function'
 						? (mod.completeSimple as CompleteFn)
 						: null;
 			if (!completeFn) {
@@ -131,13 +124,11 @@ export async function getComplete(): Promise<CompleteFn | null> {
 			diag.push(`${tag(entry)}:ok`);
 			break;
 		} catch (err) {
-			diag.push(
-				`${tag(entry)}:err:${err instanceof Error ? err.message.slice(0, 40) : "?"}`,
-			);
+			diag.push(`${tag(entry)}:err:${err instanceof Error ? err.message.slice(0, 40) : '?'}`);
 		}
 	}
 
-	lastDiag = diag.join(" | ");
+	lastDiag = diag.join(' | ');
 	cached = found;
 	return cached;
 }

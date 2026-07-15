@@ -7,35 +7,28 @@
  * State directory: ~/.pi/agent/rate-limiter/
  */
 
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 // ============================================================================
 // Paths
 // ============================================================================
 
 export function getGlobalRateLimiterDir(): string {
-	return join(homedir(), ".pi", "agent", "rate-limiter");
+	return join(homedir(), '.pi', 'agent', 'rate-limiter');
 }
 
 export function getGlobalStatePath(): string {
-	return join(getGlobalRateLimiterDir(), "global-state.json");
+	return join(getGlobalRateLimiterDir(), 'global-state.json');
 }
 
 export function getLockDir(): string {
-	return join(getGlobalRateLimiterDir(), ".lock");
+	return join(getGlobalRateLimiterDir(), '.lock');
 }
 
 export function getSessionsDir(): string {
-	return join(getGlobalRateLimiterDir(), ".sessions");
+	return join(getGlobalRateLimiterDir(), '.sessions');
 }
 
 export function getHeartbeatPath(pid: number): string {
@@ -113,9 +106,12 @@ function emptyState(windowStart: number): GlobalStateData {
 
 function readStateFile(path: string): GlobalStateData | undefined {
 	try {
-		const raw = readFileSync(path, "utf8");
+		const raw = readFileSync(path, 'utf8');
 		const parsed = JSON.parse(raw) as GlobalStateData;
-		if ((parsed.version !== 1 && parsed.version !== 2) || typeof parsed.windowStart !== "number") {
+		if (
+			(parsed.version !== 1 && parsed.version !== 2) ||
+			typeof parsed.windowStart !== 'number'
+		) {
 			return undefined;
 		}
 		// Migrate v1 to v2 on read
@@ -132,8 +128,8 @@ function readStateFile(path: string): GlobalStateData | undefined {
 }
 
 function writeStateFile(path: string, state: GlobalStateData): void {
-	const tmpPath = path + ".tmp";
-	writeFileSync(tmpPath, JSON.stringify(state, null, 2), "utf8");
+	const tmpPath = path + '.tmp';
+	writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf8');
 	// Atomic rename on POSIX; acceptable on Windows for our use-case
 	renameSync(tmpPath, path);
 }
@@ -163,7 +159,9 @@ export class OptimisticStateManager {
 	update(mutator: (state: GlobalStateData) => void): GlobalStateData | undefined {
 		for (let attempt = 0; attempt < this.maxRetries; attempt++) {
 			const before = this.read();
-			const state = before ? { ...before, processes: { ...before.processes } } : emptyState(getWindowStart(Date.now()));
+			const state = before
+				? { ...before, processes: { ...before.processes } }
+				: emptyState(getWindowStart(Date.now()));
 			if (state.models) {
 				state.models = { ...state.models };
 				for (const key of Object.keys(state.models)) {
@@ -175,9 +173,9 @@ export class OptimisticStateManager {
 			}
 			mutator(state);
 			// Write to temp and rename atomically
-			const tmpPath = this.statePath + ".tmp." + process.pid;
+			const tmpPath = this.statePath + '.tmp.' + process.pid;
 			try {
-				writeFileSync(tmpPath, JSON.stringify(state, null, 2), "utf8");
+				writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf8');
 				renameSync(tmpPath, this.statePath);
 				return state;
 			} catch {
@@ -220,20 +218,13 @@ export class DirectoryLock {
 		while (Date.now() < deadline) {
 			try {
 				mkdirSync(this.lockDir, { recursive: false });
-				writeFileSync(
-					join(this.lockDir, "ts"),
-					String(Date.now()),
-					"utf8",
-				);
+				writeFileSync(join(this.lockDir, 'ts'), String(Date.now()), 'utf8');
 				this.held = true;
 				return true;
 			} catch {
 				// Lock held; check for stale lock
 				try {
-					const tsRaw = readFileSync(
-						join(this.lockDir, "ts"),
-						"utf8",
-					);
+					const tsRaw = readFileSync(join(this.lockDir, 'ts'), 'utf8');
 					const ts = Number(tsRaw);
 					if (!Number.isNaN(ts) && Date.now() - ts > this.options.lockMaxHoldMs) {
 						rmSync(this.lockDir, { recursive: true, force: true });
@@ -248,7 +239,12 @@ export class DirectoryLock {
 			if (remaining > 0) {
 				// Use Atomics.wait for sub-millisecond precision if available
 				try {
-					Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(10, remaining));
+					Atomics.wait(
+						new Int32Array(new SharedArrayBuffer(4)),
+						0,
+						0,
+						Math.min(10, remaining),
+					);
 				} catch {
 					// Fallback for environments where Atomics.wait is not available
 				}
@@ -289,9 +285,9 @@ export class GlobalRateLimiter {
 		this.pid = options?.pid ?? process.pid;
 		this.options = { ...DEFAULT_GLOBAL_OPTIONS, ...options };
 		this.stateDir = options?.stateDir ?? getGlobalRateLimiterDir();
-		this.statePath = join(this.stateDir, "global-state.json");
-		this.lockDir = join(this.stateDir, ".lock");
-		this.sessionsDir = join(this.stateDir, ".sessions");
+		this.statePath = join(this.stateDir, 'global-state.json');
+		this.lockDir = join(this.stateDir, '.lock');
+		this.sessionsDir = join(this.stateDir, '.sessions');
 		this.heartbeatPath = join(this.sessionsDir, `${this.pid}.json`);
 		this.optimisticManager = new OptimisticStateManager(this.statePath);
 	}
@@ -336,8 +332,8 @@ export class GlobalRateLimiter {
 				localRequests: this.localRequests,
 				localTokens: this.localTokens,
 			};
-			const tmpPath = this.heartbeatPath + ".tmp";
-			writeFileSync(tmpPath, JSON.stringify(data), "utf8");
+			const tmpPath = this.heartbeatPath + '.tmp';
+			writeFileSync(tmpPath, JSON.stringify(data), 'utf8');
 			renameSync(tmpPath, this.heartbeatPath);
 		} catch {
 			// ignore heartbeat write failures
@@ -363,7 +359,11 @@ export class GlobalRateLimiter {
 	): { allowed: true } | { allowed: false; delayMs: number } {
 		// Try optimistic locking first
 		const optimisticResult = this.checkAndRecordOptimistic(
-			estimatedTokens, maxReq, maxTok, thresholdPercent, modelId,
+			estimatedTokens,
+			maxReq,
+			maxTok,
+			thresholdPercent,
+			modelId,
 		);
 		if (optimisticResult !== undefined) {
 			return optimisticResult;
@@ -371,7 +371,11 @@ export class GlobalRateLimiter {
 
 		// Fallback to directory lock
 		return this.checkAndRecordWithLock(
-			estimatedTokens, maxReq, maxTok, thresholdPercent, modelId,
+			estimatedTokens,
+			maxReq,
+			maxTok,
+			thresholdPercent,
+			modelId,
 		);
 	}
 
@@ -418,7 +422,11 @@ export class GlobalRateLimiter {
 					state.models[modelId] = { totalRequests: 0, totalTokens: 0, processes: {} };
 				}
 				if (!state.models[modelId].processes[pidKey]) {
-					state.models[modelId].processes[pidKey] = { requests: 0, tokens: 0, lastHeartbeat: now };
+					state.models[modelId].processes[pidKey] = {
+						requests: 0,
+						tokens: 0,
+						lastHeartbeat: now,
+					};
 				} else {
 					state.models[modelId].processes[pidKey].lastHeartbeat = now;
 				}
@@ -521,7 +529,11 @@ export class GlobalRateLimiter {
 					state.models[modelId] = { totalRequests: 0, totalTokens: 0, processes: {} };
 				}
 				if (!state.models[modelId].processes[pidKey]) {
-					state.models[modelId].processes[pidKey] = { requests: 0, tokens: 0, lastHeartbeat: now };
+					state.models[modelId].processes[pidKey] = {
+						requests: 0,
+						tokens: 0,
+						lastHeartbeat: now,
+					};
 				}
 				this.cleanStaleProcessesForModel(state, modelId);
 				this.recalcModelTotals(state, modelId);
@@ -580,7 +592,13 @@ export class GlobalRateLimiter {
 		modelId?: string,
 	): Promise<void> {
 		while (true) {
-			const result = this.checkAndRecord(estimatedTokens, maxReq, maxTok, thresholdPercent, modelId);
+			const result = this.checkAndRecord(
+				estimatedTokens,
+				maxReq,
+				maxTok,
+				thresholdPercent,
+				modelId,
+			);
 			if (result.allowed) {
 				return;
 			}
@@ -668,7 +686,9 @@ export class GlobalRateLimiter {
 	// Read global stats for footer (best-effort, no blocking)
 	// -------------------------------------------------------------------------
 
-	getGlobalStats(modelId?: string): { requests: number; tokens: number; windowStart: number } | undefined {
+	getGlobalStats(
+		modelId?: string,
+	): { requests: number; tokens: number; windowStart: number } | undefined {
 		try {
 			const now = Date.now();
 			const windowStart = getWindowStart(now);
@@ -703,7 +723,7 @@ export class GlobalRateLimiter {
 			if (now - proc.lastHeartbeat > this.options.staleProcessTimeoutMs) {
 				try {
 					const hbPath = getHeartbeatPath(Number(pidKey));
-					const hbRaw = readFileSync(hbPath, "utf8");
+					const hbRaw = readFileSync(hbPath, 'utf8');
 					const hb = JSON.parse(hbRaw) as { timestamp?: number };
 					if (!hb.timestamp || now - hb.timestamp > this.options.staleProcessTimeoutMs) {
 						delete state.processes[pidKey];
@@ -728,7 +748,7 @@ export class GlobalRateLimiter {
 			if (now - proc.lastHeartbeat > this.options.staleProcessTimeoutMs) {
 				try {
 					const hbPath = getHeartbeatPath(Number(pidKey));
-					const hbRaw = readFileSync(hbPath, "utf8");
+					const hbRaw = readFileSync(hbPath, 'utf8');
 					const hb = JSON.parse(hbRaw) as { timestamp?: number };
 					if (!hb.timestamp || now - hb.timestamp > this.options.staleProcessTimeoutMs) {
 						delete state.models[modelId].processes[pidKey];

@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 
-import { connect } from "./cdp.js";
-import { applyActiveEmulation } from "./emulation-state.js";
+import { connect } from './cdp.js';
+import { applyActiveEmulation } from './emulation-state.js';
 
-const DEBUG = process.env.DEBUG === "1";
-const log = DEBUG ? (...args) => console.error("[debug]", ...args) : () => {};
+const DEBUG = process.env.DEBUG === '1';
+const log = DEBUG ? (...args) => console.error('[debug]', ...args) : () => {};
 
-const message = process.argv.slice(2).join(" ");
+const message = process.argv.slice(2).join(' ');
 if (!message) {
-  console.log("Usage: pick.js 'message'");
-  console.log("\nExample:");
-  console.log('  pick.js "Click the submit button"');
-  process.exit(1);
+	console.log("Usage: pick.js 'message'");
+	console.log('\nExample:');
+	console.log('  pick.js "Click the submit button"');
+	process.exit(1);
 }
 
 // Global timeout - 5 minutes for interactive picking
 const globalTimeout = setTimeout(() => {
-  console.error("✗ Global timeout exceeded (5m)");
-  process.exit(1);
+	console.error('✗ Global timeout exceeded (5m)');
+	process.exit(1);
 }, 300000);
 
 const PICK_SCRIPT = `(message) => {
@@ -119,51 +119,51 @@ const PICK_SCRIPT = `(message) => {
 }`;
 
 try {
-  log("connecting...");
-  const cdp = await connect(5000);
+	log('connecting...');
+	const cdp = await connect(5000);
 
-  log("getting pages...");
-  const pages = await cdp.getPages();
-  const page = pages.at(-1);
+	log('getting pages...');
+	const pages = await cdp.getPages();
+	const page = pages.at(-1);
 
-  if (!page) {
-    console.error("✗ No active tab found");
-    process.exit(1);
-  }
+	if (!page) {
+		console.error('✗ No active tab found');
+		process.exit(1);
+	}
 
-  log("attaching to page...");
-  const sessionId = await cdp.attachToPage(page.targetId);
+	log('attaching to page...');
+	const sessionId = await cdp.attachToPage(page.targetId);
 
-  log("applying active emulation (if configured)...");
-  await applyActiveEmulation(cdp, sessionId);
+	log('applying active emulation (if configured)...');
+	await applyActiveEmulation(cdp, sessionId);
 
-  log("waiting for user pick...");
-  const expression = `(${PICK_SCRIPT})(${JSON.stringify(message)})`;
-  const result = await cdp.evaluate(sessionId, expression, 300000);
+	log('waiting for user pick...');
+	const expression = `(${PICK_SCRIPT})(${JSON.stringify(message)})`;
+	const result = await cdp.evaluate(sessionId, expression, 300000);
 
-  log("formatting result...");
-  if (Array.isArray(result)) {
-    for (let i = 0; i < result.length; i++) {
-      if (i > 0) console.log("");
-      for (const [key, value] of Object.entries(result[i])) {
-        console.log(`${key}: ${value}`);
-      }
-    }
-  } else if (typeof result === "object" && result !== null) {
-    for (const [key, value] of Object.entries(result)) {
-      console.log(`${key}: ${value}`);
-    }
-  } else {
-    console.log(result);
-  }
+	log('formatting result...');
+	if (Array.isArray(result)) {
+		for (let i = 0; i < result.length; i++) {
+			if (i > 0) console.log('');
+			for (const [key, value] of Object.entries(result[i])) {
+				console.log(`${key}: ${value}`);
+			}
+		}
+	} else if (typeof result === 'object' && result !== null) {
+		for (const [key, value] of Object.entries(result)) {
+			console.log(`${key}: ${value}`);
+		}
+	} else {
+		console.log(result);
+	}
 
-  log("closing...");
-  cdp.close();
-  log("done");
+	log('closing...');
+	cdp.close();
+	log('done');
 } catch (e) {
-  console.error("✗", e.message);
-  process.exit(1);
+	console.error('✗', e.message);
+	process.exit(1);
 } finally {
-  clearTimeout(globalTimeout);
-  setTimeout(() => process.exit(0), 100);
+	clearTimeout(globalTimeout);
+	setTimeout(() => process.exit(0), 100);
 }

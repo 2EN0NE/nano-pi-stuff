@@ -1,11 +1,12 @@
 ---
 name: librarian
-description: "在 ~/.cache/checkouts/<host>/<org>/<repo> 下缓存和刷新远程 git 仓库，以便后续引用可以复用本地副本。当用户指向远程 git 仓库作为参考，或通过其他方式遇到远程 git 仓库时使用此技能。"
+description: '在 ~/.cache/checkouts/<host>/<org>/<repo> 下缓存和刷新远程 git 仓库，以便后续引用可以复用本地副本。当用户指向远程 git 仓库作为参考，或通过其他方式遇到远程 git 仓库时使用此技能。'
 ---
 
 当用户指向远程 git 仓库（GitHub/GitLab/Bitbucket URL、`git@...` 或 `owner/repo` 简写）时使用此技能。
 
 目标是维护一个可复用的本地检出，其具有：
+
 - **稳定性**（路径可预测）
 - **实时性**（定期 fetch + 安全时快速向前合并）
 - **高效性**（使用 `--filter=blob:none` 部分克隆，无需重复完整克隆）
@@ -35,6 +36,7 @@ bash checkout.sh https://github.com/mitsuhiko/minijinja --path-only
 ```
 
 该脚本会：
+
 1. 将仓库引用解析为 host/org/repo。
 2. 如果缺少则克隆。
 3. 如果存在则复用现有检出。

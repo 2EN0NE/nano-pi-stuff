@@ -5,9 +5,9 @@
  * Epsilon-greedy exploration probes slightly above the estimated limit.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // ============================================================================
 // Types
@@ -25,7 +25,7 @@ export interface AdaptiveBeliefs {
 	models: Record<string, BeliefState>;
 }
 
-export type OutcomeType = "safe" | "near" | "rejected" | "probe";
+export type OutcomeType = 'safe' | 'near' | 'rejected' | 'probe';
 
 // ============================================================================
 // Defaults
@@ -41,7 +41,7 @@ const HARD_UPPER_BOUND_MULTIPLIER = 2.0;
 const DEBOUNCE_MS = 2000;
 
 function getBeliefsPath(): string {
-	return join(homedir(), ".pi", "agent", "rate-limiter", "adaptive-beliefs.json");
+	return join(homedir(), '.pi', 'agent', 'rate-limiter', 'adaptive-beliefs.json');
 }
 
 function emptyBeliefs(): AdaptiveBeliefs {
@@ -124,16 +124,16 @@ export class AdaptiveLearner {
 
 	recordOutcome(modelId: string, outcome: OutcomeType, currentRate: number): void {
 		switch (outcome) {
-			case "safe":
+			case 'safe':
 				this.updateOnSuccess(modelId, currentRate);
 				break;
-			case "near":
+			case 'near':
 				this.updateOnNearBoundary(modelId, currentRate);
 				break;
-			case "rejected":
+			case 'rejected':
 				this.updateOnRejection(modelId, currentRate);
 				break;
-			case "probe":
+			case 'probe':
 				// Probe outcome: if it succeeded, treat as success
 				this.updateOnSuccess(modelId, currentRate);
 				break;
@@ -174,9 +174,9 @@ export class AdaptiveLearner {
 			if (!existsSync(this.beliefsPath)) {
 				return emptyBeliefs();
 			}
-			const raw = readFileSync(this.beliefsPath, "utf8");
+			const raw = readFileSync(this.beliefsPath, 'utf8');
 			const parsed = JSON.parse(raw) as AdaptiveBeliefs;
-			if (parsed.version !== 1 || typeof parsed.models !== "object") {
+			if (parsed.version !== 1 || typeof parsed.models !== 'object') {
 				return emptyBeliefs();
 			}
 			return parsed;
@@ -199,12 +199,12 @@ export class AdaptiveLearner {
 
 	saveBeliefs(): void {
 		try {
-			const dir = join(homedir(), ".pi", "agent", "rate-limiter");
+			const dir = join(homedir(), '.pi', 'agent', 'rate-limiter');
 			if (!existsSync(dir)) {
 				// Parent dirs should exist from global state init
-				import("node:fs").then((fs) => fs.mkdirSync(dir, { recursive: true }));
+				import('node:fs').then((fs) => fs.mkdirSync(dir, { recursive: true }));
 			}
-			writeFileSync(this.beliefsPath, JSON.stringify(this.beliefs, null, 2), "utf8");
+			writeFileSync(this.beliefsPath, JSON.stringify(this.beliefs, null, 2), 'utf8');
 		} catch {
 			// Ignore save failures
 		}

@@ -7,14 +7,14 @@
  * granted and remembered so future sessions do not prompt.
  */
 
-import type { ExtensionAPI, ProjectTrustEventResult } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, ProjectTrustEventResult } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("trust-github-repos");
+const log = createLogger('trust-github-repos');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
-const TRUSTED_GITHUB_OWNERS = new Set(["earendil-works", "mitsuhiko"]);
+const TRUSTED_GITHUB_OWNERS = new Set(['earendil-works', 'mitsuhiko']);
 const GIT_TIMEOUT_MS = 5_000;
 
 type GitHubRepo = {
@@ -23,7 +23,7 @@ type GitHubRepo = {
 };
 
 function trimGitSuffix(repo: string): string {
-	return repo.replace(/\.git$/i, "");
+	return repo.replace(/\.git$/i, '');
 }
 
 function parseGitHubRemoteUrl(remoteUrl: string): GitHubRepo | null {
@@ -33,7 +33,9 @@ function parseGitHubRemoteUrl(remoteUrl: string): GitHubRepo | null {
 	}
 
 	// SCP-like SSH syntax: git@github.com:owner/repo.git
-	const scpMatch = value.match(/^(?:[^@/:\s]+@)?github\.com:([^/:\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i);
+	const scpMatch = value.match(
+		/^(?:[^@/:\s]+@)?github\.com:([^/:\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i,
+	);
 	if (scpMatch) {
 		return {
 			owner: scpMatch[1],
@@ -43,13 +45,13 @@ function parseGitHubRemoteUrl(remoteUrl: string): GitHubRepo | null {
 
 	try {
 		const parsed = new URL(value);
-		if (parsed.hostname.toLowerCase() !== "github.com") {
+		if (parsed.hostname.toLowerCase() !== 'github.com') {
 			return null;
 		}
 
 		const parts = parsed.pathname
-			.replace(/^\/+|\/+$/g, "")
-			.split("/")
+			.replace(/^\/+|\/+$/g, '')
+			.split('/')
 			.filter(Boolean);
 
 		if (parts.length !== 2) {
@@ -72,7 +74,7 @@ function isTrustedGitHubRemote(remoteUrl: string): boolean {
 
 async function getOriginRemoteUrls(pi: ExtensionAPI, cwd: string): Promise<string[]> {
 	try {
-		const result = await pi.exec("git", ["remote", "get-url", "--all", "origin"], {
+		const result = await pi.exec('git', ['remote', 'get-url', '--all', 'origin'], {
 			cwd,
 			timeout: GIT_TIMEOUT_MS,
 		});
@@ -91,12 +93,12 @@ async function getOriginRemoteUrls(pi: ExtensionAPI, cwd: string): Promise<strin
 }
 
 export default function trustGitHubReposExtension(pi: ExtensionAPI): void {
-	pi.on("project_trust", async (event): Promise<ProjectTrustEventResult> => {
+	pi.on('project_trust', async (event): Promise<ProjectTrustEventResult> => {
 		const originUrls = await getOriginRemoteUrls(pi, event.cwd);
 		if (originUrls.length > 0 && originUrls.every(isTrustedGitHubRemote)) {
-			return { trusted: "yes", remember: true };
+			return { trusted: 'yes', remember: true };
 		}
 
-		return { trusted: "undecided" };
+		return { trusted: 'undecided' };
 	});
 }

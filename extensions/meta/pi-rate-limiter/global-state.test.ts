@@ -5,16 +5,16 @@
  * Or compile to JS first: npx tsc && node --test dist/global-state.test.js
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, it } from "node:test";
-import assert from "node:assert";
-import { GlobalRateLimiter, DirectoryLock, OptimisticStateManager } from "./global-state.js";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import { GlobalRateLimiter, DirectoryLock, OptimisticStateManager } from './global-state.js';
 
 // Helper to create isolated temp directories for each test
 function makeTempDir(): string {
-	return mkdtempSync(join(tmpdir(), "pi-rate-limiter-test-"));
+	return mkdtempSync(join(tmpdir(), 'pi-rate-limiter-test-'));
 }
 
 function cleanup(dir: string): void {
@@ -29,10 +29,10 @@ function cleanup(dir: string): void {
 // DirectoryLock tests
 // ============================================================================
 
-describe("DirectoryLock", () => {
-	it("should acquire and release a lock", () => {
+describe('DirectoryLock', () => {
+	it('should acquire and release a lock', () => {
 		const dir = makeTempDir();
-		const lockDir = join(dir, ".lock");
+		const lockDir = join(dir, '.lock');
 		const lock = new DirectoryLock(lockDir, {
 			lockTimeoutMs: 1000,
 			lockMaxHoldMs: 5000,
@@ -50,9 +50,9 @@ describe("DirectoryLock", () => {
 		cleanup(dir);
 	});
 
-	it("should block a second acquire until released", () => {
+	it('should block a second acquire until released', () => {
 		const dir = makeTempDir();
-		const lockDir = join(dir, ".lock");
+		const lockDir = join(dir, '.lock');
 		const opts = {
 			lockTimeoutMs: 500,
 			lockMaxHoldMs: 5000,
@@ -73,9 +73,9 @@ describe("DirectoryLock", () => {
 		cleanup(dir);
 	});
 
-	it("should steal a stale lock", () => {
+	it('should steal a stale lock', () => {
 		const dir = makeTempDir();
-		const lockDir = join(dir, ".lock");
+		const lockDir = join(dir, '.lock');
 		const opts = {
 			lockTimeoutMs: 2000,
 			lockMaxHoldMs: 50, // very short stale threshold
@@ -105,8 +105,8 @@ describe("DirectoryLock", () => {
 // GlobalRateLimiter single-process tests
 // ============================================================================
 
-describe("GlobalRateLimiter (single process)", () => {
-	it("should init and write heartbeat file", () => {
+describe('GlobalRateLimiter (single process)', () => {
+	it('should init and write heartbeat file', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -116,15 +116,15 @@ describe("GlobalRateLimiter (single process)", () => {
 		});
 
 		limiter.init();
-		assert.strictEqual(existsSync(join(dir, ".sessions", `${process.pid}.json`)), true);
+		assert.strictEqual(existsSync(join(dir, '.sessions', `${process.pid}.json`)), true);
 
 		limiter.shutdown();
-		assert.strictEqual(existsSync(join(dir, ".sessions", `${process.pid}.json`)), false);
+		assert.strictEqual(existsSync(join(dir, '.sessions', `${process.pid}.json`)), false);
 
 		cleanup(dir);
 	});
 
-	it("should allow requests under the limit", () => {
+	it('should allow requests under the limit', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -146,7 +146,7 @@ describe("GlobalRateLimiter (single process)", () => {
 		cleanup(dir);
 	});
 
-	it("should throttle when request count exceeds threshold", () => {
+	it('should throttle when request count exceeds threshold', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -174,7 +174,7 @@ describe("GlobalRateLimiter (single process)", () => {
 		cleanup(dir);
 	});
 
-	it("should throttle when token count exceeds threshold", () => {
+	it('should throttle when token count exceeds threshold', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -199,7 +199,7 @@ describe("GlobalRateLimiter (single process)", () => {
 		cleanup(dir);
 	});
 
-	it("should correct last request tokens", () => {
+	it('should correct last request tokens', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -220,7 +220,7 @@ describe("GlobalRateLimiter (single process)", () => {
 		cleanup(dir);
 	});
 
-	it("should rotate window and reset counters", () => {
+	it('should rotate window and reset counters', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -236,7 +236,7 @@ describe("GlobalRateLimiter (single process)", () => {
 
 		// Manually write an old window state
 		const oldWindow = Math.floor(Date.now() / 60000) * 60000 - 60000;
-		const statePath = join(dir, "global-state.json");
+		const statePath = join(dir, 'global-state.json');
 		const oldState = {
 			version: 1,
 			windowStart: oldWindow,
@@ -244,7 +244,7 @@ describe("GlobalRateLimiter (single process)", () => {
 			totalTokens: 9999,
 			processes: {},
 		};
-		writeFileSync(statePath, JSON.stringify(oldState), "utf8");
+		writeFileSync(statePath, JSON.stringify(oldState), 'utf8');
 
 		// Next check should rotate the window
 		const r = limiter.checkAndRecord(50, 10, 10000, 80);
@@ -263,12 +263,30 @@ describe("GlobalRateLimiter (single process)", () => {
 // Multi-process simulation tests
 // ============================================================================
 
-describe("GlobalRateLimiter (multi-process simulation)", () => {
-	it("should aggregate requests from multiple simulated processes", () => {
+describe('GlobalRateLimiter (multi-process simulation)', () => {
+	it('should aggregate requests from multiple simulated processes', () => {
 		const dir = makeTempDir();
-		const p1 = new GlobalRateLimiter({ stateDir: dir, pid: 1111, heartbeatIntervalMs: 100, lockTimeoutMs: 500, staleProcessTimeoutMs: 500 });
-		const p2 = new GlobalRateLimiter({ stateDir: dir, pid: 2222, heartbeatIntervalMs: 100, lockTimeoutMs: 500, staleProcessTimeoutMs: 500 });
-		const p3 = new GlobalRateLimiter({ stateDir: dir, pid: 3333, heartbeatIntervalMs: 100, lockTimeoutMs: 500, staleProcessTimeoutMs: 500 });
+		const p1 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 1111,
+			heartbeatIntervalMs: 100,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: 500,
+		});
+		const p2 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 2222,
+			heartbeatIntervalMs: 100,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: 500,
+		});
+		const p3 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 3333,
+			heartbeatIntervalMs: 100,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: 500,
+		});
 
 		p1.init();
 		p2.init();
@@ -284,7 +302,7 @@ describe("GlobalRateLimiter (multi-process simulation)", () => {
 		const stats = p1.getGlobalStats();
 		assert.ok(stats);
 		assert.strictEqual(stats!.requests, 6); // 2 * 3 processes
-		assert.strictEqual(stats!.tokens, 60);  // 10 * 6
+		assert.strictEqual(stats!.tokens, 60); // 10 * 6
 
 		p1.shutdown();
 		p2.shutdown();
@@ -292,11 +310,23 @@ describe("GlobalRateLimiter (multi-process simulation)", () => {
 		cleanup(dir);
 	});
 
-	it("should throttle when global request count exceeds threshold across processes", () => {
+	it('should throttle when global request count exceeds threshold across processes', () => {
 		const dir = makeTempDir();
 		// Limit: 5 req/min, threshold 80% → throttle at 4 requests globally
-		const p1 = new GlobalRateLimiter({ stateDir: dir, pid: 1111, heartbeatIntervalMs: 100, lockTimeoutMs: 500, staleProcessTimeoutMs: 500 });
-		const p2 = new GlobalRateLimiter({ stateDir: dir, pid: 2222, heartbeatIntervalMs: 100, lockTimeoutMs: 500, staleProcessTimeoutMs: 500 });
+		const p1 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 1111,
+			heartbeatIntervalMs: 100,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: 500,
+		});
+		const p2 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 2222,
+			heartbeatIntervalMs: 100,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: 500,
+		});
 
 		p1.init();
 		p2.init();
@@ -318,11 +348,23 @@ describe("GlobalRateLimiter (multi-process simulation)", () => {
 		cleanup(dir);
 	});
 
-	it("should clean up stale processes after timeout", () => {
+	it('should clean up stale processes after timeout', () => {
 		const dir = makeTempDir();
 		const staleTimeout = 100;
-		const p1 = new GlobalRateLimiter({ stateDir: dir, pid: 1111, heartbeatIntervalMs: 50, lockTimeoutMs: 500, staleProcessTimeoutMs: staleTimeout });
-		const p2 = new GlobalRateLimiter({ stateDir: dir, pid: 2222, heartbeatIntervalMs: 50, lockTimeoutMs: 500, staleProcessTimeoutMs: staleTimeout });
+		const p1 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 1111,
+			heartbeatIntervalMs: 50,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: staleTimeout,
+		});
+		const p2 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 2222,
+			heartbeatIntervalMs: 50,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: staleTimeout,
+		});
 
 		p1.init();
 		p2.init();
@@ -338,7 +380,7 @@ describe("GlobalRateLimiter (multi-process simulation)", () => {
 		p2.shutdown();
 		// Also delete heartbeat so it looks like a crash
 		try {
-			rmSync(join(dir, ".sessions", "2222.json"), { force: true });
+			rmSync(join(dir, '.sessions', '2222.json'), { force: true });
 		} catch {}
 
 		// Wait for stale timeout
@@ -352,16 +394,28 @@ describe("GlobalRateLimiter (multi-process simulation)", () => {
 
 		stats = p1.getGlobalStats();
 		assert.strictEqual(stats!.requests, 2); // p1's 2 requests only (p2 cleaned)
-		assert.strictEqual(stats!.tokens, 20);   // 10 + 10 (p2's 20 cleaned)
+		assert.strictEqual(stats!.tokens, 20); // 10 + 10 (p2's 20 cleaned)
 
 		p1.shutdown();
 		cleanup(dir);
 	});
 
-	it("should remove self from global state on shutdown", () => {
+	it('should remove self from global state on shutdown', () => {
 		const dir = makeTempDir();
-		const p1 = new GlobalRateLimiter({ stateDir: dir, pid: 1111, heartbeatIntervalMs: 100, lockTimeoutMs: 500, staleProcessTimeoutMs: 500 });
-		const p2 = new GlobalRateLimiter({ stateDir: dir, pid: 2222, heartbeatIntervalMs: 100, lockTimeoutMs: 500, staleProcessTimeoutMs: 500 });
+		const p1 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 1111,
+			heartbeatIntervalMs: 100,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: 500,
+		});
+		const p2 = new GlobalRateLimiter({
+			stateDir: dir,
+			pid: 2222,
+			heartbeatIntervalMs: 100,
+			lockTimeoutMs: 500,
+			staleProcessTimeoutMs: 500,
+		});
 
 		p1.init();
 		p2.init();
@@ -389,8 +443,8 @@ describe("GlobalRateLimiter (multi-process simulation)", () => {
 // Async throttle test
 // ============================================================================
 
-describe("GlobalRateLimiter.throttle", () => {
-	it("should wait and retry after window reset", async () => {
+describe('GlobalRateLimiter.throttle', () => {
+	it('should wait and retry after window reset', async () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -407,7 +461,7 @@ describe("GlobalRateLimiter.throttle", () => {
 
 		// Next request would be throttled normally
 		// But we will manually rotate the window by writing old state
-		const statePath = join(dir, "global-state.json");
+		const statePath = join(dir, 'global-state.json');
 		const oldWindow = Math.floor(Date.now() / 60000) * 60000 - 60000;
 		const oldState = {
 			version: 1,
@@ -416,7 +470,7 @@ describe("GlobalRateLimiter.throttle", () => {
 			totalTokens: 9999,
 			processes: {},
 		};
-		writeFileSync(statePath, JSON.stringify(oldState), "utf8");
+		writeFileSync(statePath, JSON.stringify(oldState), 'utf8');
 
 		// throttle() should see the old window, wait, then rotate and succeed
 		// But since we can't wait a full minute in tests, let's verify with a fresh limiter
@@ -445,8 +499,8 @@ describe("GlobalRateLimiter.throttle", () => {
 // Per-model state tests
 // ============================================================================
 
-describe("GlobalRateLimiter (per-model)", () => {
-	it("should track requests per model independently", () => {
+describe('GlobalRateLimiter (per-model)', () => {
+	it('should track requests per model independently', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -458,18 +512,18 @@ describe("GlobalRateLimiter (per-model)", () => {
 
 		// 3 requests for model A
 		for (let i = 0; i < 3; i++) {
-			const r = limiter.checkAndRecord(10, 10, 10000, 80, "model-a");
+			const r = limiter.checkAndRecord(10, 10, 10000, 80, 'model-a');
 			assert.strictEqual(r.allowed, true);
 		}
 
 		// 2 requests for model B
 		for (let i = 0; i < 2; i++) {
-			const r = limiter.checkAndRecord(10, 10, 10000, 80, "model-b");
+			const r = limiter.checkAndRecord(10, 10, 10000, 80, 'model-b');
 			assert.strictEqual(r.allowed, true);
 		}
 
-		const statsA = limiter.getGlobalStats("model-a");
-		const statsB = limiter.getGlobalStats("model-b");
+		const statsA = limiter.getGlobalStats('model-a');
+		const statsB = limiter.getGlobalStats('model-b');
 
 		assert.ok(statsA);
 		assert.ok(statsB);
@@ -480,7 +534,7 @@ describe("GlobalRateLimiter (per-model)", () => {
 		cleanup(dir);
 	});
 
-	it("should throttle per-model independently", () => {
+	it('should throttle per-model independently', () => {
 		const dir = makeTempDir();
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,
@@ -492,15 +546,15 @@ describe("GlobalRateLimiter (per-model)", () => {
 
 		// Fill model A to threshold: 80% of 3 = 2.4 → throttle at 3
 		for (let i = 0; i < 3; i++) {
-			limiter.checkAndRecord(10, 3, 10000, 80, "model-a");
+			limiter.checkAndRecord(10, 3, 10000, 80, 'model-a');
 		}
 
 		// Model A should throttle
-		const rA = limiter.checkAndRecord(10, 3, 10000, 80, "model-a");
+		const rA = limiter.checkAndRecord(10, 3, 10000, 80, 'model-a');
 		assert.strictEqual(rA.allowed, false);
 
 		// Model B should still be allowed
-		const rB = limiter.checkAndRecord(10, 3, 10000, 80, "model-b");
+		const rB = limiter.checkAndRecord(10, 3, 10000, 80, 'model-b');
 		assert.strictEqual(rB.allowed, true);
 
 		limiter.shutdown();
@@ -512,10 +566,10 @@ describe("GlobalRateLimiter (per-model)", () => {
 // Optimistic locking tests
 // ============================================================================
 
-describe("OptimisticStateManager", () => {
-	it("should atomically update state", () => {
+describe('OptimisticStateManager', () => {
+	it('should atomically update state', () => {
 		const dir = makeTempDir();
-		const statePath = join(dir, "state.json");
+		const statePath = join(dir, 'state.json');
 		const manager = new OptimisticStateManager(statePath);
 
 		const state1 = manager.update((s) => {
@@ -533,9 +587,9 @@ describe("OptimisticStateManager", () => {
 		cleanup(dir);
 	});
 
-	it("should handle concurrent updates", () => {
+	it('should handle concurrent updates', () => {
 		const dir = makeTempDir();
-		const statePath = join(dir, "state.json");
+		const statePath = join(dir, 'state.json');
 		const manager1 = new OptimisticStateManager(statePath);
 		const manager2 = new OptimisticStateManager(statePath);
 
@@ -559,18 +613,18 @@ describe("OptimisticStateManager", () => {
 // Backward compatibility tests
 // ============================================================================
 
-describe("GlobalStateData v1 migration", () => {
-	it("should migrate v1 state to v2 on read", () => {
+describe('GlobalStateData v1 migration', () => {
+	it('should migrate v1 state to v2 on read', () => {
 		const dir = makeTempDir();
-		const statePath = join(dir, "global-state.json");
+		const statePath = join(dir, 'global-state.json');
 		const v1State = {
 			version: 1,
 			windowStart: Date.now(),
 			totalRequests: 5,
 			totalTokens: 100,
-			processes: { "1234": { requests: 5, tokens: 100, lastHeartbeat: Date.now() } },
+			processes: { '1234': { requests: 5, tokens: 100, lastHeartbeat: Date.now() } },
 		};
-		writeFileSync(statePath, JSON.stringify(v1State), "utf8");
+		writeFileSync(statePath, JSON.stringify(v1State), 'utf8');
 
 		const limiter = new GlobalRateLimiter({
 			stateDir: dir,

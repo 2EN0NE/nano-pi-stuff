@@ -1,22 +1,18 @@
-import { wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { wrapTextWithAnsi } from '@earendil-works/pi-tui';
 
 /** Map a sourceInfo (source + scope) to a display label. */
-export function srcLabel(
-	src: string | undefined,
-	scope: string | undefined,
-): string {
-	if (scope === "user") return "~/.pi/agent";
-	if (scope === "project") return ".pi";
-	if (src?.startsWith("npm:")) return src;
-	if (scope === "temporary" && src === "local") return "other";
-	if (!src || src === "builtin" || src === "system" || src === "pi")
-		return "builtin";
+export function srcLabel(src: string | undefined, scope: string | undefined): string {
+	if (scope === 'user') return '~/.pi/agent';
+	if (scope === 'project') return '.pi';
+	if (src?.startsWith('npm:')) return src;
+	if (scope === 'temporary' && src === 'local') return 'other';
+	if (!src || src === 'builtin' || src === 'system' || src === 'pi') return 'builtin';
 	return src;
 }
 
 /** Preferred sort order for source groups. */
 export function srcOrderIndex(label: string): number {
-	const order = ["builtin", "~/.pi/agent", ".pi"];
+	const order = ['builtin', '~/.pi/agent', '.pi'];
 	const idx = order.indexOf(label);
 	return idx === -1 ? 99 : idx;
 }

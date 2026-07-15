@@ -13,37 +13,52 @@
  * - patch mode: preflight by applying patch operations on a virtual filesystem
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
-import * as Diff from "diff";
-import { constants } from "fs";
-import { access as fsAccess, readFile as fsReadFile, unlink as fsUnlink, writeFile as fsWriteFile } from "fs/promises";
-import { isAbsolute, resolve as resolvePath } from "path";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { Type } from 'typebox';
+import * as Diff from 'diff';
+import { constants } from 'fs';
+import {
+	access as fsAccess,
+	readFile as fsReadFile,
+	unlink as fsUnlink,
+	writeFile as fsWriteFile,
+} from 'fs/promises';
+import { isAbsolute, resolve as resolvePath } from 'path';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("multi-edit");
+const log = createLogger('multi-edit');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 const editItemSchema = Type.Object({
-	path: Type.Optional(Type.String({ description: "Path to the file to edit (relative or absolute). Inherits from top-level path if omitted." })),
-	oldText: Type.String({ description: "Exact text to find and replace (must match exactly)" }),
-	newText: Type.String({ description: "New text to replace the old text with" }),
+	path: Type.Optional(
+		Type.String({
+			description:
+				'Path to the file to edit (relative or absolute). Inherits from top-level path if omitted.',
+		}),
+	),
+	oldText: Type.String({ description: 'Exact text to find and replace (must match exactly)' }),
+	newText: Type.String({ description: 'New text to replace the old text with' }),
 });
 
 const multiEditSchema = Type.Object({
-	path: Type.Optional(Type.String({ description: "Path to the file to edit (relative or absolute)" })),
-	oldText: Type.Optional(Type.String({ description: "Exact text to find and replace (must match exactly)" })),
-	newText: Type.Optional(Type.String({ description: "New text to replace the old text with" })),
+	path: Type.Optional(
+		Type.String({ description: 'Path to the file to edit (relative or absolute)' }),
+	),
+	oldText: Type.Optional(
+		Type.String({ description: 'Exact text to find and replace (must match exactly)' }),
+	),
+	newText: Type.Optional(Type.String({ description: 'New text to replace the old text with' })),
 	multi: Type.Optional(
 		Type.Array(editItemSchema, {
-			description: "Multiple edits to apply in sequence. Each item has path, oldText, and newText.",
+			description:
+				'Multiple edits to apply in sequence. Each item has path, oldText, and newText.',
 		}),
 	),
 	patch: Type.Optional(
 		Type.String({
 			description:
-				"Codex-style apply_patch payload (*** Begin Patch ... *** End Patch). Mutually exclusive with path/oldText/newText/multi.",
+				'Codex-style apply_patch payload (*** Begin Patch ... *** End Patch). Mutually exclusive with path/oldText/newText/multi.',
 		}),
 	),
 });
@@ -70,9 +85,9 @@ interface UpdateChunk {
 }
 
 type PatchOperation =
-	| { kind: "add"; path: string; contents: string }
-	| { kind: "delete"; path: string }
-	| { kind: "update"; path: string; chunks: UpdateChunk[] };
+	| { kind: 'add'; path: string; contents: string }
+	| { kind: 'delete'; path: string }
+	| { kind: 'update'; path: string; chunks: UpdateChunk[] };
 
 interface PatchOpResult {
 	path: string;
@@ -89,8 +104,8 @@ function generateDiffString(
 	const parts = Diff.diffLines(oldContent, newContent);
 	const output: string[] = [];
 
-	const oldLines = oldContent.split("\n");
-	const newLines = newContent.split("\n");
+	const oldLines = oldContent.split('\n');
+	const newLines = newContent.split('\n');
 	const maxLineNum = Math.max(oldLines.length, newLines.length);
 	const lineNumWidth = String(maxLineNum).length;
 
@@ -101,8 +116,8 @@ function generateDiffString(
 
 	for (let i = 0; i < parts.length; i++) {
 		const part = parts[i];
-		const raw = part.value.split("\n");
-		if (raw[raw.length - 1] === "") {
+		const raw = part.value.split('\n');
+		if (raw[raw.length - 1] === '') {
 			raw.pop();
 		}
 
@@ -113,18 +128,19 @@ function generateDiffString(
 
 			for (const line of raw) {
 				if (part.added) {
-					const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
+					const lineNum = String(newLineNum).padStart(lineNumWidth, ' ');
 					output.push(`+${lineNum} ${line}`);
 					newLineNum++;
 				} else {
-					const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+					const lineNum = String(oldLineNum).padStart(lineNumWidth, ' ');
 					output.push(`-${lineNum} ${line}`);
 					oldLineNum++;
 				}
 			}
 			lastWasChange = true;
 		} else {
-			const nextPartIsChange = i < parts.length - 1 && (parts[i + 1].added || parts[i + 1].removed);
+			const nextPartIsChange =
+				i < parts.length - 1 && (parts[i + 1].added || parts[i + 1].removed);
 
 			if (lastWasChange || nextPartIsChange) {
 				// Determine how many lines to show at the start and end of this
@@ -136,7 +152,7 @@ function generateDiffString(
 				if (raw.length <= showAtStart + showAtEnd) {
 					// Block is small enough — show it entirely.
 					for (const line of raw) {
-						const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+						const lineNum = String(oldLineNum).padStart(lineNumWidth, ' ');
 						output.push(` ${lineNum} ${line}`);
 						oldLineNum++;
 						newLineNum++;
@@ -144,7 +160,7 @@ function generateDiffString(
 				} else {
 					// Show head context.
 					for (let j = 0; j < showAtStart; j++) {
-						const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+						const lineNum = String(oldLineNum).padStart(lineNumWidth, ' ');
 						output.push(` ${lineNum} ${raw[j]}`);
 						oldLineNum++;
 						newLineNum++;
@@ -153,14 +169,14 @@ function generateDiffString(
 					// Collapse the middle.
 					const skipped = raw.length - showAtStart - showAtEnd;
 					if (skipped > 0) {
-						output.push(` ${"".padStart(lineNumWidth, " ")} ...`);
+						output.push(` ${''.padStart(lineNumWidth, ' ')} ...`);
 						oldLineNum += skipped;
 						newLineNum += skipped;
 					}
 
 					// Show tail context.
 					for (let j = raw.length - showAtEnd; j < raw.length; j++) {
-						const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+						const lineNum = String(oldLineNum).padStart(lineNumWidth, ' ');
 						output.push(` ${lineNum} ${raw[j]}`);
 						oldLineNum++;
 						newLineNum++;
@@ -175,7 +191,7 @@ function generateDiffString(
 		}
 	}
 
-	return { diff: output.join("\n"), firstChangedLine };
+	return { diff: output.join('\n'), firstChangedLine };
 }
 
 interface Workspace {
@@ -188,41 +204,48 @@ interface Workspace {
 }
 
 function normalizeToLF(text: string): string {
-	return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+	return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
 function resolvePatchPath(cwd: string, filePath: string): string {
 	const trimmed = filePath.trim();
 	if (!trimmed) {
-		throw new Error("Patch path cannot be empty");
+		throw new Error('Patch path cannot be empty');
 	}
 	return isAbsolute(trimmed) ? resolvePath(trimmed) : resolvePath(cwd, trimmed);
 }
 
 function ensureTrailingNewline(content: string): string {
-	return content.endsWith("\n") ? content : `${content}\n`;
+	return content.endsWith('\n') ? content : `${content}\n`;
 }
 
 function normaliseLineForFuzzyMatch(s: string): string {
 	return s
 		.trim()
-		.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-")
+		.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-')
 		.replace(/[\u2018\u2019\u201A\u201B]/g, "'")
 		.replace(/[\u201C\u201D\u201E\u201F]/g, '"')
-		.replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ");
+		.replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, ' ');
 }
 
-function seekSequence(lines: string[], pattern: string[], start: number, eof: boolean): number | undefined {
+function seekSequence(
+	lines: string[],
+	pattern: string[],
+	start: number,
+	eof: boolean,
+): number | undefined {
 	if (pattern.length === 0) return start;
 	if (pattern.length > lines.length) return undefined;
 
-	const searchStart = eof && lines.length >= pattern.length ? lines.length - pattern.length : start;
+	const searchStart =
+		eof && lines.length >= pattern.length ? lines.length - pattern.length : start;
 	const searchEnd = lines.length - pattern.length;
 
 	const exactEqual = (a: string, b: string) => a === b;
 	const rstripEqual = (a: string, b: string) => a.trimEnd() === b.trimEnd();
 	const trimEqual = (a: string, b: string) => a.trim() === b.trim();
-	const fuzzyEqual = (a: string, b: string) => normaliseLineForFuzzyMatch(a) === normaliseLineForFuzzyMatch(b);
+	const fuzzyEqual = (a: string, b: string) =>
+		normaliseLineForFuzzyMatch(a) === normaliseLineForFuzzyMatch(b);
 
 	const passes = [exactEqual, rstripEqual, trimEqual, fuzzyEqual];
 
@@ -242,7 +265,10 @@ function seekSequence(lines: string[], pattern: string[], start: number, eof: bo
 	return undefined;
 }
 
-function applyReplacements(lines: string[], replacements: Array<[number, number, string[]]>): string[] {
+function applyReplacements(
+	lines: string[],
+	replacements: Array<[number, number, string[]]>,
+): string[] {
 	const next = [...lines];
 
 	for (const [start, oldLen, newSegment] of [...replacements].sort((a, b) => b[0] - a[0])) {
@@ -252,9 +278,13 @@ function applyReplacements(lines: string[], replacements: Array<[number, number,
 	return next;
 }
 
-function deriveUpdatedContent(filePath: string, currentContent: string, chunks: UpdateChunk[]): string {
-	const originalLines = currentContent.split("\n");
-	if (originalLines[originalLines.length - 1] === "") {
+function deriveUpdatedContent(
+	filePath: string,
+	currentContent: string,
+	chunks: UpdateChunk[],
+): string {
+	const originalLines = currentContent.split('\n');
+	if (originalLines[originalLines.length - 1] === '') {
 		originalLines.pop();
 	}
 
@@ -279,16 +309,18 @@ function deriveUpdatedContent(filePath: string, currentContent: string, chunks: 
 		let newSlice = chunk.newLines;
 
 		let found = seekSequence(originalLines, pattern, lineIndex, chunk.isEndOfFile);
-		if (found === undefined && pattern[pattern.length - 1] === "") {
+		if (found === undefined && pattern[pattern.length - 1] === '') {
 			pattern = pattern.slice(0, -1);
-			if (newSlice[newSlice.length - 1] === "") {
+			if (newSlice[newSlice.length - 1] === '') {
 				newSlice = newSlice.slice(0, -1);
 			}
 			found = seekSequence(originalLines, pattern, lineIndex, chunk.isEndOfFile);
 		}
 
 		if (found === undefined) {
-			throw new Error(`Failed to find expected lines in ${filePath}:\n${chunk.oldLines.join("\n")}`);
+			throw new Error(
+				`Failed to find expected lines in ${filePath}:\n${chunk.oldLines.join('\n')}`,
+			);
 		}
 
 		replacements.push([found, pattern.length, [...newSlice]]);
@@ -296,10 +328,10 @@ function deriveUpdatedContent(filePath: string, currentContent: string, chunks: 
 	}
 
 	const newLines = applyReplacements(originalLines, replacements);
-	if (newLines[newLines.length - 1] !== "") {
-		newLines.push("");
+	if (newLines[newLines.length - 1] !== '') {
+		newLines.push('');
 	}
-	return newLines.join("\n");
+	return newLines.join('\n');
 }
 
 function parseUpdateChunk(
@@ -312,9 +344,9 @@ function parseUpdateChunk(
 	let changeContext: string | undefined;
 	const first = lines[i].trimEnd();
 
-	if (first === "@@") {
+	if (first === '@@') {
 		i++;
-	} else if (first.startsWith("@@ ")) {
+	} else if (first.startsWith('@@ ')) {
 		changeContext = first.slice(3);
 		i++;
 	} else if (!allowMissingContext) {
@@ -330,22 +362,22 @@ function parseUpdateChunk(
 		const raw = lines[i];
 		const trimmed = raw.trimEnd();
 
-		if (trimmed === "*** End of File") {
+		if (trimmed === '*** End of File') {
 			if (parsed === 0) {
-				throw new Error("Update hunk does not contain any lines");
+				throw new Error('Update hunk does not contain any lines');
 			}
 			isEndOfFile = true;
 			i++;
 			break;
 		}
 
-		if (parsed > 0 && (trimmed.startsWith("@@") || trimmed.startsWith("*** "))) {
+		if (parsed > 0 && (trimmed.startsWith('@@') || trimmed.startsWith('*** '))) {
 			break;
 		}
 
 		if (raw.length === 0) {
-			oldLines.push("");
-			newLines.push("");
+			oldLines.push('');
+			newLines.push('');
 			parsed++;
 			i++;
 			continue;
@@ -353,12 +385,12 @@ function parseUpdateChunk(
 
 		const marker = raw[0];
 		const body = raw.slice(1);
-		if (marker === " ") {
+		if (marker === ' ') {
 			oldLines.push(body);
 			newLines.push(body);
-		} else if (marker === "-") {
+		} else if (marker === '-') {
 			oldLines.push(body);
-		} else if (marker === "+") {
+		} else if (marker === '+') {
 			newLines.push(body);
 		} else if (parsed === 0) {
 			throw new Error(
@@ -373,7 +405,7 @@ function parseUpdateChunk(
 	}
 
 	if (parsed === 0) {
-		throw new Error("Update hunk does not contain any lines");
+		throw new Error('Update hunk does not contain any lines');
 	}
 
 	return {
@@ -383,14 +415,14 @@ function parseUpdateChunk(
 }
 
 function parsePatch(patchText: string): PatchOperation[] {
-	const lines = normalizeToLF(patchText).trim().split("\n");
+	const lines = normalizeToLF(patchText).trim().split('\n');
 	if (lines.length < 2) {
-		throw new Error("Patch is empty or invalid");
+		throw new Error('Patch is empty or invalid');
 	}
-	if (lines[0].trim() !== "*** Begin Patch") {
+	if (lines[0].trim() !== '*** Begin Patch') {
 		throw new Error("The first line of the patch must be '*** Begin Patch'");
 	}
-	if (lines[lines.length - 1].trim() !== "*** End Patch") {
+	if (lines[lines.length - 1].trim() !== '*** End Patch') {
 		throw new Error("The last line of the patch must be '*** End Patch'");
 	}
 
@@ -399,51 +431,57 @@ function parsePatch(patchText: string): PatchOperation[] {
 	const lastContentLine = lines.length - 2;
 
 	while (i <= lastContentLine) {
-		if (lines[i].trim() === "") {
+		if (lines[i].trim() === '') {
 			i++;
 			continue;
 		}
 
 		const line = lines[i].trim();
-		if (line.startsWith("*** Add File: ")) {
-			const path = line.slice("*** Add File: ".length);
+		if (line.startsWith('*** Add File: ')) {
+			const path = line.slice('*** Add File: '.length);
 			i++;
 			const contentLines: string[] = [];
 			while (i <= lastContentLine) {
 				const next = lines[i];
-				if (next.trim().startsWith("*** ")) break;
-				if (!next.startsWith("+")) {
-					throw new Error(`Invalid add-file line '${next}'. Add file lines must start with '+'`);
+				if (next.trim().startsWith('*** ')) break;
+				if (!next.startsWith('+')) {
+					throw new Error(
+						`Invalid add-file line '${next}'. Add file lines must start with '+'`,
+					);
 				}
 				contentLines.push(next.slice(1));
 				i++;
 			}
-			operations.push({ kind: "add", path, contents: contentLines.length > 0 ? `${contentLines.join("\n")}\n` : "" });
+			operations.push({
+				kind: 'add',
+				path,
+				contents: contentLines.length > 0 ? `${contentLines.join('\n')}\n` : '',
+			});
 			continue;
 		}
 
-		if (line.startsWith("*** Delete File: ")) {
-			const path = line.slice("*** Delete File: ".length);
-			operations.push({ kind: "delete", path });
+		if (line.startsWith('*** Delete File: ')) {
+			const path = line.slice('*** Delete File: '.length);
+			operations.push({ kind: 'delete', path });
 			i++;
 			continue;
 		}
 
-		if (line.startsWith("*** Update File: ")) {
-			const path = line.slice("*** Update File: ".length);
+		if (line.startsWith('*** Update File: ')) {
+			const path = line.slice('*** Update File: '.length);
 			i++;
 
-			if (i <= lastContentLine && lines[i].trim().startsWith("*** Move to: ")) {
-				throw new Error("Patch move operations (*** Move to:) are not supported.");
+			if (i <= lastContentLine && lines[i].trim().startsWith('*** Move to: ')) {
+				throw new Error('Patch move operations (*** Move to:) are not supported.');
 			}
 
 			const chunks: UpdateChunk[] = [];
 			while (i <= lastContentLine) {
-				if (lines[i].trim() === "") {
+				if (lines[i].trim() === '') {
 					i++;
 					continue;
 				}
-				if (lines[i].trim().startsWith("*** ")) {
+				if (lines[i].trim().startsWith('*** ')) {
 					break;
 				}
 
@@ -456,7 +494,7 @@ function parsePatch(patchText: string): PatchOperation[] {
 				throw new Error(`Update file hunk for path '${path}' is empty`);
 			}
 
-			operations.push({ kind: "update", path, chunks });
+			operations.push({ kind: 'update', path, chunks });
 			continue;
 		}
 
@@ -470,8 +508,9 @@ function parsePatch(patchText: string): PatchOperation[] {
 
 function createRealWorkspace(): Workspace {
 	return {
-		readText: (absolutePath: string) => fsReadFile(absolutePath, "utf-8"),
-		writeText: (absolutePath: string, content: string) => fsWriteFile(absolutePath, content, "utf-8"),
+		readText: (absolutePath: string) => fsReadFile(absolutePath, 'utf-8'),
+		writeText: (absolutePath: string, content: string) =>
+			fsWriteFile(absolutePath, content, 'utf-8'),
 		deleteFile: (absolutePath: string) => fsUnlink(absolutePath),
 		exists: async (absolutePath: string) => {
 			try {
@@ -481,7 +520,8 @@ function createRealWorkspace(): Workspace {
 				return false;
 			}
 		},
-		checkWriteAccess: (absolutePath: string) => fsAccess(absolutePath, constants.R_OK | constants.W_OK),
+		checkWriteAccess: (absolutePath: string) =>
+			fsAccess(absolutePath, constants.R_OK | constants.W_OK),
 	};
 }
 
@@ -491,7 +531,7 @@ function createVirtualWorkspace(cwd: string): Workspace {
 	async function ensureLoaded(absolutePath: string): Promise<void> {
 		if (state.has(absolutePath)) return;
 		try {
-			const content = await fsReadFile(absolutePath, "utf-8");
+			const content = await fsReadFile(absolutePath, 'utf-8');
 			state.set(absolutePath, content);
 		} catch {
 			state.set(absolutePath, null);
@@ -503,7 +543,7 @@ function createVirtualWorkspace(cwd: string): Workspace {
 			await ensureLoaded(absolutePath);
 			const content = state.get(absolutePath);
 			if (content === null || content === undefined) {
-				throw new Error(`File not found: ${absolutePath.replace(`${cwd}/`, "")}`);
+				throw new Error(`File not found: ${absolutePath.replace(`${cwd}/`, '')}`);
 			}
 			return content;
 		},
@@ -513,7 +553,7 @@ function createVirtualWorkspace(cwd: string): Workspace {
 		deleteFile: async (absolutePath) => {
 			await ensureLoaded(absolutePath);
 			if (state.get(absolutePath) === null) {
-				throw new Error(`File not found: ${absolutePath.replace(`${cwd}/`, "")}`);
+				throw new Error(`File not found: ${absolutePath.replace(`${cwd}/`, '')}`);
 			}
 			state.set(absolutePath, null);
 		},
@@ -539,12 +579,12 @@ async function applyPatchOperations(
 
 	for (const op of ops) {
 		if (signal?.aborted) {
-			throw new Error("Operation aborted");
+			throw new Error('Operation aborted');
 		}
 
-		if (op.kind === "add") {
+		if (op.kind === 'add') {
 			const abs = resolvePatchPath(cwd, op.path);
-			let oldText = "";
+			let oldText = '';
 			if (collectDiff && (await workspace.exists(abs))) {
 				oldText = await workspace.readText(abs);
 			}
@@ -560,20 +600,20 @@ async function applyPatchOperations(
 			continue;
 		}
 
-		if (op.kind === "delete") {
+		if (op.kind === 'delete') {
 			const abs = resolvePatchPath(cwd, op.path);
 			const exists = await workspace.exists(abs);
 			if (!exists) {
 				throw new Error(`Failed to delete ${op.path}: file does not exist`);
 			}
-			let oldText = "";
+			let oldText = '';
 			if (collectDiff) {
 				oldText = await workspace.readText(abs);
 			}
 			await workspace.deleteFile(abs);
 			const result: PatchOpResult = { path: op.path, message: `Deleted file ${op.path}.` };
 			if (collectDiff) {
-				const diffResult = generateDiffString(oldText, "");
+				const diffResult = generateDiffString(oldText, '');
 				result.diff = diffResult.diff;
 				result.firstChangedLine = diffResult.firstChangedLine;
 			}
@@ -622,7 +662,9 @@ async function applyClassicEdits(
 	const editOrder: string[] = []; // track insertion order of keys
 
 	for (let i = 0; i < edits.length; i++) {
-		const abs = isAbsolute(edits[i].path) ? resolvePath(edits[i].path) : resolvePath(cwd, edits[i].path);
+		const abs = isAbsolute(edits[i].path)
+			? resolvePath(edits[i].path)
+			: resolvePath(cwd, edits[i].path);
 		if (!fileGroups.has(abs)) {
 			fileGroups.set(abs, []);
 			editOrder.push(abs);
@@ -641,7 +683,7 @@ async function applyClassicEdits(
 		const group = fileGroups.get(absPath)!;
 
 		if (signal?.aborted) {
-			throw new Error("Operation aborted");
+			throw new Error('Operation aborted');
 		}
 
 		const originalContent = await workspace.readText(absPath);
@@ -669,7 +711,7 @@ async function applyClassicEdits(
 
 		for (const { index, edit } of group) {
 			if (signal?.aborted) {
-				throw new Error("Operation aborted");
+				throw new Error('Operation aborted');
 			}
 
 			// Find oldText starting from the cursor position (positional ordering).
@@ -695,11 +737,14 @@ async function applyClassicEdits(
 					message: `Could not find the exact text in ${edit.path}. The old text must match exactly including all whitespace and newlines.`,
 				};
 				// Fill remaining edits in this group as skipped.
-				const filled = Array.from({ length: edits.length }, (_, i) => results[i]).filter(Boolean);
+				const filled = Array.from({ length: edits.length }, (_, i) => results[i]).filter(
+					Boolean,
+				);
 				throw new Error(formatResults(filled, edits.length));
 			}
 
-			content = content.slice(0, pos) + edit.newText + content.slice(pos + edit.oldText.length);
+			content =
+				content.slice(0, pos) + edit.newText + content.slice(pos + edit.oldText.length);
 			searchOffset = pos + edit.newText.length;
 			appliedPairs.add(`${edit.oldText}\0${edit.newText}`);
 
@@ -727,43 +772,64 @@ async function applyClassicEdits(
 
 export default function (pi: ExtensionAPI) {
 	pi.registerTool({
-		name: "edit",
-		label: "edit",
+		name: 'edit',
+		label: 'edit',
 		description:
-			"Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits. Supports a `multi` parameter for batch edits across one or more files, and a `patch` parameter for Codex-style patches.",
+			'Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits. Supports a `multi` parameter for batch edits across one or more files, and a `patch` parameter for Codex-style patches.',
 		promptSnippet:
-			"Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits.",
+			'Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits.',
 		promptGuidelines: [
-			"Use edit for precise changes (old text must match exactly)",
-			"Use the `multi` parameter to apply multiple edits in a single tool call",
-			"Use the `patch` parameter for Codex-style multi-file / hunk-based edits",
+			'Use edit for precise changes (old text must match exactly)',
+			'Use the `multi` parameter to apply multiple edits in a single tool call',
+			'Use the `patch` parameter for Codex-style multi-file / hunk-based edits',
 		],
 		parameters: multiEditSchema,
 
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			const { path, oldText, newText, multi, patch } = params;
 
-			const hasAnyClassicParam = path !== undefined || oldText !== undefined || newText !== undefined || multi !== undefined;
+			const hasAnyClassicParam =
+				path !== undefined ||
+				oldText !== undefined ||
+				newText !== undefined ||
+				multi !== undefined;
 			if (patch !== undefined && hasAnyClassicParam) {
-				throw new Error("The `patch` parameter is mutually exclusive with path/oldText/newText/multi.");
+				throw new Error(
+					'The `patch` parameter is mutually exclusive with path/oldText/newText/multi.',
+				);
 			}
 
 			if (patch !== undefined) {
 				const ops = parsePatch(patch);
 
 				// Preflight on virtual filesystem before mutating real files.
-				await applyPatchOperations(ops, createVirtualWorkspace(ctx.cwd), ctx.cwd, signal, { collectDiff: false });
+				await applyPatchOperations(ops, createVirtualWorkspace(ctx.cwd), ctx.cwd, signal, {
+					collectDiff: false,
+				});
 
 				// Apply for real.
-				const applied = await applyPatchOperations(ops, createRealWorkspace(), ctx.cwd, signal, { collectDiff: true });
-				const summary = applied.map((r, i) => `${i + 1}. ${r.message}`).join("\n");
+				const applied = await applyPatchOperations(
+					ops,
+					createRealWorkspace(),
+					ctx.cwd,
+					signal,
+					{ collectDiff: true },
+				);
+				const summary = applied.map((r, i) => `${i + 1}. ${r.message}`).join('\n');
 				const combinedDiff = applied
 					.filter((r) => r.diff)
 					.map((r) => `File: ${r.path}\n${r.diff}`)
-					.join("\n\n");
-				const firstChangedLine = applied.find((r) => r.firstChangedLine !== undefined)?.firstChangedLine;
+					.join('\n\n');
+				const firstChangedLine = applied.find(
+					(r) => r.firstChangedLine !== undefined,
+				)?.firstChangedLine;
 				return {
-					content: [{ type: "text" as const, text: `Applied patch with ${applied.length} operation(s).\n${summary}` }],
+					content: [
+						{
+							type: 'text' as const,
+							text: `Applied patch with ${applied.length} operation(s).\n${summary}`,
+						},
+					],
 					details: {
 						diff: combinedDiff,
 						firstChangedLine,
@@ -773,21 +839,23 @@ export default function (pi: ExtensionAPI) {
 
 			// Build classic edit list.
 			const edits: EditItem[] = [];
-			const hasTopLevel = path !== undefined && oldText !== undefined && newText !== undefined;
+			const hasTopLevel =
+				path !== undefined && oldText !== undefined && newText !== undefined;
 
 			if (hasTopLevel) {
 				edits.push({ path: path!, oldText: oldText!, newText: newText! });
 			} else if (path !== undefined || oldText !== undefined || newText !== undefined) {
 				// When multi is present, only a bare top-level `path` (for inheritance) is allowed.
 				// Any other partial combination (e.g. path+oldText, oldText+newText) is an error.
-				const hasOnlyPath = path !== undefined && oldText === undefined && newText === undefined;
+				const hasOnlyPath =
+					path !== undefined && oldText === undefined && newText === undefined;
 				if (!hasOnlyPath || multi === undefined) {
 					const missing: string[] = [];
-					if (path === undefined) missing.push("path");
-					if (oldText === undefined) missing.push("oldText");
-					if (newText === undefined) missing.push("newText");
+					if (path === undefined) missing.push('path');
+					if (oldText === undefined) missing.push('oldText');
+					if (newText === undefined) missing.push('newText');
 					throw new Error(
-						`Incomplete top-level edit: missing ${missing.join(", ")}. Provide all three (path, oldText, newText) or use only the multi parameter.`,
+						`Incomplete top-level edit: missing ${missing.join(', ')}. Provide all three (path, oldText, newText) or use only the multi parameter.`,
 					);
 				}
 				// path-only top-level with multi is fine — path is inherited below.
@@ -796,7 +864,7 @@ export default function (pi: ExtensionAPI) {
 			if (multi) {
 				for (const item of multi) {
 					edits.push({
-						path: item.path ?? path ?? "",
+						path: item.path ?? path ?? '',
 						oldText: item.oldText,
 						newText: item.newText,
 					});
@@ -804,7 +872,9 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (edits.length === 0) {
-				throw new Error("No edits provided. Supply path/oldText/newText, a multi array, or a patch.");
+				throw new Error(
+					'No edits provided. Supply path/oldText/newText, a multi array, or a patch.',
+				);
 			}
 
 			// Validate that every edit has a path.
@@ -820,20 +890,26 @@ export default function (pi: ExtensionAPI) {
 			// Uses sequential occurrence matching so same-file edits are resolved
 			// in file order (positional ordering).
 			try {
-				await applyClassicEdits(edits, createVirtualWorkspace(ctx.cwd), ctx.cwd, signal, { collectDiff: false });
+				await applyClassicEdits(edits, createVirtualWorkspace(ctx.cwd), ctx.cwd, signal, {
+					collectDiff: false,
+				});
 			} catch (err: any) {
-				throw new Error(`Preflight failed before mutating files.\n${err.message ?? String(err)}`);
+				throw new Error(
+					`Preflight failed before mutating files.\n${err.message ?? String(err)}`,
+				);
 			}
 
 			// Apply for real.
-			const results = await applyClassicEdits(edits, createRealWorkspace(), ctx.cwd, signal, { collectDiff: true });
+			const results = await applyClassicEdits(edits, createRealWorkspace(), ctx.cwd, signal, {
+				collectDiff: true,
+			});
 
 			if (results.length === 1) {
 				const r = results[0];
 				return {
-					content: [{ type: "text" as const, text: r.message }],
+					content: [{ type: 'text' as const, text: r.message }],
 					details: {
-						diff: r.diff ?? "",
+						diff: r.diff ?? '',
 						firstChangedLine: r.firstChangedLine,
 					},
 				};
@@ -842,13 +918,20 @@ export default function (pi: ExtensionAPI) {
 			const combinedDiff = results
 				.filter((r) => r.diff)
 				.map((r) => r.diff)
-				.join("\n");
+				.join('\n');
 
-			const firstChanged = results.find((r) => r.firstChangedLine !== undefined)?.firstChangedLine;
-			const summary = results.map((r, i) => `${i + 1}. ${r.message}`).join("\n");
+			const firstChanged = results.find(
+				(r) => r.firstChangedLine !== undefined,
+			)?.firstChangedLine;
+			const summary = results.map((r, i) => `${i + 1}. ${r.message}`).join('\n');
 
 			return {
-				content: [{ type: "text" as const, text: `Applied ${results.length} edit(s) successfully.\n${summary}` }],
+				content: [
+					{
+						type: 'text' as const,
+						text: `Applied ${results.length} edit(s) successfully.\n${summary}`,
+					},
+				],
 				details: {
 					diff: combinedDiff,
 					firstChangedLine: firstChanged,
@@ -863,7 +946,7 @@ function formatResults(results: EditResult[], totalEdits: number): string {
 
 	for (let i = 0; i < results.length; i++) {
 		const r = results[i];
-		const status = r.success ? "✓" : "✗";
+		const status = r.success ? '✓' : '✗';
 		lines.push(`${status} Edit ${i + 1}/${totalEdits} (${r.path}): ${r.message}`);
 	}
 
@@ -872,5 +955,5 @@ function formatResults(results: EditResult[], totalEdits: number): string {
 		lines.push(`⊘ ${remaining} remaining edit(s) skipped due to error.`);
 	}
 
-	return lines.join("\n");
+	return lines.join('\n');
 }

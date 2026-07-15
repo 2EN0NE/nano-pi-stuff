@@ -1,9 +1,9 @@
-import { getComplete } from "../host-ai.js";
-import { loadConfig } from "../config.js";
-import { createHash } from "node:crypto";
-import { createLogger } from "@zenone/pi-logger";
+import { getComplete } from '../host-ai.js';
+import { loadConfig } from '../config.js';
+import { createHash } from 'node:crypto';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("smart-context:summarize");
+const log = createLogger('smart-context:summarize');
 
 const SUMMARIZE_PROMPT = `You compress conversation messages for an AI coding agent's context. Produce a dense summary that preserves ALL load-bearing facts: decisions made, file paths, function/variable names, API contracts, error messages, requirements, and open questions. Drop filler, pleasantries, and verbose explanations.
 
@@ -15,11 +15,11 @@ export function createSummarizer() {
 	let cacheHits = 0;
 
 	async function summarize(text: string, ctx: any): Promise<string | null> {
-		const key = createHash("sha256").update(text).digest("hex").slice(0, 16);
+		const key = createHash('sha256').update(text).digest('hex').slice(0, 16);
 		const cached = cache.get(key);
 		if (cached !== undefined) {
 			cacheHits++;
-			log.debug("Cache hit", {
+			log.debug('Cache hit', {
 				key,
 				originalLen: text.length,
 				summaryLen: cached.length,
@@ -28,12 +28,9 @@ export function createSummarizer() {
 		}
 
 		const { classifier } = loadConfig(ctx.cwd);
-		const model = ctx.modelRegistry?.find?.(
-			classifier.provider,
-			classifier.model,
-		);
+		const model = ctx.modelRegistry?.find?.(classifier.provider, classifier.model);
 		if (!model) {
-			log.warn("No classifier model found, skipping summarize", {
+			log.warn('No classifier model found, skipping summarize', {
 				provider: classifier.provider,
 				model: classifier.model,
 			});
@@ -42,7 +39,7 @@ export function createSummarizer() {
 
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		if (!auth.ok || !auth.apiKey) {
-			log.warn("Auth failed for summarizer model", {
+			log.warn('Auth failed for summarizer model', {
 				provider: classifier.provider,
 				model: classifier.model,
 			});
@@ -51,7 +48,7 @@ export function createSummarizer() {
 
 		try {
 			calls++;
-			log.debug("Calling summarizer model", {
+			log.debug('Calling summarizer model', {
 				provider: classifier.provider,
 				model: classifier.model,
 				inputLen: text.length,
@@ -60,7 +57,7 @@ export function createSummarizer() {
 
 			const complete = await getComplete();
 			if (!complete) {
-				log.warn("Host complete() not available");
+				log.warn('Host complete() not available');
 				return null;
 			}
 
@@ -69,10 +66,10 @@ export function createSummarizer() {
 				{
 					messages: [
 						{
-							role: "user" as const,
+							role: 'user' as const,
 							content: [
 								{
-									type: "text" as const,
+									type: 'text' as const,
 									text: `<message>\n${text}\n</message>`,
 								},
 							],
@@ -91,23 +88,20 @@ export function createSummarizer() {
 
 			const summary = response.content
 				.filter(
-					(c: {
-						type: string;
-						text?: string;
-					}): c is { type: "text"; text: string } =>
-						c.type === "text" && typeof c.text === "string",
+					(c: { type: string; text?: string }): c is { type: 'text'; text: string } =>
+						c.type === 'text' && typeof c.text === 'string',
 				)
 				.map((c: { text: string }) => c.text.trim())
-				.join("\n");
+				.join('\n');
 
 			if (!summary) {
-				log.warn("Summarizer returned empty response");
+				log.warn('Summarizer returned empty response');
 				return null;
 			}
 
 			const ratio = Math.round((1 - summary.length / text.length) * 100);
 			log.info(
-				"Summarization complete | original=%s summary=%s ratio=%s%% key=%s",
+				'Summarization complete | original=%s summary=%s ratio=%s%% key=%s',
 				text.length,
 				summary.length,
 				ratio,
@@ -117,7 +111,7 @@ export function createSummarizer() {
 			cache.set(key, summary);
 			return summary;
 		} catch (err) {
-			log.error("Summarizer model call failed", {
+			log.error('Summarizer model call failed', {
 				error: err instanceof Error ? err.message : String(err),
 			});
 			return null;

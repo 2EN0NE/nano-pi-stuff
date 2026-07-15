@@ -10,18 +10,13 @@
  * 4. Submits the compiled answers when done
  */
 
-import {
-	complete,
-	type Model,
-	type Api,
-	type UserMessage,
-} from "@earendil-works/pi-ai";
+import { complete, type Model, type Api, type UserMessage } from '@earendil-works/pi-ai';
 import type {
 	ExtensionAPI,
 	ExtensionContext,
 	ModelRegistry,
-} from "@earendil-works/pi-coding-agent";
-import { BorderedLoader } from "@earendil-works/pi-coding-agent";
+} from '@earendil-works/pi-coding-agent';
+import { BorderedLoader } from '@earendil-works/pi-coding-agent';
 import {
 	type Component,
 	Editor,
@@ -32,8 +27,7 @@ import {
 	type TUI,
 	visibleWidth,
 	wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
-
+} from '@earendil-works/pi-tui';
 
 // Structured output format for question extraction
 interface ExtractedQuestion {
@@ -77,8 +71,8 @@ Example output:
   ]
 }`;
 
-const CODEX_MODEL_ID = "gpt-5.3";
-const HAIKU_MODEL_ID = "claude-haiku-4-5";
+const CODEX_MODEL_ID = 'gpt-5.3';
+const HAIKU_MODEL_ID = 'claude-haiku-4-5';
 
 /**
  * Prefer GPT-5.3 for extraction when available, otherwise fallback to haiku or the current model.
@@ -87,7 +81,7 @@ async function selectExtractionModel(
 	currentModel: Model<Api>,
 	modelRegistry: ModelRegistry,
 ): Promise<Model<Api>> {
-	const codexModel = modelRegistry.find("openai-codex", CODEX_MODEL_ID);
+	const codexModel = modelRegistry.find('openai-codex', CODEX_MODEL_ID);
 	if (codexModel) {
 		const auth = await modelRegistry.getApiKeyAndHeaders(codexModel);
 		if (auth.ok) {
@@ -95,7 +89,7 @@ async function selectExtractionModel(
 		}
 	}
 
-	const haikuModel = modelRegistry.find("anthropic", HAIKU_MODEL_ID);
+	const haikuModel = modelRegistry.find('anthropic', HAIKU_MODEL_ID);
 	if (!haikuModel) {
 		return currentModel;
 	}
@@ -156,13 +150,9 @@ class QnAComponent implements Component {
 	private yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 	private gray = (s: string) => `\x1b[90m${s}\x1b[0m`;
 
-	constructor(
-		questions: ExtractedQuestion[],
-		tui: TUI,
-		onDone: (result: string | null) => void,
-	) {
+	constructor(questions: ExtractedQuestion[], tui: TUI, onDone: (result: string | null) => void) {
 		this.questions = questions;
-		this.answers = questions.map(() => "");
+		this.answers = questions.map(() => '');
 		this.tui = tui;
 		this.onDone = onDone;
 
@@ -190,7 +180,7 @@ class QnAComponent implements Component {
 
 	private allQuestionsAnswered(): boolean {
 		this.saveCurrentAnswer();
-		return this.answers.every((a) => (a?.trim() || "").length > 0);
+		return this.answers.every((a) => (a?.trim() || '').length > 0);
 	}
 
 	private saveCurrentAnswer(): void {
@@ -201,7 +191,7 @@ class QnAComponent implements Component {
 		if (index < 0 || index >= this.questions.length) return;
 		this.saveCurrentAnswer();
 		this.currentIndex = index;
-		this.editor.setText(this.answers[index] || "");
+		this.editor.setText(this.answers[index] || '');
 		this.invalidate();
 	}
 
@@ -212,16 +202,16 @@ class QnAComponent implements Component {
 		const parts: string[] = [];
 		for (let i = 0; i < this.questions.length; i++) {
 			const q = this.questions[i];
-			const a = this.answers[i]?.trim() || "(no answer)";
+			const a = this.answers[i]?.trim() || '(no answer)';
 			parts.push(`Q: ${q.question}`);
 			if (q.context) {
 				parts.push(`> ${q.context}`);
 			}
 			parts.push(`A: ${a}`);
-			parts.push("");
+			parts.push('');
 		}
 
-		this.onDone(parts.join("\n").trim());
+		this.onDone(parts.join('\n').trim());
 	}
 
 	private cancel(): void {
@@ -236,14 +226,14 @@ class QnAComponent implements Component {
 	handleInput(data: string): void {
 		// Handle confirmation dialog
 		if (this.showingConfirmation) {
-			if (matchesKey(data, Key.enter) || data.toLowerCase() === "y") {
+			if (matchesKey(data, Key.enter) || data.toLowerCase() === 'y') {
 				this.submit();
 				return;
 			}
 			if (
 				matchesKey(data, Key.escape) ||
-				matchesKey(data, Key.ctrl("c")) ||
-				data.toLowerCase() === "n"
+				matchesKey(data, Key.ctrl('c')) ||
+				data.toLowerCase() === 'n'
 			) {
 				this.showingConfirmation = false;
 				this.invalidate();
@@ -254,7 +244,7 @@ class QnAComponent implements Component {
 		}
 
 		// Global navigation and commands
-		if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("c"))) {
+		if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl('c'))) {
 			this.cancel();
 			return;
 		}
@@ -267,7 +257,7 @@ class QnAComponent implements Component {
 			}
 			return;
 		}
-		if (matchesKey(data, Key.shift("tab"))) {
+		if (matchesKey(data, Key.shift('tab'))) {
 			if (this.currentIndex > 0) {
 				this.navigateTo(this.currentIndex - 1);
 				this.tui.requestRender();
@@ -277,14 +267,14 @@ class QnAComponent implements Component {
 
 		// Arrow up/down for question navigation when editor is empty
 		// (Editor handles its own cursor navigation when there's content)
-		if (matchesKey(data, Key.up) && this.editor.getText() === "") {
+		if (matchesKey(data, Key.up) && this.editor.getText() === '') {
 			if (this.currentIndex > 0) {
 				this.navigateTo(this.currentIndex - 1);
 				this.tui.requestRender();
 				return;
 			}
 		}
-		if (matchesKey(data, Key.down) && this.editor.getText() === "") {
+		if (matchesKey(data, Key.down) && this.editor.getText() === '') {
 			if (this.currentIndex < this.questions.length - 1) {
 				this.navigateTo(this.currentIndex + 1);
 				this.tui.requestRender();
@@ -295,7 +285,7 @@ class QnAComponent implements Component {
 		// Handle Enter ourselves (editor's submit is disabled)
 		// Plain Enter moves to next question or shows confirmation on last question
 		// Shift+Enter adds a newline (handled by editor)
-		if (matchesKey(data, Key.enter) && !matchesKey(data, Key.shift("enter"))) {
+		if (matchesKey(data, Key.enter) && !matchesKey(data, Key.shift('enter'))) {
 			this.saveCurrentAnswer();
 			if (this.currentIndex < this.questions.length - 1) {
 				this.navigateTo(this.currentIndex + 1);
@@ -324,52 +314,50 @@ class QnAComponent implements Component {
 		const contentWidth = boxWidth - 4; // 2 chars padding on each side
 
 		// Helper to create horizontal lines (dim the whole thing at once)
-		const horizontalLine = (count: number) => "─".repeat(count);
+		const horizontalLine = (count: number) => '─'.repeat(count);
 
 		// Helper to create a box line
 		const boxLine = (content: string, leftPad: number = 2): string => {
-			const paddedContent = " ".repeat(leftPad) + content;
+			const paddedContent = ' '.repeat(leftPad) + content;
 			const contentLen = visibleWidth(paddedContent);
 			const rightPad = Math.max(0, boxWidth - contentLen - 2);
-			return (
-				this.dim("│") + paddedContent + " ".repeat(rightPad) + this.dim("│")
-			);
+			return this.dim('│') + paddedContent + ' '.repeat(rightPad) + this.dim('│');
 		};
 
 		const emptyBoxLine = (): string => {
-			return this.dim("│") + " ".repeat(boxWidth - 2) + this.dim("│");
+			return this.dim('│') + ' '.repeat(boxWidth - 2) + this.dim('│');
 		};
 
 		const padToWidth = (line: string): string => {
 			const len = visibleWidth(line);
-			return line + " ".repeat(Math.max(0, width - len));
+			return line + ' '.repeat(Math.max(0, width - len));
 		};
 
 		// Title
-		lines.push(padToWidth(this.dim("╭" + horizontalLine(boxWidth - 2) + "╮")));
-		const title = `${this.bold(this.cyan("Questions"))} ${this.dim(`(${this.currentIndex + 1}/${this.questions.length})`)}`;
+		lines.push(padToWidth(this.dim('╭' + horizontalLine(boxWidth - 2) + '╮')));
+		const title = `${this.bold(this.cyan('Questions'))} ${this.dim(`(${this.currentIndex + 1}/${this.questions.length})`)}`;
 		lines.push(padToWidth(boxLine(title)));
-		lines.push(padToWidth(this.dim("├" + horizontalLine(boxWidth - 2) + "┤")));
+		lines.push(padToWidth(this.dim('├' + horizontalLine(boxWidth - 2) + '┤')));
 
 		// Progress indicator
 		const progressParts: string[] = [];
 		for (let i = 0; i < this.questions.length; i++) {
-			const answered = (this.answers[i]?.trim() || "").length > 0;
+			const answered = (this.answers[i]?.trim() || '').length > 0;
 			const current = i === this.currentIndex;
 			if (current) {
-				progressParts.push(this.cyan("●"));
+				progressParts.push(this.cyan('●'));
 			} else if (answered) {
-				progressParts.push(this.green("●"));
+				progressParts.push(this.green('●'));
 			} else {
-				progressParts.push(this.dim("○"));
+				progressParts.push(this.dim('○'));
 			}
 		}
-		lines.push(padToWidth(boxLine(progressParts.join(" "))));
+		lines.push(padToWidth(boxLine(progressParts.join(' '))));
 		lines.push(padToWidth(emptyBoxLine()));
 
 		// Current question
 		const q = this.questions[this.currentIndex];
-		const questionText = `${this.bold("Q:")} ${q.question}`;
+		const questionText = `${this.bold('Q:')} ${q.question}`;
 		const wrappedQuestion = wrapTextWithAnsi(questionText, contentWidth);
 		for (const line of wrappedQuestion) {
 			lines.push(padToWidth(boxLine(line)));
@@ -389,7 +377,7 @@ class QnAComponent implements Component {
 
 		// Render the editor component (multi-line input) with padding
 		// Skip the first and last lines (editor's own border lines)
-		const answerPrefix = this.bold("A: ");
+		const answerPrefix = this.bold('A: ');
 		const editorWidth = contentWidth - 4 - 3; // Extra padding + space for "A: "
 		const editorLines = this.editor.render(editorWidth);
 		for (let i = 1; i < editorLines.length - 1; i++) {
@@ -398,7 +386,7 @@ class QnAComponent implements Component {
 				lines.push(padToWidth(boxLine(answerPrefix + editorLines[i])));
 			} else {
 				// Subsequent lines get padding to align with the first line
-				lines.push(padToWidth(boxLine("   " + editorLines[i])));
+				lines.push(padToWidth(boxLine('   ' + editorLines[i])));
 			}
 		}
 
@@ -406,21 +394,15 @@ class QnAComponent implements Component {
 
 		// Confirmation dialog or footer with controls
 		if (this.showingConfirmation) {
-			lines.push(
-				padToWidth(this.dim("├" + horizontalLine(boxWidth - 2) + "┤")),
-			);
-			const confirmMsg = `${this.yellow("Submit all answers?")} ${this.dim("(Enter/y to confirm, Esc/n to cancel)")}`;
-			lines.push(
-				padToWidth(boxLine(truncateToWidth(confirmMsg, contentWidth))),
-			);
+			lines.push(padToWidth(this.dim('├' + horizontalLine(boxWidth - 2) + '┤')));
+			const confirmMsg = `${this.yellow('Submit all answers?')} ${this.dim('(Enter/y to confirm, Esc/n to cancel)')}`;
+			lines.push(padToWidth(boxLine(truncateToWidth(confirmMsg, contentWidth))));
 		} else {
-			lines.push(
-				padToWidth(this.dim("├" + horizontalLine(boxWidth - 2) + "┤")),
-			);
-			const controls = `${this.dim("Tab/Enter")} next · ${this.dim("Shift+Tab")} prev · ${this.dim("Shift+Enter")} newline · ${this.dim("Esc")} cancel`;
+			lines.push(padToWidth(this.dim('├' + horizontalLine(boxWidth - 2) + '┤')));
+			const controls = `${this.dim('Tab/Enter')} next · ${this.dim('Shift+Tab')} prev · ${this.dim('Shift+Enter')} newline · ${this.dim('Esc')} cancel`;
 			lines.push(padToWidth(boxLine(truncateToWidth(controls, contentWidth))));
 		}
-		lines.push(padToWidth(this.dim("╰" + horizontalLine(boxWidth - 2) + "╯")));
+		lines.push(padToWidth(this.dim('╰' + horizontalLine(boxWidth - 2) + '╯')));
 
 		this.cachedWidth = width;
 		this.cachedLines = lines;
@@ -431,12 +413,12 @@ class QnAComponent implements Component {
 export default function (pi: ExtensionAPI) {
 	const answerHandler = async (ctx: ExtensionContext) => {
 		if (!ctx.hasUI) {
-			ctx.ui.notify("answer requires interactive mode", "error");
+			ctx.ui.notify('answer requires interactive mode', 'error');
 			return;
 		}
 
 		if (!ctx.model) {
-			ctx.ui.notify("No model selected", "error");
+			ctx.ui.notify('No model selected', 'error');
 			return;
 		}
 
@@ -446,23 +428,21 @@ export default function (pi: ExtensionAPI) {
 
 		for (let i = branch.length - 1; i >= 0; i--) {
 			const entry = branch[i];
-			if (entry.type === "message") {
+			if (entry.type === 'message') {
 				const msg = entry.message;
-				if ("role" in msg && msg.role === "assistant") {
-					if (msg.stopReason !== "stop") {
+				if ('role' in msg && msg.role === 'assistant') {
+					if (msg.stopReason !== 'stop') {
 						ctx.ui.notify(
 							`Last assistant message incomplete (${msg.stopReason})`,
-							"error",
+							'error',
 						);
 						return;
 					}
 					const textParts = msg.content
-						.filter(
-							(c): c is { type: "text"; text: string } => c.type === "text",
-						)
+						.filter((c): c is { type: 'text'; text: string } => c.type === 'text')
 						.map((c) => c.text);
 					if (textParts.length > 0) {
-						lastAssistantText = textParts.join("\n");
+						lastAssistantText = textParts.join('\n');
 						break;
 					}
 				}
@@ -470,15 +450,12 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		if (!lastAssistantText) {
-			ctx.ui.notify("No assistant messages found", "error");
+			ctx.ui.notify('No assistant messages found', 'error');
 			return;
 		}
 
 		// Select the best model for extraction (prefer GPT-5.3, then haiku)
-		const extractionModel = await selectExtractionModel(
-			ctx.model,
-			ctx.modelRegistry,
-		);
+		const extractionModel = await selectExtractionModel(ctx.model, ctx.modelRegistry);
 
 		// Run extraction with loader UI
 		const extractionResult = await ctx.ui.custom<ExtractionResult | null>(
@@ -491,14 +468,13 @@ export default function (pi: ExtensionAPI) {
 				loader.onAbort = () => done(null);
 
 				const doExtract = async () => {
-					const auth =
-						await ctx.modelRegistry.getApiKeyAndHeaders(extractionModel);
+					const auth = await ctx.modelRegistry.getApiKeyAndHeaders(extractionModel);
 					if (auth.ok === false) {
 						throw new Error(auth.error);
 					}
 					const userMessage: UserMessage = {
-						role: "user",
-						content: [{ type: "text", text: lastAssistantText! }],
+						role: 'user',
+						content: [{ type: 'text', text: lastAssistantText! }],
 						timestamp: Date.now(),
 					};
 
@@ -512,16 +488,14 @@ export default function (pi: ExtensionAPI) {
 						},
 					);
 
-					if (response.stopReason === "aborted") {
+					if (response.stopReason === 'aborted') {
 						return null;
 					}
 
 					const responseText = response.content
-						.filter(
-							(c): c is { type: "text"; text: string } => c.type === "text",
-						)
+						.filter((c): c is { type: 'text'; text: string } => c.type === 'text')
 						.map((c) => c.text)
-						.join("\n");
+						.join('\n');
 
 					return parseExtractionResult(responseText);
 				};
@@ -535,47 +509,43 @@ export default function (pi: ExtensionAPI) {
 		);
 
 		if (extractionResult === null) {
-			ctx.ui.notify("Cancelled", "info");
+			ctx.ui.notify('Cancelled', 'info');
 			return;
 		}
 
 		if (extractionResult.questions.length === 0) {
-			ctx.ui.notify("No questions found in the last message", "info");
+			ctx.ui.notify('No questions found in the last message', 'info');
 			return;
 		}
 
 		// Show the Q&A component
-		const answersResult = await ctx.ui.custom<string | null>(
-			(tui, _theme, _kb, done) => {
-				return new QnAComponent(extractionResult.questions, tui, done);
-			},
-		);
+		const answersResult = await ctx.ui.custom<string | null>((tui, _theme, _kb, done) => {
+			return new QnAComponent(extractionResult.questions, tui, done);
+		});
 
 		if (answersResult === null) {
-			ctx.ui.notify("Cancelled", "info");
+			ctx.ui.notify('Cancelled', 'info');
 			return;
 		}
 
 		// Send the answers directly as a message and trigger a turn
 		pi.sendMessage(
 			{
-				customType: "answers",
-				content:
-					"I answered your questions in the following way:\n\n" + answersResult,
+				customType: 'answers',
+				content: 'I answered your questions in the following way:\n\n' + answersResult,
 				display: true,
 			},
 			{ triggerTurn: true },
 		);
 	};
 
-	pi.registerCommand("answer", {
-		description:
-			"Extract questions from last assistant message into interactive Q&A",
+	pi.registerCommand('answer', {
+		description: 'Extract questions from last assistant message into interactive Q&A',
 		handler: (_args, ctx) => answerHandler(ctx),
 	});
 
-	pi.registerShortcut("ctrl+.", {
-		description: "Extract and answer questions",
+	pi.registerShortcut('ctrl+.', {
+		description: 'Extract and answer questions',
 		handler: answerHandler,
 	});
 }

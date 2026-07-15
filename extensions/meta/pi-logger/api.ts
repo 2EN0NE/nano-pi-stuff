@@ -16,9 +16,9 @@
  * ```
  */
 
-import type { EventBus } from "@earendil-works/pi-coding-agent";
-import type { LogEvent, LogLevel, Logger } from "./types.js";
-import { LOG_EVENT_CHANNEL } from "./types.js";
+import type { EventBus } from '@earendil-works/pi-coding-agent';
+import type { LogEvent, LogLevel, Logger } from './types.js';
+import { LOG_EVENT_CHANNEL } from './types.js';
 
 // ============================================================================
 // Global EventBus reference (stored on globalThis to survive jiti module isolation)
@@ -28,7 +28,7 @@ import { LOG_EVENT_CHANNEL } from "./types.js";
 // instances. We use globalThis so all instances see the same EventBus reference.
 // ============================================================================
 
-const GLOBAL_EVENTBUS_KEY = "__pi_logger_eventbus__";
+const GLOBAL_EVENTBUS_KEY = '__pi_logger_eventbus__';
 
 /**
  * Initialize the EventBus reference. Called by the pi-logger extension factory
@@ -43,11 +43,7 @@ export function initEventBus(bus: EventBus): void {
  * Returns null if initEventBus has not been called yet.
  */
 export function getEventBus(): EventBus | null {
-	return (
-		((globalThis as Record<string, unknown>)[
-			GLOBAL_EVENTBUS_KEY
-		] as EventBus) ?? null
-	);
+	return ((globalThis as Record<string, unknown>)[GLOBAL_EVENTBUS_KEY] as EventBus) ?? null;
 }
 
 // ============================================================================
@@ -65,10 +61,7 @@ export function getEventBus(): EventBus | null {
  * If no format specifiers are present, args are space-appended to the message.
  * The last positional arg that is a plain object becomes the `details` field.
  */
-function formatMessage(
-	template: string,
-	args: unknown[],
-): { message: string; details?: unknown } {
+function formatMessage(template: string, args: unknown[]): { message: string; details?: unknown } {
 	if (args.length === 0) {
 		return { message: template };
 	}
@@ -77,17 +70,17 @@ function formatMessage(
 	if (/%(?:[sdjoO]|%)/.test(template)) {
 		let idx = 0;
 		const formatted = template.replace(/%(?:[sdjoO%])/g, (match) => {
-			if (match === "%%") return "%";
+			if (match === '%%') return '%';
 			if (idx >= args.length) return match;
 			const arg = args[idx++];
 			switch (match) {
-				case "%s":
+				case '%s':
 					return String(arg);
-				case "%d":
+				case '%d':
 					return String(Number(arg));
-				case "%j":
-				case "%O":
-				case "%o":
+				case '%j':
+				case '%O':
+				case '%o':
 					try {
 						return JSON.stringify(arg, null, 2);
 					} catch {
@@ -100,9 +93,7 @@ function formatMessage(
 
 		const remaining = args.slice(idx);
 		const details =
-			remaining.length === 1 &&
-			typeof remaining[0] === "object" &&
-			remaining[0] !== null
+			remaining.length === 1 && typeof remaining[0] === 'object' && remaining[0] !== null
 				? remaining[0]
 				: remaining.length > 0
 					? remaining
@@ -112,15 +103,10 @@ function formatMessage(
 	}
 
 	// No format specifiers: append non-object args as space-separated suffix
-	const nonObject = args.filter((a) => typeof a !== "object" || a === null);
-	const objects = args.filter((a) => typeof a === "object" && a !== null);
-	const suffix = nonObject.length > 0 ? " " + nonObject.join(" ") : "";
-	const details =
-		objects.length === 1
-			? objects[0]
-			: objects.length > 0
-				? objects
-				: undefined;
+	const nonObject = args.filter((a) => typeof a !== 'object' || a === null);
+	const objects = args.filter((a) => typeof a === 'object' && a !== null);
+	const suffix = nonObject.length > 0 ? ' ' + nonObject.join(' ') : '';
+	const details = objects.length === 1 ? objects[0] : objects.length > 0 ? objects : undefined;
 
 	return { message: template + suffix, details };
 }
@@ -129,12 +115,7 @@ function formatMessage(
 // Internal: emit a structured LogEvent onto the EventBus
 // ============================================================================
 
-function emitLogEvent(
-	level: LogLevel,
-	source: string,
-	message: string,
-	details?: unknown,
-): void {
+function emitLogEvent(level: LogLevel, source: string, message: string, details?: unknown): void {
 	const bus = getEventBus();
 	if (!bus) return; // silently drop until initEventBus is called
 
@@ -177,32 +158,30 @@ export function getLoggerName(logger: Logger): string | undefined {
  * ```
  */
 export function createLogger(name: string): Logger {
-	if (!name || typeof name !== "string") {
-		throw new Error(
-			`createLogger requires a non-empty string name, got ${typeof name}`,
-		);
+	if (!name || typeof name !== 'string') {
+		throw new Error(`createLogger requires a non-empty string name, got ${typeof name}`);
 	}
 
 	const logger: Logger = {
 		trace(message: string, ...args: unknown[]): void {
 			const { message: msg, details } = formatMessage(message, args);
-			emitLogEvent("trace", name, msg, details);
+			emitLogEvent('trace', name, msg, details);
 		},
 		debug(message: string, ...args: unknown[]): void {
 			const { message: msg, details } = formatMessage(message, args);
-			emitLogEvent("debug", name, msg, details);
+			emitLogEvent('debug', name, msg, details);
 		},
 		info(message: string, ...args: unknown[]): void {
 			const { message: msg, details } = formatMessage(message, args);
-			emitLogEvent("info", name, msg, details);
+			emitLogEvent('info', name, msg, details);
 		},
 		warn(message: string, ...args: unknown[]): void {
 			const { message: msg, details } = formatMessage(message, args);
-			emitLogEvent("warn", name, msg, details);
+			emitLogEvent('warn', name, msg, details);
 		},
 		error(message: string, ...args: unknown[]): void {
 			const { message: msg, details } = formatMessage(message, args);
-			emitLogEvent("error", name, msg, details);
+			emitLogEvent('error', name, msg, details);
 		},
 	};
 
@@ -223,9 +202,7 @@ export function createLogger(name: string): Logger {
 export function childLogger(parent: Logger, childName: string): Logger {
 	const parentName = LOGGER_NAMES.get(parent);
 	if (!parentName) {
-		throw new Error(
-			"childLogger: parent logger was not created by createLogger()",
-		);
+		throw new Error('childLogger: parent logger was not created by createLogger()');
 	}
 	return createLogger(`${parentName}.${childName}`);
 }

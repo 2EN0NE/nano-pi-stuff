@@ -1,6 +1,6 @@
-import type { ContextFileEntry, SkillEntry } from "./types.js";
+import type { ContextFileEntry, SkillEntry } from './types.js';
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 
 /** Shared mutable state for the extension. */
 export const state = {

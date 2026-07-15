@@ -1,14 +1,14 @@
-import type { CompressorStats } from "./types.js";
-import type { ContentStore } from "./store.js";
-import type { Summarizer } from "./haiku-summarize.js";
-import { deduplicateLines } from "./stages/dedup.js";
-import { foldLogs } from "./stages/log-fold.js";
-import { compactJson } from "./stages/json-compact.js";
-import { bm25Score, type ScoredMessage } from "./stages/bm25.js";
-import { deltaCompress } from "./stages/delta.js";
-import { createLogger } from "@zenone/pi-logger";
+import type { CompressorStats } from './types.js';
+import type { ContentStore } from './store.js';
+import type { Summarizer } from './haiku-summarize.js';
+import { deduplicateLines } from './stages/dedup.js';
+import { foldLogs } from './stages/log-fold.js';
+import { compactJson } from './stages/json-compact.js';
+import { bm25Score, type ScoredMessage } from './stages/bm25.js';
+import { deltaCompress } from './stages/delta.js';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("smart-context:pipeline");
+const log = createLogger('smart-context:pipeline');
 
 interface Message {
 	role: string;
@@ -63,13 +63,13 @@ function resolveProfile(ctx: any): AggressionProfile {
 	const usedTokens: number | undefined = usage?.tokens;
 
 	const smallWindow =
-		typeof contextWindow === "number" &&
+		typeof contextWindow === 'number' &&
 		contextWindow > 0 &&
 		contextWindow < SMALL_CONTEXT_WINDOW;
 
 	const highUsage =
-		typeof usedTokens === "number" &&
-		typeof contextWindow === "number" &&
+		typeof usedTokens === 'number' &&
+		typeof contextWindow === 'number' &&
 		contextWindow > 0 &&
 		usedTokens / contextWindow >= HIGH_USAGE_RATIO;
 
@@ -95,25 +95,22 @@ export function createCompressor(deps: CompressorDeps) {
 	async function compress(messages: Message[], ctx: any): Promise<Message[]> {
 		state.turnsProcessed++;
 		if (messages.length < 4) {
-			log.debug("Skipped (too few messages)", { count: messages.length });
+			log.debug('Skipped (too few messages)', { count: messages.length });
 			return messages;
 		}
 
 		const lastUserIdx = findLastUserMessage(messages);
 		if (lastUserIdx === -1) {
-			log.debug("Skipped (no user message)");
+			log.debug('Skipped (no user message)');
 			return messages;
 		}
 
 		const profile = resolveProfile(ctx);
 		const cacheActive = detectActiveCache(ctx);
 		const query = extractText(messages[lastUserIdx]);
-		const protectedBoundary = findProtectedBoundary(
-			messages,
-			profile.protectedTurns,
-		);
+		const protectedBoundary = findProtectedBoundary(messages, profile.protectedTurns);
 
-		log.debug("Compression start", {
+		log.debug('Compression start', {
 			totalMessages: messages.length,
 			protectedTurns: profile.protectedTurns,
 			protectedBoundary,
@@ -154,7 +151,7 @@ export function createCompressor(deps: CompressorDeps) {
 				continue;
 			}
 
-			if (msg.role === "assistant" || msg.role === "user") {
+			if (msg.role === 'assistant' || msg.role === 'user') {
 				if (cacheActive && !profile.compressDespiteCache) {
 					result[i] = msg;
 					continue;
@@ -185,7 +182,7 @@ export function createCompressor(deps: CompressorDeps) {
 			for (let j = 0; j < summarizeQueue.length; j++) {
 				const r = settled[j];
 				result[summarizeQueue[j].index] =
-					r.status === "fulfilled" && r.value ? r.value : summarizeQueue[j].msg;
+					r.status === 'fulfilled' && r.value ? r.value : summarizeQueue[j].msg;
 			}
 		}
 
@@ -215,20 +212,14 @@ export function createCompressor(deps: CompressorDeps) {
 
 		if (relevant) {
 			const summary = await summarizer.summarize(text, ctx);
-			if (
-				summary &&
-				summary.length < text.length * (1 - profile.minSavingsRatio)
-			) {
+			if (summary && summary.length < text.length * (1 - profile.minSavingsRatio)) {
 				const id = store.put(text, msg.role, state.turnsProcessed);
 				replacement = `${summary}\n[full original: recover_context("${id}")]`;
 			}
 		} else {
 			const summary = await summarizer.summarize(text, ctx);
 			const id = store.put(text, msg.role, state.turnsProcessed);
-			if (
-				summary &&
-				summary.length < text.length * (1 - profile.minSavingsRatio)
-			) {
+			if (summary && summary.length < text.length * (1 - profile.minSavingsRatio)) {
 				replacement = `[low-relevance, summarized] ${summary}\n[full: recover_context("${id}")]`;
 			} else {
 				replacement = `[compressed ${msg.role} message — ${text.length} chars — recover_context("${id}")]`;
@@ -241,10 +232,7 @@ export function createCompressor(deps: CompressorDeps) {
 		return replaceText(msg, replacement);
 	}
 
-	function maybeTrimLargeToolOutput(
-		msg: Message,
-		profile: AggressionProfile,
-	): Message | null {
+	function maybeTrimLargeToolOutput(msg: Message, profile: AggressionProfile): Message | null {
 		const text = extractText(msg);
 		if (text.length < profile.largeToolOutputChars) return null;
 
@@ -277,9 +265,8 @@ export function createCompressor(deps: CompressorDeps) {
 		toolName: string,
 		content: ContentBlock[],
 	): ContentBlock[] | undefined {
-		const textBlock = content.find((c) => c.type === "text" && c.text);
-		if (!textBlock || !textBlock.text || textBlock.text.length < 500)
-			return undefined;
+		const textBlock = content.find((c) => c.type === 'text' && c.text);
+		if (!textBlock || !textBlock.text || textBlock.text.length < 500) return undefined;
 
 		let text = textBlock.text;
 		const originalLen = text.length;
@@ -288,7 +275,7 @@ export function createCompressor(deps: CompressorDeps) {
 		text = deduplicateLines(text);
 		text = compactJson(text);
 
-		if (toolName === "read") {
+		if (toolName === 'read') {
 			text = trimLargeFileOutput(text);
 		}
 
@@ -296,7 +283,7 @@ export function createCompressor(deps: CompressorDeps) {
 
 		const saved = originalLen - text.length;
 		log.debug(
-			"Tool result compressed | tool=%s original=%s saved=%s ratio=%s%%",
+			'Tool result compressed | tool=%s original=%s saved=%s ratio=%s%%',
 			toolName,
 			originalLen,
 			saved,
@@ -304,7 +291,7 @@ export function createCompressor(deps: CompressorDeps) {
 		);
 
 		return content.map((c) => {
-			if (c.type === "text" && c.text === textBlock.text) {
+			if (c.type === 'text' && c.text === textBlock.text) {
 				return { ...c, text };
 			}
 			return c;
@@ -335,10 +322,7 @@ export function createCompressor(deps: CompressorDeps) {
 		const scorable: ScoredMessage[] = [];
 		for (let i = 0; i < boundary; i++) {
 			const text = extractText(messages[i]);
-			if (
-				text.length > 20 &&
-				!state.stableCompressions.has(store.makeId(text))
-			) {
+			if (text.length > 20 && !state.stableCompressions.has(store.makeId(text))) {
 				scorable.push({ text, index: i });
 			}
 		}
@@ -349,8 +333,7 @@ export function createCompressor(deps: CompressorDeps) {
 		if (!msg.content || !Array.isArray(msg.content)) return msg;
 
 		const newContent = msg.content.map((block: any) => {
-			if (block.type !== "text" || !block.text || block.text.length < 300)
-				return block;
+			if (block.type !== 'text' || !block.text || block.text.length < 300) return block;
 			const original = block.text;
 			let text = original;
 			text = foldLogs(text);
@@ -372,7 +355,7 @@ export function createCompressor(deps: CompressorDeps) {
 
 function findLastUserMessage(messages: Message[]): number {
 	for (let i = messages.length - 1; i >= 0; i--) {
-		if (messages[i].role === "user") return i;
+		if (messages[i].role === 'user') return i;
 	}
 	return -1;
 }
@@ -384,7 +367,7 @@ function detectActiveCache(ctx: any): boolean {
 		const entry = entries[i];
 		const usage = entry?.message?.usage;
 		if (!usage) continue;
-		if (entry.message?.role !== "assistant") continue;
+		if (entry.message?.role !== 'assistant') continue;
 		return (usage.cacheRead ?? 0) > 0 || (usage.cacheWrite ?? 0) > 0;
 	}
 	return false;
@@ -393,7 +376,7 @@ function detectActiveCache(ctx: any): boolean {
 function findProtectedBoundary(messages: Message[], turns: number): number {
 	let userCount = 0;
 	for (let i = messages.length - 1; i >= 0; i--) {
-		if (messages[i].role === "user") {
+		if (messages[i].role === 'user') {
 			userCount++;
 			if (userCount === turns) return i;
 		}
@@ -402,37 +385,37 @@ function findProtectedBoundary(messages: Message[], turns: number): number {
 }
 
 function extractText(msg: Message): string {
-	if (typeof msg.content === "string") return msg.content;
+	if (typeof msg.content === 'string') return msg.content;
 	if (Array.isArray(msg.content)) {
 		return msg.content
-			.filter((c: any) => c.type === "text")
+			.filter((c: any) => c.type === 'text')
 			.map((c: any) => c.text)
-			.join(" ");
+			.join(' ');
 	}
-	return "";
+	return '';
 }
 
 function isToolResult(msg: Message): boolean {
-	return msg.role === "toolResult" || msg.role === "tool";
+	return msg.role === 'toolResult' || msg.role === 'tool';
 }
 
 function replaceText(msg: Message, text: string): Message {
-	if (typeof msg.content === "string") {
+	if (typeof msg.content === 'string') {
 		return { ...msg, content: text };
 	}
 	return {
 		...msg,
-		content: [{ type: "text", text }],
+		content: [{ type: 'text', text }],
 	};
 }
 
 function trimLargeFileOutput(text: string): string {
-	const lines = text.split("\n");
+	const lines = text.split('\n');
 	if (lines.length <= 100) return text;
 	const head = lines.slice(0, 40);
 	const tail = lines.slice(-40);
 	const omitted = lines.length - 80;
-	return [...head, `\n[... ${omitted} lines omitted ...]`, ...tail].join("\n");
+	return [...head, `\n[... ${omitted} lines omitted ...]`, ...tail].join('\n');
 }
 
 function messageSize(msg: Message): number {

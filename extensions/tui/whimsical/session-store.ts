@@ -10,12 +10,12 @@
  * extension re-initialization within the same session.
  */
 
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { createLogger } from "@zenone/pi-logger";
+import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("whimsical:session-store");
+const log = createLogger('whimsical:session-store');
 
 export interface SessionRecord {
 	/** Unique session ID from sessionManager.getSessionId() */
@@ -56,7 +56,7 @@ export interface SessionStoreData {
 	sessions: SessionRecord[];
 }
 
-const STORE_RELATIVE = join(".pi", "agent", "extensions-data", "whimsical");
+const STORE_RELATIVE = join('.pi', 'agent', 'extensions-data', 'whimsical');
 
 function getStoreDir(): string {
 	const home = homedir();
@@ -64,11 +64,11 @@ function getStoreDir(): string {
 }
 
 function getSessionsPath(): string {
-	return join(getStoreDir(), "sessions.json");
+	return join(getStoreDir(), 'sessions.json');
 }
 
 function getLiveDir(): string {
-	return join(getStoreDir(), "live");
+	return join(getStoreDir(), 'live');
 }
 
 function getLivePath(sessionId: string): string {
@@ -82,18 +82,18 @@ function getLivePath(sessionId: string): string {
 export async function loadSessions(): Promise<SessionRecord[]> {
 	const p = getSessionsPath();
 	try {
-		const raw = await readFile(p, "utf-8");
+		const raw = await readFile(p, 'utf-8');
 		const parsed: SessionStoreData = JSON.parse(raw);
 		if (Array.isArray(parsed?.sessions)) {
 			return parsed.sessions;
 		}
-		log.warn("sessions.json has invalid format, returning empty");
+		log.warn('sessions.json has invalid format, returning empty');
 		return [];
 	} catch (err: unknown) {
-		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
 			return [];
 		}
-		log.warn("Failed to load sessions.json", err);
+		log.warn('Failed to load sessions.json', err);
 		return [];
 	}
 }
@@ -102,9 +102,7 @@ export async function loadSessions(): Promise<SessionRecord[]> {
  * Load all sessions, but only the metric values for a given key.
  * Returns an array of numbers (the metric values from all historical sessions).
  */
-export async function loadMetricHistory(
-	key: keyof SessionMetrics,
-): Promise<number[]> {
+export async function loadMetricHistory(key: keyof SessionMetrics): Promise<number[]> {
 	const sessions = await loadSessions();
 	return sessions.map((s) => s.metrics[key]);
 }
@@ -125,10 +123,10 @@ export async function appendSession(record: SessionRecord): Promise<void> {
 
 	try {
 		await mkdir(getStoreDir(), { recursive: true });
-		await writeFile(p, JSON.stringify(data, null, 2), "utf-8");
-		log.debug("Appended session", record.sessionId);
+		await writeFile(p, JSON.stringify(data, null, 2), 'utf-8');
+		log.debug('Appended session', record.sessionId);
 	} catch (err) {
-		log.error("Failed to persist session", err);
+		log.error('Failed to persist session', err);
 	}
 }
 
@@ -145,9 +143,9 @@ export async function saveLiveState(state: LiveSessionState): Promise<void> {
 	const p = getLivePath(state.sessionId);
 	try {
 		await mkdir(dir, { recursive: true });
-		await writeFile(p, JSON.stringify(state, null, 2), "utf-8");
+		await writeFile(p, JSON.stringify(state, null, 2), 'utf-8');
 	} catch (err) {
-		log.error("Failed to save live state for %s", state.sessionId, err);
+		log.error('Failed to save live state for %s', state.sessionId, err);
 	}
 }
 
@@ -155,18 +153,16 @@ export async function saveLiveState(state: LiveSessionState): Promise<void> {
  * Load intermediate state for an in-progress session.
  * Returns null if no live state exists (fresh session, or already cleaned up).
  */
-export async function loadLiveState(
-	sessionId: string,
-): Promise<LiveSessionState | null> {
+export async function loadLiveState(sessionId: string): Promise<LiveSessionState | null> {
 	const p = getLivePath(sessionId);
 	try {
-		const raw = await readFile(p, "utf-8");
+		const raw = await readFile(p, 'utf-8');
 		return JSON.parse(raw) as LiveSessionState;
 	} catch (err: unknown) {
-		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
 			return null;
 		}
-		log.warn("Failed to load live state for %s", sessionId, err);
+		log.warn('Failed to load live state for %s', sessionId, err);
 		return null;
 	}
 }
@@ -182,8 +178,8 @@ export async function deleteLiveState(sessionId: string): Promise<void> {
 	} catch (err: unknown) {
 		// ENOENT is fine — live file may not exist (e.g. fresh session
 		// that didn't accumulate enough metrics to trigger a save).
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			log.warn("Failed to delete live state for %s", sessionId, err);
+		if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+			log.warn('Failed to delete live state for %s', sessionId, err);
 		}
 	}
 }

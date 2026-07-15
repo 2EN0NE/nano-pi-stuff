@@ -14,22 +14,14 @@
  * 2. Use /tools to open the tool selector
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	ToolInfo,
-} from "@earendil-works/pi-coding-agent";
-import { getSettingsListTheme } from "@earendil-works/pi-coding-agent";
-import {
-	Container,
-	type SettingItem,
-	SettingsList,
-} from "@earendil-works/pi-tui";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, ExtensionContext, ToolInfo } from '@earendil-works/pi-coding-agent';
+import { getSettingsListTheme } from '@earendil-works/pi-coding-agent';
+import { Container, type SettingItem, SettingsList } from '@earendil-works/pi-tui';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("tools");
+const log = createLogger('tools');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 // State persisted to session
 interface ToolsState {
@@ -59,7 +51,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 
 	// Persist current state
 	function persistState() {
-		pi.appendEntry<ToolsState>("tools-config", {
+		pi.appendEntry<ToolsState>('tools-config', {
 			enabledTools: Array.from(enabledTools),
 			disabledTools: Array.from(disabledTools),
 		});
@@ -79,12 +71,9 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		enabledTools.add(toolName);
 		applyTools();
 		persistState();
-		log.info("auto-enabled new tool", { tool: toolName });
+		log.info('auto-enabled new tool', { tool: toolName });
 		if (ctx?.hasUI) {
-			ctx.ui.notify(
-				`New tool "${toolName}" auto-enabled — use /tools to manage.`,
-				"info",
-			);
+			ctx.ui.notify(`New tool "${toolName}" auto-enabled — use /tools to manage.`, 'info');
 		}
 	}
 
@@ -97,11 +86,11 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		for (const t of trulyNew) enabledTools.add(t);
 		applyTools();
 		persistState();
-		log.info("auto-enabled new tools", { tools: trulyNew });
+		log.info('auto-enabled new tools', { tools: trulyNew });
 		if (ctx?.hasUI) {
 			ctx.ui.notify(
-				`${trulyNew.length} new tool(s) auto-enabled: ${trulyNew.join(", ")}`,
-				"info",
+				`${trulyNew.length} new tool(s) auto-enabled: ${trulyNew.join(', ')}`,
+				'info',
 			);
 		}
 	}
@@ -119,13 +108,13 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		// 外部已接管：replaceTools 已完成全部状态设置（enabled / disabled /
 		// apply / persist），不需要本函数再覆盖
 		if (externalOverride) {
-			log.debug("restoreFromBranch: skipped — external override in effect");
+			log.debug('restoreFromBranch: skipped — external override in effect');
 			// 同步 disabledTools（replaceTools 也会更新 disabledTools，但
 			// 此处兜底确保 session branch 中的禁用记录也得到反映）
 			const entries = ctx.sessionManager.getEntries();
 			let savedDisabled: string[] | undefined;
 			for (const entry of entries) {
-				if (entry.type === "custom" && entry.customType === "tools-config") {
+				if (entry.type === 'custom' && entry.customType === 'tools-config') {
 					const data = entry.data as ToolsState | undefined;
 					if (data?.disabledTools) savedDisabled = data.disabledTools;
 				}
@@ -143,7 +132,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		let savedDisabled: string[] | undefined;
 
 		for (const entry of entries) {
-			if (entry.type === "custom" && entry.customType === "tools-config") {
+			if (entry.type === 'custom' && entry.customType === 'tools-config') {
 				const data = entry.data as ToolsState | undefined;
 				if (data?.enabledTools) {
 					savedEnabled = data.enabledTools;
@@ -163,11 +152,9 @@ export default function toolsExtension(pi: ExtensionAPI) {
 
 		if (savedEnabled) {
 			// Restore saved tool selection (filter to only tools that still exist)
-			enabledTools = new Set(
-				savedEnabled.filter((t: string) => allToolNames.includes(t)),
-			);
+			enabledTools = new Set(savedEnabled.filter((t: string) => allToolNames.includes(t)));
 			applyTools();
-			log.debug("restoreFromBranch: restored from saved state", {
+			log.debug('restoreFromBranch: restored from saved state', {
 				enabled: enabledTools.size,
 				total: allToolNames.length,
 				disabled: disabledTools.size,
@@ -175,7 +162,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		} else {
 			// No saved state - sync with currently active tools
 			enabledTools = new Set(pi.getActiveTools());
-			log.debug("restoreFromBranch: initialized from active tools", {
+			log.debug('restoreFromBranch: initialized from active tools', {
 				enabled: enabledTools.size,
 				total: allToolNames.length,
 			});
@@ -183,12 +170,12 @@ export default function toolsExtension(pi: ExtensionAPI) {
 	}
 
 	// Register /tools command
-	log.debug("registerCommand: tools");
-	pi.registerCommand("tools", {
-		description: "Enable/disable tools",
+	log.debug('registerCommand: tools');
+	pi.registerCommand('tools', {
+		description: 'Enable/disable tools',
 		handler: async (_args, ctx) => {
-			if (ctx.mode !== "tui") {
-				ctx.ui.notify("/tools requires TUI mode", "error");
+			if (ctx.mode !== 'tui') {
+				ctx.ui.notify('/tools requires TUI mode', 'error');
 				return;
 			}
 
@@ -200,14 +187,12 @@ export default function toolsExtension(pi: ExtensionAPI) {
 			for (const name of allToolNames) {
 				if (!enabledTools.has(name) && !disabledTools.has(name)) {
 					enabledTools.add(name);
-					log.info("auto-enabled new tool (discovered via /tools)", {
+					log.info('auto-enabled new tool (discovered via /tools)', {
 						tool: name,
 					});
 				}
 			}
-			if (
-				allToolNames.some((n) => !enabledTools.has(n) && !disabledTools.has(n))
-			) {
+			if (allToolNames.some((n) => !enabledTools.has(n) && !disabledTools.has(n))) {
 				applyTools();
 				persistState();
 			}
@@ -217,27 +202,27 @@ export default function toolsExtension(pi: ExtensionAPI) {
 				const items: SettingItem[] = allTools.map((tool) => {
 					// Format source info for display
 					const si = tool.sourceInfo;
-					let sourceLine = "来源: 未知";
+					let sourceLine = '来源: 未知';
 
 					if (si) {
 						const scopeTag =
-							si.scope === "project"
-								? "[项目]"
-								: si.scope === "user"
-									? "[用户]"
-									: "[内置]";
+							si.scope === 'project'
+								? '[项目]'
+								: si.scope === 'user'
+									? '[用户]'
+									: '[内置]';
 
-						if (si.path.startsWith("<builtin:")) {
+						if (si.path.startsWith('<builtin:')) {
 							sourceLine = `来源: 内置工具 ${scopeTag}`;
 						} else {
 							// Make path relative if possible
 							let displayPath = si.path;
 							const cwd = process.cwd();
-							const home = process.env.HOME ?? "";
+							const home = process.env.HOME ?? '';
 							if (home && si.path.startsWith(home)) {
-								displayPath = "~" + si.path.slice(home.length);
+								displayPath = '~' + si.path.slice(home.length);
 							} else if (si.path.startsWith(cwd)) {
-								displayPath = "." + si.path.slice(cwd.length);
+								displayPath = '.' + si.path.slice(cwd.length);
 							}
 							sourceLine = `来源: ${displayPath}  ${scopeTag}`;
 						}
@@ -252,9 +237,9 @@ export default function toolsExtension(pi: ExtensionAPI) {
 					return {
 						id: tool.name,
 						label: tool.name,
-						description: descParts.join("\n"),
-						currentValue: enabledTools.has(tool.name) ? "enabled" : "disabled",
-						values: ["enabled", "disabled"],
+						description: descParts.join('\n'),
+						currentValue: enabledTools.has(tool.name) ? 'enabled' : 'disabled',
+						values: ['enabled', 'disabled'],
 					};
 				});
 
@@ -273,9 +258,9 @@ export default function toolsExtension(pi: ExtensionAPI) {
 					render(_width: number) {
 						const { enabled, total } = getToolCounts();
 						return [
-							theme.fg("accent", theme.bold("Tool Configuration")),
-							`  ${theme.fg("muted", `Enabled tools: ${enabled}/${total}`)}`,
-							"",
+							theme.fg('accent', theme.bold('Tool Configuration')),
+							`  ${theme.fg('muted', `Enabled tools: ${enabled}/${total}`)}`,
+							'',
 						];
 					}
 					invalidate() {}
@@ -288,7 +273,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 					getSettingsListTheme(),
 					(id, newValue) => {
 						// Update enabled state and apply immediately
-						if (newValue === "enabled") {
+						if (newValue === 'enabled') {
 							enabledTools.add(id);
 							disabledTools.delete(id);
 						} else {
@@ -301,7 +286,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 					() => {
 						// Log final state on confirm (Esc)
 						const { enabled, total } = getToolCounts();
-						log.info("tools selection confirmed", {
+						log.info('tools selection confirmed', {
 							enabled,
 							total,
 							disabled: Array.from(disabledTools),
@@ -344,14 +329,10 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		const currentActive = pi.getActiveTools();
 
 		// Split: which are newly discovered vs which were explicitly blocked?
-		const newTools = currentActive.filter(
-			(t) => !enabledTools.has(t) && !disabledTools.has(t),
-		);
-		const stale = currentActive.filter(
-			(t) => !enabledTools.has(t) && disabledTools.has(t),
-		);
+		const newTools = currentActive.filter((t) => !enabledTools.has(t) && !disabledTools.has(t));
+		const stale = currentActive.filter((t) => !enabledTools.has(t) && disabledTools.has(t));
 
-		log.debug("reapplyRestrictions: active", {
+		log.debug('reapplyRestrictions: active', {
 			activeCount: currentActive.length,
 			enabledCount: enabledTools.size,
 			disabledCount: disabledTools.size,
@@ -364,18 +345,18 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		}
 
 		if (stale.length > 0) {
-			log.warn("reapplyRestrictions: blocked re-enabled tools", stale);
+			log.warn('reapplyRestrictions: blocked re-enabled tools', stale);
 			if (ctx.hasUI) {
 				ctx.ui.notify(
 					`${stale.length} tool(s) were re-enabled but blocked per /tools.`,
-					"info",
+					'info',
 				);
 			}
 			applyTools();
 		}
 
 		if (newTools.length === 0 && stale.length === 0) {
-			log.debug("reapplyRestrictions: all tools in sync — no changes needed");
+			log.debug('reapplyRestrictions: all tools in sync — no changes needed');
 		}
 	}
 
@@ -387,7 +368,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 	 * - If the tool is not in enabledTools AND is explicitly disabled:
 	 *   → block it with a warning
 	 */
-	pi.on("tool_call", (_event, ctx) => {
+	pi.on('tool_call', (_event, ctx) => {
 		const event = _event as { toolName?: string };
 		const toolName = event.toolName;
 		if (!toolName) return;
@@ -407,15 +388,12 @@ export default function toolsExtension(pi: ExtensionAPI) {
 			}
 
 			// Explicitly disabled — block
-			log.info("blocked tool call", {
+			log.info('blocked tool call', {
 				tool: toolName,
 				enabledCount: enabledTools.size,
 			});
 			if (ctx.hasUI) {
-				ctx.ui.notify(
-					`Tool "${toolName}" is disabled per /tools settings.`,
-					"warning",
-				);
+				ctx.ui.notify(`Tool "${toolName}" is disabled per /tools settings.`, 'warning');
 			}
 			return {
 				block: true,
@@ -425,15 +403,15 @@ export default function toolsExtension(pi: ExtensionAPI) {
 	});
 
 	// Restore state on session start, then re-apply restrictions
-	pi.on("session_start", async (_event, ctx) => {
-		log.debug("event: session_start");
+	pi.on('session_start', async (_event, ctx) => {
+		log.debug('event: session_start');
 		restoreFromBranch(ctx);
 		reapplyRestrictions(ctx);
 	});
 
 	// Restore state when navigating the session tree, then re-apply restrictions
-	pi.on("session_tree", async (_event, ctx) => {
-		log.debug("event: session_tree");
+	pi.on('session_tree', async (_event, ctx) => {
+		log.debug('event: session_tree');
 		restoreFromBranch(ctx);
 		reapplyRestrictions(ctx);
 	});
@@ -472,7 +450,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 			const validTools = toolNames.filter((t) => allToolNames.includes(t));
 
 			if (validTools.length === 0 && toolNames.length > 0) {
-				log.warn("replaceTools: all requested tools are unknown", {
+				log.warn('replaceTools: all requested tools are unknown', {
 					requested: toolNames,
 				});
 				externalOverride = false; // 无有效工具，复位标记
@@ -493,7 +471,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 
 			applyTools();
 			persistState();
-			log.info("replaceTools: tools replaced", {
+			log.info('replaceTools: tools replaced', {
 				enabled: validTools,
 				disabled: [...disabledTools],
 			});

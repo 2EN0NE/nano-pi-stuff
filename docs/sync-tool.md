@@ -56,25 +56,25 @@ npx tsx scripts/sync-to-local-pi.ts --ext sandbox --target ~/.pi/agent
 
 ```yaml
 profiles:
-  my-profile:
-    description: "用途描述"
-    target: "~/.pi/agent"          # 目标目录（支持 ~ 展开、相对路径、绝对路径）
-    extensions: "*"                 # "*" = 全部，或 ["sandbox", "logger"]
-    skills: "*"                    # "*" = 全部，或 ["my-skill"]
-    themes: ["nightowl"]           # 只同步指定的主题
-    prompts: ["*"]                 # "*" = 全部
-    exclude:                       # 排除列表（可选）
-      extensions: ["sandbox"]      # 排除需要特殊设置的扩展
+    my-profile:
+        description: '用途描述'
+        target: '~/.pi/agent' # 目标目录（支持 ~ 展开、相对路径、绝对路径）
+        extensions: '*' # "*" = 全部，或 ["sandbox", "logger"]
+        skills: '*' # "*" = 全部，或 ["my-skill"]
+        themes: ['nightowl'] # 只同步指定的主题
+        prompts: ['*'] # "*" = 全部
+        exclude: # 排除列表（可选）
+            extensions: ['sandbox'] # 排除需要特殊设置的扩展
 ```
 
 ### 资源类型与目录映射
 
-| 资源类型 | 源目录 | 目标子目录 | 说明 |
-|---------|--------|-----------|------|
+| 资源类型   | 源目录                                                                                              | 目标子目录             | 说明                                                   |
+| ---------- | --------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------ |
 | extensions | `extensions/` (含 `tui/` `context/` `security/` `auto/` `accuracy/` `verification/` `meta/` 子目录) | `<target>/extensions/` | 按功能分类存放，同步脚本递归搜索所有子目录，按名字匹配 |
-| skills | `skills/` | `<target>/skills/` | |
-| themes | `themes/` | `<target>/themes/` | |
-| prompts | `prompts/` | `<target>/prompts/` | |
+| skills     | `skills/`                                                                                           | `<target>/skills/`     |                                                        |
+| themes     | `themes/`                                                                                           | `<target>/themes/`     |                                                        |
+| prompts    | `prompts/`                                                                                          | `<target>/prompts/`    |                                                        |
 
 > `intercepted-commands/` 目录不同步，保留原名用于独立用途。
 
@@ -132,11 +132,11 @@ npx tsx scripts/sync-to-local-pi.ts --profile user-install
 
 ```yaml
 profiles:
-  project:
-    extensions: "*"
-    # npmBuild 是可选的显式声明，仅用于文档目的。
-    # 脚本会自动检测所有 npm 包风格扩展，无需手动列出。
-    npmBuild: ["widget-wrangler", "catch-the-fox"]
+    project:
+        extensions: '*'
+        # npmBuild 是可选的显式声明，仅用于文档目的。
+        # 脚本会自动检测所有 npm 包风格扩展，无需手动列出。
+        npmBuild: ['widget-wrangler', 'catch-the-fox']
 ```
 
 > **注意**：桥接文件指向 `src/index.ts` 而非编译后的 `dist/index.js`，
@@ -153,9 +153,9 @@ profiles:
 
 ```json
 {
-  "devDependencies": {
-    "@zenone/pi-logger": "file:extensions/meta/pi-logger"
-  }
+	"devDependencies": {
+		"@zenone/pi-logger": "file:extensions/meta/pi-logger"
+	}
 }
 ```
 
@@ -200,10 +200,10 @@ cd ~/.pi/agent/extensions/sandbox && npm link @zenone/pi-logger
 
 ### 已知的本地依赖
 
-| 包名 | 源路径 | 说明 |
-|------|--------|------|
-| `@zenone/pi-logger` | `extensions/meta/pi-logger/` | 统一日志系统，所有扩展必须接入 |
-| `@zenone/pi-selector` | `extensions/meta/selector/` | 共享选择器，confir m-destructive、permission-gate 等使用 |
+| 包名                  | 源路径                       | 说明                                                     |
+| --------------------- | ---------------------------- | -------------------------------------------------------- |
+| `@zenone/pi-logger`   | `extensions/meta/pi-logger/` | 统一日志系统，所有扩展必须接入                           |
+| `@zenone/pi-selector` | `extensions/meta/selector/`  | 共享选择器，confir m-destructive、permission-gate 等使用 |
 
 ## 日志
 
@@ -224,7 +224,7 @@ cd ~/.pi/agent/extensions/sandbox && npm link @zenone/pi-logger
 
 ## 目标目录
 
-| 路径 | 说明 |
-|------|------|
-| `~/.pi/agent/` | Pi 实际读取的全局代理目录 |
-| `<project>/.pi/` | 项目本地目录 |
+| 路径             | 说明                      |
+| ---------------- | ------------------------- |
+| `~/.pi/agent/`   | Pi 实际读取的全局代理目录 |
+| `<project>/.pi/` | 项目本地目录              |

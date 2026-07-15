@@ -1,11 +1,12 @@
 ---
 name: extract-pi-knowledge
-description: "分析 Pi 会话历史（~/.pi/agent/sessions/）中关于扩展开发的失败模式与 tree 分叉路径，提取可复用的关键知识，补充到 AGENTS.md 的 `## 开发Pi插件一些补充信息` 节下。帮助后续 agent 一次改对，无需阅读 Pi 源码。"
+description: '分析 Pi 会话历史（~/.pi/agent/sessions/）中关于扩展开发的失败模式与 tree 分叉路径，提取可复用的关键知识，补充到 AGENTS.md 的 `## 开发Pi插件一些补充信息` 节下。帮助后续 agent 一次改对，无需阅读 Pi 源码。'
 ---
 
 从 Pi 会话历史中提取扩展开发关键知识，补充到 AGENTS.md。
 
 !!!特别注意：
+
 1. 如果没有额外的信息，不用非要有知识抽取合并，保留精简有用才是第一要义。没有的话直接回复没有额外的关键信息即可。
 2. 信息必须是pi的官方文档中不存在的。
 
@@ -82,6 +83,7 @@ uv run .pi/skills/extract-pi-knowledge/analyze.py --session-dir ~/.pi/agent/sess
 ```
 
 输出：
+
 1. 每个会话的用户消息摘要
 2. Tree 分叉点（分支路径）
 3. 失败模式列表（错误关键词 + 上下文）

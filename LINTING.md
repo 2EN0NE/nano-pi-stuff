@@ -11,24 +11,29 @@
 ## 🚀 使用方法
 
 ### 1. 安装依赖
+
 ```bash
 npm install
 ```
+
 Husky 会在 `npm install` 后自动初始化。
 
 ### 2. 运行 Lint 检查
 
 #### 检查所有文件
+
 ```bash
 npm run lint
 ```
 
 #### 自动修复可修复的问题
+
 ```bash
 npm run lint:fix
 ```
 
 #### 仅检查暂存文件（Pre-commit）
+
 ```bash
 npm run lint:staged
 ```
@@ -45,12 +50,14 @@ npm run lint:staged
 配置文件：`eslint.config.js`
 
 ### 检查规则
+
 - 使用 @eslint/js 推荐配置
 - 支持 ES2024+ 语法
 - 允许空 catch 块（用于静默错误）
 - 检查未使用的变量和其他常见问题
 
 ### 忽略文件
+
 - `node_modules/`
 - `dist/`, `build/`
 - `.husky/`
@@ -59,16 +66,19 @@ npm run lint:staged
 ## 🎯 常见任务
 
 ### 跳过 Pre-commit 检查（不推荐）
+
 ```bash
 git commit --no-verify
 ```
 
 ### 修复所有 Lint 错误
+
 ```bash
 npm run lint:fix
 ```
 
 ### 检查特定文件
+
 ```bash
 npx eslint path/to/file.js
 ```
@@ -76,6 +86,7 @@ npx eslint path/to/file.js
 ## 📊 当前状态
 
 当前有 3 个 Lint 错误需要修复（真实的代码问题）：
+
 - 2 个未使用变量的问题
 - 1 个错误处理的问题
 

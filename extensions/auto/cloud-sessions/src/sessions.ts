@@ -1,9 +1,9 @@
-import { readdir, stat, mkdir, readFile } from "node:fs/promises";
-import type { Dirent } from "node:fs";
-import { existsSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { join, relative } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { readdir, stat, mkdir, readFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join, relative } from 'node:path';
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
 
 export interface LocalSession {
 	relativePath: string;
@@ -14,24 +14,20 @@ export interface LocalSession {
 }
 
 export function sessionsRoot(): string {
-	return join(getAgentDir(), "sessions");
+	return join(getAgentDir(), 'sessions');
 }
 
 async function hashFile(absolutePath: string): Promise<string> {
 	const content = await readFile(absolutePath);
-	return createHash("sha256").update(content).digest("hex");
+	return createHash('sha256').update(content).digest('hex');
 }
 
-async function walkJsonl(
-	dir: string,
-	root: string,
-	out: LocalSession[],
-): Promise<void> {
+async function walkJsonl(dir: string, root: string, out: LocalSession[]): Promise<void> {
 	let entries: Dirent[];
 	try {
 		entries = await readdir(dir, { withFileTypes: true });
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
 		throw new Error(`Failed to read sessions directory: ${dir}`, {
 			cause: error,
 		});
@@ -43,7 +39,7 @@ async function walkJsonl(
 			await walkJsonl(full, root, out);
 			continue;
 		}
-		if (!entry.isFile() || !entry.name.endsWith(".jsonl")) {
+		if (!entry.isFile() || !entry.name.endsWith('.jsonl')) {
 			continue;
 		}
 		const info = await stat(full);

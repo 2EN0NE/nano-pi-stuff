@@ -8,25 +8,22 @@
 
 // ── Trigger: when to compact ────────────────────────────────────
 
-export type TriggerType = "context_percent" | "fixed" | "reserve";
+export type TriggerType = 'context_percent' | 'fixed' | 'reserve';
 
 export const TRIGGER_LABELS: Record<TriggerType, string> = {
-	context_percent: "Context percentage",
-	fixed: "Fixed token count",
-	reserve: "Reserve tokens",
+	context_percent: 'Context percentage',
+	fixed: 'Fixed token count',
+	reserve: 'Reserve tokens',
 };
 
 /** Describe what a trigger condition means */
-export function describeTrigger(trigger: {
-	type: TriggerType;
-	threshold: number;
-}): string {
+export function describeTrigger(trigger: { type: TriggerType; threshold: number }): string {
 	switch (trigger.type) {
-		case "context_percent":
+		case 'context_percent':
 			return `Compact at ${trigger.threshold}% context window usage`;
-		case "fixed":
+		case 'fixed':
 			return `Compact when tokens exceed ${trigger.threshold.toLocaleString()}`;
-		case "reserve":
+		case 'reserve':
 			return `Compact when remaining tokens < ${trigger.threshold.toLocaleString()}`;
 		default:
 			return `Unknown trigger`;
@@ -34,22 +31,19 @@ export function describeTrigger(trigger: {
 }
 
 /** Validate a trigger threshold */
-export function validateTriggerThreshold(
-	type: TriggerType,
-	value: number,
-): string | null {
+export function validateTriggerThreshold(type: TriggerType, value: number): string | null {
 	switch (type) {
-		case "context_percent":
+		case 'context_percent':
 			if (!Number.isFinite(value) || value < 1 || value > 99)
-				return "Threshold must be between 1 and 99";
+				return 'Threshold must be between 1 and 99';
 			break;
-		case "fixed":
+		case 'fixed':
 			if (!Number.isFinite(value) || value < 1000)
-				return "Token count must be at least 1,000";
+				return 'Token count must be at least 1,000';
 			break;
-		case "reserve":
+		case 'reserve':
 			if (!Number.isFinite(value) || value < 100)
-				return "Reserve must be at least 100 tokens";
+				return 'Reserve must be at least 100 tokens';
 			break;
 		default:
 			return `Unknown trigger type`;
@@ -59,25 +53,22 @@ export function validateTriggerThreshold(
 
 // ── Mechanism: how to compact ───────────────────────────────────
 
-export type MechanismType = "summarize" | "pass_through" | "adapter";
+export type MechanismType = 'summarize' | 'pass_through' | 'adapter';
 
 export const MECHANISM_LABELS: Record<MechanismType, string> = {
-	summarize: "LLM summarization",
-	pass_through: "Pass through (default Pi / other)",
-	adapter: "External adapter",
+	summarize: 'LLM summarization',
+	pass_through: 'Pass through (default Pi / other)',
+	adapter: 'External adapter',
 };
 
-export function describeMechanism(mechanism: {
-	type: MechanismType;
-	adapterId?: string;
-}): string {
+export function describeMechanism(mechanism: { type: MechanismType; adapterId?: string }): string {
 	switch (mechanism.type) {
-		case "summarize":
-			return "LLM full summary (custom prompt)";
-		case "pass_through":
-			return "Let Pi default or other extensions handle compaction";
-		case "adapter":
-			return `External adapter: ${mechanism.adapterId ?? "(none)"}`;
+		case 'summarize':
+			return 'LLM full summary (custom prompt)';
+		case 'pass_through':
+			return 'Let Pi default or other extensions handle compaction';
+		case 'adapter':
+			return `External adapter: ${mechanism.adapterId ?? '(none)'}`;
 	}
 }
 
@@ -107,7 +98,7 @@ export interface CompactionProfile {
 	 * - "current": use ctx.model (the currently active Pi model)
 	 * - "provider/modelId": use a specific model (e.g. "anthropic/claude-sonnet-4-20250514")
 	 */
-	model: "current" | `${string}/${string}`;
+	model: 'current' | `${string}/${string}`;
 	/** WHEN to compact */
 	trigger: TriggerCondition;
 	/** HOW to compact */
@@ -134,7 +125,7 @@ export interface CompactionConfig {
 // ── Default values ──────────────────────────────────────────────
 
 /** Default auto-continue message */
-export const DEFAULT_AUTO_CONTINUE_MESSAGE = "continue";
+export const DEFAULT_AUTO_CONTINUE_MESSAGE = 'continue';
 
 /** Default prompt used when a profile has no custom prompt */
 export const DEFAULT_COMPACTION_PROMPT = `You are a conversation summarizer. Create a comprehensive summary of this conversation that captures:
@@ -153,15 +144,15 @@ Format the summary as structured markdown with clear sections.`;
 /** Default profile shipped with the extension */
 export function createDefaultProfile(): CompactionProfile {
 	return {
-		id: "default",
-		name: "Default",
-		model: "current",
+		id: 'default',
+		name: 'Default',
+		model: 'current',
 		trigger: {
-			type: "context_percent",
+			type: 'context_percent',
 			threshold: 20,
 		},
 		mechanism: {
-			type: "summarize",
+			type: 'summarize',
 		},
 		prompt: DEFAULT_COMPACTION_PROMPT,
 		autoContinue: true,
@@ -174,6 +165,6 @@ export function createDefaultConfig(): CompactionConfig {
 		profiles: {
 			default: createDefaultProfile(),
 		},
-		activeProfileId: "default",
+		activeProfileId: 'default',
 	};
 }

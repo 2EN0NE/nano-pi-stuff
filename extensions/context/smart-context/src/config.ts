@@ -1,9 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type Complexity = "trivial" | "simple" | "medium" | "complex";
+export type Complexity = 'trivial' | 'simple' | 'medium' | 'complex';
 
 export interface ModelRef {
 	provider: string;
@@ -38,12 +38,12 @@ export interface SmartContextConfig {
 // ── Built-in profiles ──────────────────────────────────────────────
 
 const DEEPSEEK_FLASH: ModelRef = {
-	provider: "deepseek",
-	model: "deepseek-v4-flash",
+	provider: 'deepseek',
+	model: 'deepseek-v4-flash',
 };
 const DEEPSEEK_PRO: ModelRef = {
-	provider: "deepseek",
-	model: "deepseek-v4-pro",
+	provider: 'deepseek',
+	model: 'deepseek-v4-pro',
 };
 
 const BUILTIN_PROFILES: Record<string, ModelProfile> = {
@@ -94,17 +94,16 @@ const BUILTIN_PROFILES: Record<string, ModelProfile> = {
 };
 
 /** Default profile to use when nothing is configured */
-const DEFAULT_PROFILE_NAME = "balanced";
+const DEFAULT_PROFILE_NAME = 'balanced';
 
-const CONFIG_FILE = "smart-context.json";
+const CONFIG_FILE = 'smart-context.json';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
 function findProjectRoot(cwd: string): string | null {
 	let dir = cwd;
 	for (let i = 0; i < 12; i++) {
-		if (existsSync(join(dir, ".pi")) || existsSync(join(dir, ".git")))
-			return dir;
+		if (existsSync(join(dir, '.pi')) || existsSync(join(dir, '.git'))) return dir;
 		const parent = dirname(dir);
 		if (parent === dir) return null;
 		dir = parent;
@@ -115,7 +114,7 @@ function findProjectRoot(cwd: string): string | null {
 function configPath(cwd: string): string | null {
 	const root = findProjectRoot(cwd);
 	if (!root) return null;
-	return join(root, ".pi", CONFIG_FILE);
+	return join(root, '.pi', CONFIG_FILE);
 }
 
 function mergeRef(base: ModelRef, override?: Partial<ModelRef>): ModelRef {
@@ -127,17 +126,11 @@ function mergeRef(base: ModelRef, override?: Partial<ModelRef>): ModelRef {
 }
 
 /** Merge a partial flat config snippet onto a base profile */
-function mergeIntoProfile(
-	base: ModelProfile,
-	raw: Record<string, unknown>,
-): ModelProfile {
+function mergeIntoProfile(base: ModelProfile, raw: Record<string, unknown>): ModelProfile {
 	const rawClassifier = raw.classifier as Partial<ModelRef> | undefined;
-	const rawRouting = raw.routing as
-		| Partial<Record<Complexity, Partial<ModelRef>>>
-		| undefined;
+	const rawRouting = raw.routing as Partial<Record<Complexity, Partial<ModelRef>>> | undefined;
 	const rawLarge = raw.largeContext as
-		| { thresholdTokens?: number; model?: Partial<ModelRef> }
-		| undefined;
+		{ thresholdTokens?: number; model?: Partial<ModelRef> } | undefined;
 
 	const threshold = rawLarge?.thresholdTokens;
 
@@ -151,9 +144,7 @@ function mergeIntoProfile(
 		},
 		largeContext: {
 			thresholdTokens:
-				typeof threshold === "number" &&
-				Number.isFinite(threshold) &&
-				threshold > 0
+				typeof threshold === 'number' && Number.isFinite(threshold) && threshold > 0
 					? threshold
 					: base.largeContext.thresholdTokens,
 			model: mergeRef(base.largeContext.model, rawLarge?.model),
@@ -176,7 +167,7 @@ function loadConfigRaw(cwd: string): { raw: Record<string, unknown> } {
 	let raw: Record<string, unknown> = {};
 	if (path && existsSync(path)) {
 		try {
-			raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+			raw = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
 		} catch {
 			raw = {};
 		}
@@ -201,16 +192,13 @@ export function resolveProfile(cwd: string = process.cwd()): ModelProfile {
 	const { raw } = loadConfigRaw(cwd);
 
 	// ── Profile mode ────────────────────────────────────────────────
-	if (raw.profiles && typeof raw.profiles === "object") {
+	if (raw.profiles && typeof raw.profiles === 'object') {
 		const profileName =
-			typeof raw.activeProfile === "string" && raw.activeProfile
+			typeof raw.activeProfile === 'string' && raw.activeProfile
 				? raw.activeProfile
 				: DEFAULT_PROFILE_NAME;
 
-		const userProfiles = raw.profiles as Record<
-			string,
-			Record<string, unknown>
-		>;
+		const userProfiles = raw.profiles as Record<string, Record<string, unknown>>;
 
 		// Start from built-in, then overlay user-defined profiles
 		const allProfiles: Record<string, ModelProfile> = { ...BUILTIN_PROFILES };
@@ -230,9 +218,7 @@ export function resolveProfile(cwd: string = process.cwd()): ModelProfile {
 
 	// ── Legacy flat config mode ─────────────────────────────────────
 	const hasLegacyFields =
-		raw.classifier !== undefined ||
-		raw.routing !== undefined ||
-		raw.largeContext !== undefined;
+		raw.classifier !== undefined || raw.routing !== undefined || raw.largeContext !== undefined;
 
 	if (hasLegacyFields) {
 		return mergeIntoProfile(BUILTIN_PROFILES[DEFAULT_PROFILE_NAME], raw);

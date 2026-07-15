@@ -1,69 +1,69 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, writeFileSync, realpathSync } from "fs";
-import { spawnSync, execSync } from "child_process";
-import { homedir } from "os";
-import { dirname, isAbsolute, join, resolve } from "path";
-import { fileURLToPath, pathToFileURL } from "url";
+import { existsSync, readFileSync, writeFileSync, realpathSync } from 'fs';
+import { spawnSync, execSync } from 'child_process';
+import { homedir } from 'os';
+import { dirname, isAbsolute, join, resolve } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 function parseArgs(argv) {
 	const out = {
 		provider: undefined,
 		model: undefined,
-		purpose: "general research support",
+		purpose: 'general research support',
 		timeoutMs: 120000,
 		json: false,
 		help: false,
-		query: "",
+		query: '',
 	};
 
 	const positional = [];
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
-		if (arg === "--help" || arg === "-h") {
+		if (arg === '--help' || arg === '-h') {
 			out.help = true;
 			continue;
 		}
-		if (arg === "--json") {
+		if (arg === '--json') {
 			out.json = true;
 			continue;
 		}
-		if (arg === "--provider") {
+		if (arg === '--provider') {
 			out.provider = argv[++i];
 			continue;
 		}
-		if (arg.startsWith("--provider=")) {
-			out.provider = arg.slice("--provider=".length);
+		if (arg.startsWith('--provider=')) {
+			out.provider = arg.slice('--provider='.length);
 			continue;
 		}
-		if (arg === "--model") {
+		if (arg === '--model') {
 			out.model = argv[++i];
 			continue;
 		}
-		if (arg.startsWith("--model=")) {
-			out.model = arg.slice("--model=".length);
+		if (arg.startsWith('--model=')) {
+			out.model = arg.slice('--model='.length);
 			continue;
 		}
-		if (arg === "--purpose") {
+		if (arg === '--purpose') {
 			out.purpose = argv[++i] || out.purpose;
 			continue;
 		}
-		if (arg.startsWith("--purpose=")) {
-			out.purpose = arg.slice("--purpose=".length) || out.purpose;
+		if (arg.startsWith('--purpose=')) {
+			out.purpose = arg.slice('--purpose='.length) || out.purpose;
 			continue;
 		}
-		if (arg === "--timeout") {
+		if (arg === '--timeout') {
 			out.timeoutMs = Math.max(1000, Number(argv[++i] || out.timeoutMs));
 			continue;
 		}
-		if (arg.startsWith("--timeout=")) {
-			out.timeoutMs = Math.max(1000, Number(arg.slice("--timeout=".length) || out.timeoutMs));
+		if (arg.startsWith('--timeout=')) {
+			out.timeoutMs = Math.max(1000, Number(arg.slice('--timeout='.length) || out.timeoutMs));
 			continue;
 		}
 		positional.push(arg);
 	}
 
-	out.query = positional.join(" ").trim();
+	out.query = positional.join(' ').trim();
 	return out;
 }
 
@@ -80,24 +80,24 @@ Examples:
 function readJson(path, fallback = {}) {
 	if (!existsSync(path)) return fallback;
 	try {
-		return JSON.parse(readFileSync(path, "utf8"));
+		return JSON.parse(readFileSync(path, 'utf8'));
 	} catch {
 		return fallback;
 	}
 }
 
 function writeJson(path, value) {
-	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
 function resolveConfigValue(config) {
-	if (typeof config !== "string" || !config) return undefined;
-	if (config.startsWith("!")) {
+	if (typeof config !== 'string' || !config) return undefined;
+	if (config.startsWith('!')) {
 		try {
 			const out = execSync(config.slice(1), {
-				encoding: "utf8",
+				encoding: 'utf8',
 				timeout: 10000,
-				stdio: ["ignore", "pipe", "ignore"],
+				stdio: ['ignore', 'pipe', 'ignore'],
 			}).trim();
 			return out || undefined;
 		} catch {
@@ -109,17 +109,17 @@ function resolveConfigValue(config) {
 
 function getAgentDir() {
 	const configured = process.env.PI_CODING_AGENT_DIR;
-	if (!configured) return join(homedir(), ".pi", "agent");
-	if (configured === "~") return homedir();
-	if (configured.startsWith("~/")) return join(homedir(), configured.slice(2));
+	if (!configured) return join(homedir(), '.pi', 'agent');
+	if (configured === '~') return homedir();
+	if (configured.startsWith('~/')) return join(homedir(), configured.slice(2));
 	return configured;
 }
 
 function normalizeProvider(provider) {
 	if (!provider) return undefined;
 	const p = String(provider).toLowerCase().trim();
-	if (p.includes("anthropic") || p.includes("claude")) return "anthropic";
-	if (p.includes("codex") || p === "openai" || p.startsWith("openai")) return "openai-codex";
+	if (p.includes('anthropic') || p.includes('claude')) return 'anthropic';
+	if (p.includes('codex') || p === 'openai' || p.startsWith('openai')) return 'openai-codex';
 	return undefined;
 }
 
@@ -130,27 +130,27 @@ function pickProvider(argProvider, settings, auth) {
 	const fromSettings = normalizeProvider(settings?.defaultProvider);
 	if (fromSettings) return fromSettings;
 
-	if (auth?.["openai-codex"]) return "openai-codex";
-	if (auth?.anthropic) return "anthropic";
+	if (auth?.['openai-codex']) return 'openai-codex';
+	if (auth?.anthropic) return 'anthropic';
 
-	throw new Error("Could not determine provider. Pass --provider openai-codex|anthropic");
+	throw new Error('Could not determine provider. Pass --provider openai-codex|anthropic');
 }
 
 function decodeJwtAccountId(jwt) {
-	if (!jwt || typeof jwt !== "string") return undefined;
+	if (!jwt || typeof jwt !== 'string') return undefined;
 	try {
-		const parts = jwt.split(".");
+		const parts = jwt.split('.');
 		if (parts.length !== 3) return undefined;
-		const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-		return payload?.["https://api.openai.com/auth"]?.chatgpt_account_id;
+		const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+		return payload?.['https://api.openai.com/auth']?.chatgpt_account_id;
 	} catch {
 		return undefined;
 	}
 }
 
 function findPiExecutable() {
-	const cmd = process.platform === "win32" ? "where" : "which";
-	const result = spawnSync(cmd, ["pi"], { encoding: "utf8" });
+	const cmd = process.platform === 'win32' ? 'where' : 'which';
+	const result = spawnSync(cmd, ['pi'], { encoding: 'utf8' });
 	if (result.status !== 0) return undefined;
 	const first = result.stdout
 		.split(/\r?\n/)
@@ -159,7 +159,7 @@ function findPiExecutable() {
 	return first || undefined;
 }
 
-function collectModuleCandidates(fileName = "index.js", envVarName = "PI_AI_MODULE_PATH") {
+function collectModuleCandidates(fileName = 'index.js', envVarName = 'PI_AI_MODULE_PATH') {
 	const candidates = new Set();
 
 	const add = (p) => {
@@ -175,9 +175,9 @@ function collectModuleCandidates(fileName = "index.js", envVarName = "PI_AI_MODU
 	for (const start of [cwd, scriptDir]) {
 		let dir = start;
 		for (let i = 0; i < 8; i++) {
-			add(join(dir, "node_modules", "@earendil-works", "pi-ai", "dist", fileName));
-			add(join(dir, "packages", "ai", "dist", fileName));
-			add(join(dir, "ai", "dist", fileName));
+			add(join(dir, 'node_modules', '@earendil-works', 'pi-ai', 'dist', fileName));
+			add(join(dir, 'packages', 'ai', 'dist', fileName));
+			add(join(dir, 'ai', 'dist', fileName));
 			const parent = dirname(dir);
 			if (parent === dir) break;
 			dir = parent;
@@ -189,16 +189,27 @@ function collectModuleCandidates(fileName = "index.js", envVarName = "PI_AI_MODU
 		try {
 			const piReal = realpathSync(piExec);
 			const piDir = dirname(piReal);
-			add(join(piDir, "..", "..", "ai", "dist", fileName));
-			add(join(piDir, "..", "..", "pi-ai", "dist", fileName));
-			add(join(piDir, "..", "node_modules", "@earendil-works", "pi-ai", "dist", fileName));
-			add(join(piDir, "..", "..", "node_modules", "@earendil-works", "pi-ai", "dist", fileName));
+			add(join(piDir, '..', '..', 'ai', 'dist', fileName));
+			add(join(piDir, '..', '..', 'pi-ai', 'dist', fileName));
+			add(join(piDir, '..', 'node_modules', '@earendil-works', 'pi-ai', 'dist', fileName));
+			add(
+				join(
+					piDir,
+					'..',
+					'..',
+					'node_modules',
+					'@earendil-works',
+					'pi-ai',
+					'dist',
+					fileName,
+				),
+			);
 		} catch {
 			// ignore
 		}
 	}
 
-	add(join(homedir(), "Development", "pi-mono", "packages", "ai", "dist", fileName));
+	add(join(homedir(), 'Development', 'pi-mono', 'packages', 'ai', 'dist', fileName));
 
 	return Array.from(candidates);
 }
@@ -207,68 +218,68 @@ async function loadPiAi() {
 	const tried = [];
 
 	try {
-		return await import("@earendil-works/pi-ai");
+		return await import('@earendil-works/pi-ai');
 	} catch (err) {
-		tried.push(`@earendil-works/pi-ai (${err?.code || err?.message || "not found"})`);
+		tried.push(`@earendil-works/pi-ai (${err?.code || err?.message || 'not found'})`);
 	}
 
-	for (const candidate of collectModuleCandidates("index.js", "PI_AI_MODULE_PATH")) {
+	for (const candidate of collectModuleCandidates('index.js', 'PI_AI_MODULE_PATH')) {
 		if (!existsSync(candidate)) continue;
 		try {
 			return await import(pathToFileURL(candidate).href);
 		} catch (err) {
-			tried.push(`${candidate} (${err?.code || err?.message || "failed"})`);
+			tried.push(`${candidate} (${err?.code || err?.message || 'failed'})`);
 		}
 	}
 
 	throw new Error(
-		`Could not load @earendil-works/pi-ai. Set PI_AI_MODULE_PATH to its dist/index.js.\nTried:\n- ${tried.join("\n- ")}`,
+		`Could not load @earendil-works/pi-ai. Set PI_AI_MODULE_PATH to its dist/index.js.\nTried:\n- ${tried.join('\n- ')}`,
 	);
 }
 
 async function loadPiAiOAuth(piAi) {
-	if (typeof piAi?.getOAuthApiKey === "function") {
+	if (typeof piAi?.getOAuthApiKey === 'function') {
 		return { getOAuthApiKey: piAi.getOAuthApiKey.bind(piAi) };
 	}
 
 	const tried = [];
 
 	try {
-		const oauth = await import("@earendil-works/pi-ai/oauth");
-		if (typeof oauth.getOAuthApiKey === "function") {
+		const oauth = await import('@earendil-works/pi-ai/oauth');
+		if (typeof oauth.getOAuthApiKey === 'function') {
 			return { getOAuthApiKey: oauth.getOAuthApiKey.bind(oauth) };
 		}
-		tried.push("@earendil-works/pi-ai/oauth (missing getOAuthApiKey export)");
+		tried.push('@earendil-works/pi-ai/oauth (missing getOAuthApiKey export)');
 	} catch (err) {
-		tried.push(`@earendil-works/pi-ai/oauth (${err?.code || err?.message || "not found"})`);
+		tried.push(`@earendil-works/pi-ai/oauth (${err?.code || err?.message || 'not found'})`);
 	}
 
-	for (const candidate of collectModuleCandidates("oauth.js", "PI_AI_OAUTH_MODULE_PATH")) {
+	for (const candidate of collectModuleCandidates('oauth.js', 'PI_AI_OAUTH_MODULE_PATH')) {
 		if (!existsSync(candidate)) continue;
 		try {
 			const oauth = await import(pathToFileURL(candidate).href);
-			if (typeof oauth.getOAuthApiKey === "function") {
+			if (typeof oauth.getOAuthApiKey === 'function') {
 				return { getOAuthApiKey: oauth.getOAuthApiKey.bind(oauth) };
 			}
 			tried.push(`${candidate} (missing getOAuthApiKey export)`);
 		} catch (err) {
-			tried.push(`${candidate} (${err?.code || err?.message || "failed"})`);
+			tried.push(`${candidate} (${err?.code || err?.message || 'failed'})`);
 		}
 	}
 
 	return {
 		getOAuthApiKey: undefined,
-		error: `Could not load getOAuthApiKey. Set PI_AI_OAUTH_MODULE_PATH to pi-ai dist/oauth.js.\nTried:\n- ${tried.join("\n- ")}`,
+		error: `Could not load getOAuthApiKey. Set PI_AI_OAUTH_MODULE_PATH to pi-ai dist/oauth.js.\nTried:\n- ${tried.join('\n- ')}`,
 	};
 }
 
 function parseExpiryTimestamp(expires) {
-	if (typeof expires === "number" && Number.isFinite(expires)) {
+	if (typeof expires === 'number' && Number.isFinite(expires)) {
 		if (expires <= 0) return undefined;
 		return expires < 1_000_000_000_000 ? expires * 1000 : expires;
 	}
 
-	if (typeof expires === "string") {
+	if (typeof expires === 'string') {
 		const trimmed = expires.trim();
 		if (!trimmed) return undefined;
 
@@ -285,7 +296,7 @@ function parseExpiryTimestamp(expires) {
 }
 
 function getCachedOAuthAccess(entry, now = Date.now()) {
-	if (!entry || typeof entry !== "object") return undefined;
+	if (!entry || typeof entry !== 'object') return undefined;
 
 	const apiKey = resolveConfigValue(entry.access);
 	if (!apiKey) return undefined;
@@ -302,11 +313,12 @@ function getCachedOAuthAccess(entry, now = Date.now()) {
 }
 
 function pickFastModel(provider, requestedModel, piAi) {
-	const models = typeof piAi.getModels === "function" ? piAi.getModels(provider) : [];
+	const models = typeof piAi.getModels === 'function' ? piAi.getModels(provider) : [];
 	if (!Array.isArray(models) || models.length === 0) {
 		if (requestedModel) return { id: requestedModel, baseUrl: undefined };
-		if (provider === "openai-codex") return { id: "gpt-5.4-mini", baseUrl: "https://chatgpt.com/backend-api" };
-		return { id: "claude-haiku-4-5", baseUrl: "https://api.anthropic.com" };
+		if (provider === 'openai-codex')
+			return { id: 'gpt-5.4-mini', baseUrl: 'https://chatgpt.com/backend-api' };
+		return { id: 'claude-haiku-4-5', baseUrl: 'https://api.anthropic.com' };
 	}
 
 	if (requestedModel) {
@@ -316,9 +328,9 @@ function pickFastModel(provider, requestedModel, piAi) {
 	}
 
 	const preferredIds =
-		provider === "openai-codex"
-			? ["gpt-5.4-mini", "gpt-5.3-codex-spark", "gpt-5.1", "gpt-5.1-codex-mini"]
-			: ["claude-haiku-4-5", "claude-3-5-haiku-latest", "claude-3-5-haiku-20241022"];
+		provider === 'openai-codex'
+			? ['gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.1', 'gpt-5.1-codex-mini']
+			: ['claude-haiku-4-5', 'claude-3-5-haiku-latest', 'claude-3-5-haiku-20241022'];
 
 	for (const id of preferredIds) {
 		const found = models.find((m) => m.id === id);
@@ -335,29 +347,32 @@ async function resolveApiKey(provider, auth, authPath, piAi) {
 		throw new Error(`No credentials for provider '${provider}' in ${authPath}`);
 	}
 
-	const inferredType = entry.type || (entry.access && entry.refresh ? "oauth" : entry.key ? "api_key" : undefined);
+	const inferredType =
+		entry.type || (entry.access && entry.refresh ? 'oauth' : entry.key ? 'api_key' : undefined);
 
-	if (inferredType === "api_key") {
+	if (inferredType === 'api_key') {
 		const key = resolveConfigValue(entry.key);
 		if (!key) throw new Error(`API key for ${provider} is empty or unresolved.`);
 		return { apiKey: key, accountId: entry.accountId };
 	}
 
-	if (inferredType !== "oauth") {
-		throw new Error(`Unsupported credential type for ${provider}: ${String(entry.type || "unknown")}`);
+	if (inferredType !== 'oauth') {
+		throw new Error(
+			`Unsupported credential type for ${provider}: ${String(entry.type || 'unknown')}`,
+		);
 	}
 
 	const fallbackToken = getCachedOAuthAccess(entry);
 	const oauth = await loadPiAiOAuth(piAi);
 
-	if (typeof oauth.getOAuthApiKey !== "function") {
+	if (typeof oauth.getOAuthApiKey !== 'function') {
 		if (fallbackToken) return fallbackToken;
-		throw new Error(oauth.error || "Loaded pi-ai module does not export getOAuthApiKey");
+		throw new Error(oauth.error || 'Loaded pi-ai module does not export getOAuthApiKey');
 	}
 
 	const oauthCreds = {};
 	for (const [k, v] of Object.entries(auth || {})) {
-		if (v && (v.type === "oauth" || (v.access && v.refresh && v.expires))) {
+		if (v && (v.type === 'oauth' || (v.access && v.refresh && v.expires))) {
 			oauthCreds[k] = v;
 		}
 	}
@@ -375,7 +390,7 @@ async function resolveApiKey(provider, auth, authPath, piAi) {
 		throw new Error(`No OAuth credentials available for provider '${provider}'`);
 	}
 
-	const mergedCred = { type: "oauth", ...(entry || {}), ...(refreshed.newCredentials || {}) };
+	const mergedCred = { type: 'oauth', ...(entry || {}), ...(refreshed.newCredentials || {}) };
 	auth[provider] = mergedCred;
 	writeJson(authPath, auth);
 
@@ -390,31 +405,31 @@ function buildUserPrompt(query, purpose) {
 }
 
 function buildSystemPrompt() {
-	return "You are a fast web research assistant. Always produce practical summaries and include full source URLs (no shortened links).";
+	return 'You are a fast web research assistant. Always produce practical summaries and include full source URLs (no shortened links).';
 }
 
-function resolveCodexUrl(baseUrl = "https://chatgpt.com/backend-api") {
-	const normalized = String(baseUrl || "https://chatgpt.com/backend-api").replace(/\/+$/, "");
-	if (normalized.endsWith("/codex/responses")) return normalized;
-	if (normalized.endsWith("/codex")) return `${normalized}/responses`;
+function resolveCodexUrl(baseUrl = 'https://chatgpt.com/backend-api') {
+	const normalized = String(baseUrl || 'https://chatgpt.com/backend-api').replace(/\/+$/, '');
+	if (normalized.endsWith('/codex/responses')) return normalized;
+	if (normalized.endsWith('/codex')) return `${normalized}/responses`;
 	return `${normalized}/codex/responses`;
 }
 
 function extractEventData(chunk) {
 	const payload = chunk
 		.split(/\r?\n/)
-		.filter((line) => line.startsWith("data:"))
+		.filter((line) => line.startsWith('data:'))
 		.map((line) => line.slice(5).trim())
-		.join("\n")
+		.join('\n')
 		.trim();
-	if (!payload || payload === "[DONE]") return null;
+	if (!payload || payload === '[DONE]') return null;
 	return payload;
 }
 
 async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeoutMs, baseUrl }) {
 	const tokenAccountId = accountId || decodeJwtAccountId(apiKey);
 	if (!tokenAccountId) {
-		throw new Error("Could not determine ChatGPT account ID for openai-codex token.");
+		throw new Error('Could not determine ChatGPT account ID for openai-codex token.');
 	}
 
 	const body = {
@@ -422,23 +437,26 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 		store: false,
 		stream: true,
 		instructions: buildSystemPrompt(),
-		input: [{ role: "user", content: buildUserPrompt(query, purpose) }],
-		tools: [{ type: "web_search" }],
-		tool_choice: "auto",
+		input: [{ role: 'user', content: buildUserPrompt(query, purpose) }],
+		tools: [{ type: 'web_search' }],
+		tool_choice: 'auto',
 	};
 
 	const endpoint = resolveCodexUrl(baseUrl);
-	const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined;
+	const signal =
+		typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+			? AbortSignal.timeout(timeoutMs)
+			: undefined;
 
 	const res = await fetch(endpoint, {
-		method: "POST",
+		method: 'POST',
 		headers: {
 			authorization: `Bearer ${apiKey}`,
-			"chatgpt-account-id": tokenAccountId,
-			"content-type": "application/json",
-			accept: "text/event-stream",
-			"OpenAI-Beta": "responses=experimental",
-			originator: "pi-native-web-search-skill",
+			'chatgpt-account-id': tokenAccountId,
+			'content-type': 'application/json',
+			accept: 'text/event-stream',
+			'OpenAI-Beta': 'responses=experimental',
+			originator: 'pi-native-web-search-skill',
 		},
 		body: JSON.stringify(body),
 		signal,
@@ -449,25 +467,25 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 		throw new Error(`Codex request failed (${res.status}): ${detail}`);
 	}
 	if (!res.body) {
-		throw new Error("Codex response had no body");
+		throw new Error('Codex response had no body');
 	}
 
 	const reader = res.body.getReader();
 	const decoder = new TextDecoder();
-	let buffer = "";
-	let text = "";
-	let fallbackText = "";
+	let buffer = '';
+	let text = '';
+	let fallbackText = '';
 
 	while (true) {
 		const { done, value } = await reader.read();
 		if (done) break;
 		buffer += decoder.decode(value, { stream: true });
 
-		let idx = buffer.indexOf("\n\n");
+		let idx = buffer.indexOf('\n\n');
 		while (idx !== -1) {
 			const chunk = buffer.slice(0, idx);
 			buffer = buffer.slice(idx + 2);
-			idx = buffer.indexOf("\n\n");
+			idx = buffer.indexOf('\n\n');
 
 			const data = extractEventData(chunk);
 			if (!data) continue;
@@ -479,55 +497,55 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 				continue;
 			}
 
-			if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+			if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
 				text += event.delta;
 			}
 
-			if (event.type === "response.output_item.done" && event.item?.type === "message") {
+			if (event.type === 'response.output_item.done' && event.item?.type === 'message') {
 				const parts = Array.isArray(event.item?.content) ? event.item.content : [];
 				const full = parts
-					.filter((p) => p.type === "output_text" && typeof p.text === "string")
+					.filter((p) => p.type === 'output_text' && typeof p.text === 'string')
 					.map((p) => p.text)
-					.join("\n");
+					.join('\n');
 				if (full) fallbackText = full;
 			}
 
-			if (event.type === "error") {
-				throw new Error(event.message || "Codex stream failed");
+			if (event.type === 'error') {
+				throw new Error(event.message || 'Codex stream failed');
 			}
 
-			if (event.type === "response.failed") {
-				throw new Error(event.response?.error?.message || "Codex response failed");
+			if (event.type === 'response.failed') {
+				throw new Error(event.response?.error?.message || 'Codex response failed');
 			}
 		}
 	}
 
-	const finalText = (text || fallbackText || "").trim();
+	const finalText = (text || fallbackText || '').trim();
 	if (!finalText) {
-		throw new Error("Codex returned an empty response");
+		throw new Error('Codex returned an empty response');
 	}
 	return finalText;
 }
 
 function buildAnthropicHeaders(apiKey) {
-	const oauthToken = typeof apiKey === "string" && apiKey.includes("sk-ant-oat");
+	const oauthToken = typeof apiKey === 'string' && apiKey.includes('sk-ant-oat');
 	if (oauthToken) {
 		return {
 			authorization: `Bearer ${apiKey}`,
-			"anthropic-version": "2023-06-01",
-			"anthropic-beta": "claude-code-20250219,oauth-2025-04-20,web-search-2025-03-05",
-			"content-type": "application/json",
-			accept: "application/json",
-			"x-app": "cli",
-			"user-agent": "claude-cli/1.0.72 (external, cli)",
+			'anthropic-version': '2023-06-01',
+			'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20,web-search-2025-03-05',
+			'content-type': 'application/json',
+			accept: 'application/json',
+			'x-app': 'cli',
+			'user-agent': 'claude-cli/1.0.72 (external, cli)',
 		};
 	}
 	return {
-		"x-api-key": apiKey,
-		"anthropic-version": "2023-06-01",
-		"anthropic-beta": "web-search-2025-03-05",
-		"content-type": "application/json",
-		accept: "application/json",
+		'x-api-key': apiKey,
+		'anthropic-version': '2023-06-01',
+		'anthropic-beta': 'web-search-2025-03-05',
+		'content-type': 'application/json',
+		accept: 'application/json',
 	};
 }
 
@@ -537,14 +555,17 @@ async function runAnthropicSearch({ model, apiKey, query, purpose, timeoutMs }) 
 		max_tokens: 1800,
 		temperature: 0,
 		system: buildSystemPrompt(),
-		tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
-		messages: [{ role: "user", content: buildUserPrompt(query, purpose) }],
+		tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+		messages: [{ role: 'user', content: buildUserPrompt(query, purpose) }],
 	};
 
-	const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined;
+	const signal =
+		typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+			? AbortSignal.timeout(timeoutMs)
+			: undefined;
 
-	const res = await fetch("https://api.anthropic.com/v1/messages", {
-		method: "POST",
+	const res = await fetch('https://api.anthropic.com/v1/messages', {
+		method: 'POST',
 		headers: buildAnthropicHeaders(apiKey),
 		body: JSON.stringify(body),
 		signal,
@@ -559,17 +580,17 @@ async function runAnthropicSearch({ model, apiKey, query, purpose, timeoutMs }) 
 	try {
 		parsed = JSON.parse(payload);
 	} catch {
-		throw new Error("Anthropic returned non-JSON response");
+		throw new Error('Anthropic returned non-JSON response');
 	}
 
 	const text = (parsed.content || [])
-		.filter((item) => item.type === "text" && typeof item.text === "string")
+		.filter((item) => item.type === 'text' && typeof item.text === 'string')
 		.map((item) => item.text)
-		.join("\n\n")
+		.join('\n\n')
 		.trim();
 
 	if (!text) {
-		throw new Error("Anthropic returned no text content");
+		throw new Error('Anthropic returned no text content');
 	}
 
 	return text;
@@ -583,8 +604,8 @@ async function main() {
 	}
 
 	const agentDir = getAgentDir();
-	const authPath = join(agentDir, "auth.json");
-	const settingsPath = join(agentDir, "settings.json");
+	const authPath = join(agentDir, 'auth.json');
+	const settingsPath = join(agentDir, 'settings.json');
 	const auth = readJson(authPath, {});
 	const settings = readJson(settingsPath, {});
 
@@ -594,7 +615,7 @@ async function main() {
 	const { apiKey, accountId } = await resolveApiKey(provider, auth, authPath, piAi);
 
 	const text =
-		provider === "openai-codex"
+		provider === 'openai-codex'
 			? await runCodexSearch({
 					model: model.id,
 					apiKey,
@@ -603,14 +624,14 @@ async function main() {
 					purpose: args.purpose,
 					timeoutMs: args.timeoutMs,
 					baseUrl: model.baseUrl,
-			  })
+				})
 			: await runAnthropicSearch({
 					model: model.id,
 					apiKey,
 					query: args.query,
 					purpose: args.purpose,
 					timeoutMs: args.timeoutMs,
-			  });
+				});
 
 	if (args.json) {
 		console.log(
@@ -631,7 +652,7 @@ async function main() {
 
 	console.log(`Provider: ${provider}`);
 	console.log(`Model: ${model.id}`);
-	console.log("");
+	console.log('');
 	console.log(text);
 }
 

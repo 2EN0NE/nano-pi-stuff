@@ -1,8 +1,8 @@
 ---
 name: e2e-test
 description: >
-  完成扩展或技能的编码修改后，按标准流程搭建隔离环境进行端到端集成测试并生成可查阅的测试报告。
-  包含依赖检测、场景设计、测试执行、AI 衡量非标结果、结果报告全流程。
+    完成扩展或技能的编码修改后，按标准流程搭建隔离环境进行端到端集成测试并生成可查阅的测试报告。
+    包含依赖检测、场景设计、测试执行、AI 衡量非标结果、结果报告全流程。
 ---
 
 # End-to-End Test
@@ -39,11 +39,11 @@ description: >
 
 根据类型确定对应的测试模块路径：
 
-| 源模块 | 测试模块路径 |
-|--------|------------|
+| 源模块              | 测试模块路径                        |
+| ------------------- | ----------------------------------- |
 | `extensions/foo.ts` | `test/extensions/foo/smoke.test.sh` |
-| `extensions/foo/` | `test/extensions/foo/smoke.test.sh` |
-| `skills/foo/` | `test/skills/foo/smoke.test.sh` |
+| `extensions/foo/`   | `test/extensions/foo/smoke.test.sh` |
+| `skills/foo/`       | `test/skills/foo/smoke.test.sh`     |
 
 ---
 
@@ -53,8 +53,8 @@ description: >
 
 1. **读取修改的 `.ts` 文件**
 2. **查找本地 import**（以 `./` 或 `../` 开头）：
-   - `from "./pi-logger/api.js"` → 依赖 `pi-logger`
-   - `from "../resources-tree/scanner.js"` → 依赖 `resources-tree`
+    - `from "./pi-logger/api.js"` → 依赖 `pi-logger`
+    - `from "../resources-tree/scanner.js"` → 依赖 `resources-tree`
 3. **查找扩展间依赖**（通过 `pi.on` / `pi.registerTool` 等 API 间接引用）
 4. **列出所有需要一同拷贝的依赖扩展**
 
@@ -74,13 +74,13 @@ description: >
 
 ### 场景类型
 
-| 类型 | 测试方法 | 判定方式 |
-|------|---------|---------|
-| **加载** | `pi -a --no-session -p "hi"` | 检查 exit code=0、日志无 ERROR |
-| **工具调用** | prompt 中要求 LLM 调用该工具 | 检查 stdout 含预期输出 |
-| **命令** | prompt 中包含 `/command` | 检查 stdout 含命令反馈 |
-| **日志输出** | 检查 `test/results/.../cases/*-logs/` | grep 关键日志行 |
-| **技能加载** | prompt 中要求加载技能 | 检查 `<available_skills>` 中技能名 |
+| 类型         | 测试方法                              | 判定方式                           |
+| ------------ | ------------------------------------- | ---------------------------------- |
+| **加载**     | `pi -a --no-session -p "hi"`          | 检查 exit code=0、日志无 ERROR     |
+| **工具调用** | prompt 中要求 LLM 调用该工具          | 检查 stdout 含预期输出             |
+| **命令**     | prompt 中包含 `/command`              | 检查 stdout 含命令反馈             |
+| **日志输出** | 检查 `test/results/.../cases/*-logs/` | grep 关键日志行                    |
+| **技能加载** | prompt 中要求加载技能                 | 检查 `<available_skills>` 中技能名 |
 
 ### 设计原则
 
@@ -213,11 +213,11 @@ grep "\[REVIEW\]" test/results/$LATEST/summary.md
 
 - **如果 `[REVIEW]` 总计 ≤ 20 条** → 由 AI 全部逐条衡量判断
 - **如果 `[REVIEW]` 总计 > 20 条** → **停止逐条衡量**，输出 warning：
-  > ⚠️ 当前 REVIEW 用例数 (N) 超过阈值 (20)，非标准化结果过多，
-  > 不适宜由 AI 全量判断。请用户手动比对 case 日志与预期结果。
-  >
-  > 建议：将大规模场景拆分为多个小批量测试，或将 REVIEW 用例改为
-  > 自动化判断形式。
+    > ⚠️ 当前 REVIEW 用例数 (N) 超过阈值 (20)，非标准化结果过多，
+    > 不适宜由 AI 全量判断。请用户手动比对 case 日志与预期结果。
+    >
+    > 建议：将大规模场景拆分为多个小批量测试，或将 REVIEW 用例改为
+    > 自动化判断形式。
 
 ---
 

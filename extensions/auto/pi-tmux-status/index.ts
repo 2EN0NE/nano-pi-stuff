@@ -26,15 +26,15 @@
  * 不使用轮询、不通过 import 耦合、selector 不感知 tmux 概念。
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 
-const STATE_DIR = "/tmp/pi-tmux-state";
+const STATE_DIR = '/tmp/pi-tmux-state';
 
-let currentState = "green";
-let currentSessionId = "";
+let currentState = 'green';
+let currentSessionId = '';
 let tmuxPaneId: string | null = null;
 
 function isInTmux(): boolean {
@@ -53,7 +53,7 @@ function setState(state: string): void {
 	if (!fp) return;
 	try {
 		if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
-		writeFileSync(fp, `${state}|${currentSessionId}`, "utf-8");
+		writeFileSync(fp, `${state}|${currentSessionId}`, 'utf-8');
 	} catch {
 		/* 静默 */
 	}
@@ -74,21 +74,16 @@ function cleanup() {
 
 /** 更新底部窗口页签背景色（window 级，只影响当前窗口） */
 function updateWindowTab(state: string): void {
-	const tabBg =
-		state === "yellow"
-			? "colour226"
-			: state === "red"
-				? "colour196"
-				: "colour82";
+	const tabBg = state === 'yellow' ? 'colour226' : state === 'red' ? 'colour196' : 'colour82';
 	try {
 		execSync(`tmux set -w window-status-style "bg=${tabBg}"`, {
-			stdio: "ignore",
+			stdio: 'ignore',
 			timeout: 300,
 		});
-		execSync(
-			`tmux set -w window-status-current-style "bg=${tabBg},fg=colour232,bold"`,
-			{ stdio: "ignore", timeout: 300 },
-		);
+		execSync(`tmux set -w window-status-current-style "bg=${tabBg},fg=colour232,bold"`, {
+			stdio: 'ignore',
+			timeout: 300,
+		});
 	} catch {
 		/* tmux 命令失败时静默 */
 	}
@@ -96,29 +91,29 @@ function updateWindowTab(state: string): void {
 
 export default function (pi: ExtensionAPI) {
 	if (!isInTmux()) {
-		console.warn("[pi-tmux-status] 不在 tmux 中，已跳过");
+		console.warn('[pi-tmux-status] 不在 tmux 中，已跳过');
 		return;
 	}
 
 	tmuxPaneId = process.env.TMUX_PANE ?? null;
 
-	let stateBeforeDialog = "green";
+	let stateBeforeDialog = 'green';
 
 	// 注册对话框事件回调（selector 通过此回调通知 dialog 状态变化）
 	(globalThis as any).__piOnDialogChange = (isOpen: boolean) => {
 		if (isOpen) {
 			stateBeforeDialog = currentState;
-			setState("red");
+			setState('red');
 		} else {
 			setState(stateBeforeDialog);
 		}
 	};
 
 	// 初始状态：绿色
-	setState("green");
+	setState('green');
 
 	// session_start → 获取 session ID
-	pi.on("session_start", async (_event, ctx) => {
+	pi.on('session_start', async (_event, ctx) => {
 		const sid = ctx.sessionManager.getSessionId();
 		if (sid) {
 			currentSessionId = sid.slice(0, 12);
@@ -127,17 +122,17 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// 🟡 turn_start → 执行中
-	pi.on("turn_start", async () => {
-		setState("yellow");
+	pi.on('turn_start', async () => {
+		setState('yellow');
 	});
 
 	// 🟢 agent_settled → 空闲
-	pi.on("agent_settled", async () => {
-		setState("green");
+	pi.on('agent_settled', async () => {
+		setState('green');
 	});
 
 	// 清理
-	pi.on("session_shutdown", async () => {
+	pi.on('session_shutdown', async () => {
 		cleanup();
 		delete (globalThis as any).__piOnDialogChange;
 	});

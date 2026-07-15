@@ -1,40 +1,27 @@
-import { createLogger } from "@zenone/pi-logger";
-import {
-	ANIMS,
-	FOX_WIDTH,
-	PALETTE,
-	scaleGrid,
-	type FoxState,
-	type RGB,
-} from "./fox-art.js";
-import { FoxRunMotion, renderRunGrid } from "./fox-run-motion.js";
+import { createLogger } from '@zenone/pi-logger';
+import { ANIMS, FOX_WIDTH, PALETTE, scaleGrid, type FoxState, type RGB } from './fox-art.js';
+import { FoxRunMotion, renderRunGrid } from './fox-run-motion.js';
 
-const log = createLogger("catch-the-fox:fox-widget");
+const log = createLogger('catch-the-fox:fox-widget');
 
-const ESC = "\x1b[";
+const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
 const fg = ([r, g, b]: RGB) => `${ESC}38;2;${r};${g};${b}m`;
 const bg = ([r, g, b]: RGB) => `${ESC}48;2;${r};${g};${b}m`;
 
-export function gridToAnsi(
-	grid: string[],
-	maximumWidth = Number.POSITIVE_INFINITY,
-): string[] {
+export function gridToAnsi(grid: string[], maximumWidth = Number.POSITIVE_INFINITY): string[] {
 	const lines: string[] = [];
 	for (let row = 0; row < grid.length; row += 2) {
 		const top = grid[row];
-		const bottom = grid[row + 1] ?? ".".repeat(top.length);
+		const bottom = grid[row + 1] ?? '.'.repeat(top.length);
 		const width = Math.min(
 			top.length,
-			Number.isFinite(maximumWidth)
-				? Math.max(0, Math.floor(maximumWidth))
-				: top.length,
+			Number.isFinite(maximumWidth) ? Math.max(0, Math.floor(maximumWidth)) : top.length,
 		);
-		let line = "";
+		let line = '';
 		for (let column = 0; column < width; column++) {
-			const topColor = top[column] === "." ? null : PALETTE[top[column]];
-			const bottomColor =
-				bottom[column] === "." ? null : PALETTE[bottom[column]];
+			const topColor = top[column] === '.' ? null : PALETTE[top[column]];
+			const bottomColor = bottom[column] === '.' ? null : PALETTE[bottom[column]];
 			if (!topColor && !bottomColor) {
 				line += `${RESET} `;
 			} else if (topColor && bottomColor) {
@@ -81,7 +68,7 @@ export class FoxWidget {
 	/** Horizontal offset (cols from left) preserved across state changes. */
 	private offset = 0;
 	private runMotion = new FoxRunMotion();
-	private state: FoxState = "sleep";
+	private state: FoxState = 'sleep';
 	private terminalWidth = FOX_WIDTH;
 	private transitionTimer: ReturnType<typeof setTimeout> | null = null;
 	private ui: any = null;
@@ -107,8 +94,8 @@ export class FoxWidget {
 	}
 
 	setState(nextState: FoxState): void {
-		const enteringRun = nextState === "run" && this.state !== "run";
-		const leavingRun = this.state === "run" && nextState !== "run";
+		const enteringRun = nextState === 'run' && this.state !== 'run';
+		const leavingRun = this.state === 'run' && nextState !== 'run';
 		this.clearTimers();
 		// Preserve horizontal position when leaving run
 		if (leavingRun) this.offset = this.runMotion.currentOffset;
@@ -123,11 +110,8 @@ export class FoxWidget {
 		if (!this.reducedMotion) {
 			this.animationTimer = setInterval(() => {
 				this.frameIndex += 1;
-				if (this.state === "run") {
-					this.runMotion.advance(
-						this.terminalWidth,
-						Math.ceil(FOX_WIDTH * this.scale),
-					);
+				if (this.state === 'run') {
+					this.runMotion.advance(this.terminalWidth, Math.ceil(FOX_WIDTH * this.scale));
 				}
 				this.render();
 			}, ANIMS[this.state].intervalMs);
@@ -145,8 +129,8 @@ export class FoxWidget {
 	}
 
 	completeTurn(): void {
-		this.setState("jump");
-		this.transitionTimer = setTimeout(() => this.setState("caught"), 1400);
+		this.setState('jump');
+		this.transitionTimer = setTimeout(() => this.setState('caught'), 1400);
 		this.transitionTimer.unref?.();
 	}
 
@@ -190,11 +174,8 @@ export class FoxWidget {
 		// Compute scaled fox width once; used by both run-motion bounds and offset clamping
 		const scaledFoxWidth = Math.ceil(FOX_WIDTH * this.scale);
 
-		if (this.state === "run") {
-			const placement = this.runMotion.snapshot(
-				this.terminalWidth,
-				scaledFoxWidth,
-			);
+		if (this.state === 'run') {
+			const placement = this.runMotion.snapshot(this.terminalWidth, scaledFoxWidth);
 			grid = renderRunGrid(grid, placement);
 			this.offset = placement.offset;
 		}
@@ -207,7 +188,7 @@ export class FoxWidget {
 		const actualOffset = Math.min(this.offset, maxOffset);
 
 		const frame = gridToAnsi(grid, this.terminalWidth - actualOffset);
-		const padding = " ".repeat(actualOffset);
+		const padding = ' '.repeat(actualOffset);
 		const label = ` ${ANIMS[this.state].label}`.slice(0, this.terminalWidth);
 		return [label, ...frame.map((line) => `${padding}${line}`)];
 	};
@@ -215,9 +196,9 @@ export class FoxWidget {
 	private clearWidget(): void {
 		if (!this.ui || !this.widgetRegistered) return;
 		try {
-			this.ui.setWidget("catch-the-fox", undefined);
+			this.ui.setWidget('catch-the-fox', undefined);
 		} catch (err) {
-			log.error("clearWidget: failed to clear widget", err);
+			log.error('clearWidget: failed to clear widget', err);
 		}
 		this.widgetRegistered = false;
 		this.widgetTui = null;
@@ -231,7 +212,7 @@ export class FoxWidget {
 		}
 		if (!this.widgetRegistered) {
 			try {
-				this.ui.setWidget("catch-the-fox", (tui: any) => {
+				this.ui.setWidget('catch-the-fox', (tui: any) => {
 					this.widgetTui = tui;
 					return {
 						render: this.renderLines,
@@ -243,7 +224,7 @@ export class FoxWidget {
 				});
 				this.widgetRegistered = true;
 			} catch (err) {
-				log.error("render: failed to register widget", err);
+				log.error('render: failed to register widget', err);
 			}
 			return;
 		}
@@ -251,7 +232,7 @@ export class FoxWidget {
 			if (this.widgetTui?.requestRender) this.widgetTui.requestRender();
 			else this.ui.requestRender?.();
 		} catch (err) {
-			log.error("render: requestRender failed", err);
+			log.error('render: requestRender failed', err);
 		}
 	}
 }

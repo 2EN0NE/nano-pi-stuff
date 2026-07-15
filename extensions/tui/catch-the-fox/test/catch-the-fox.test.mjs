@@ -1,14 +1,14 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-import catchTheFoxExtension from "../dist/index.js";
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import catchTheFoxExtension from '../dist/index.js';
 
 const ANSI_SEQUENCE = /\x1b\[[0-9;]*m/g;
 
 function visibleWidth(line) {
-	return line.replace(ANSI_SEQUENCE, "").length;
+	return line.replace(ANSI_SEQUENCE, '').length;
 }
 
-test("the run animation crosses the widget without wrapping", async () => {
+test('the run animation crosses the widget without wrapping', async () => {
 	const originalSetInterval = globalThis.setInterval;
 	const originalClearInterval = globalThis.clearInterval;
 	const intervalCallbacks = [];
@@ -44,11 +44,8 @@ test("the run animation crosses the widget without wrapping", async () => {
 			},
 		};
 
-		await handlers.get("session_start")({}, context);
-		await handlers.get("tool_execution_start")(
-			{ toolName: "exec_command" },
-			context,
-		);
+		await handlers.get('session_start')({}, context);
+		await handlers.get('tool_execution_start')({ toolName: 'exec_command' }, context);
 
 		const widget = widgetFactory({
 			requestRender() {
@@ -78,14 +75,14 @@ test("the run animation crosses the widget without wrapping", async () => {
 		assert.equal(widgetRegistrations, 1);
 		assert.ok(renderRequests > 0);
 
-		await handlers.get("session_shutdown")({}, context);
+		await handlers.get('session_shutdown')({}, context);
 	} finally {
 		globalThis.setInterval = originalSetInterval;
 		globalThis.clearInterval = originalClearInterval;
 	}
 });
 
-test("reduced motion keeps the fox static while preserving state", async () => {
+test('reduced motion keeps the fox static while preserving state', async () => {
 	const originalSetInterval = globalThis.setInterval;
 	const originalClearInterval = globalThis.clearInterval;
 	const intervalCallbacks = [];
@@ -118,18 +115,15 @@ test("reduced motion keeps the fox static while preserving state", async () => {
 			},
 		};
 
-		await handlers.get("session_start")({}, context);
-		await handlers.get("tool_execution_start")(
-			{ toolName: "exec_command" },
-			context,
-		);
+		await handlers.get('session_start')({}, context);
+		await handlers.get('tool_execution_start')({ toolName: 'exec_command' }, context);
 
 		const lines = widgetFactory().render(80);
 		assert.match(lines[0], /跑起来/);
 		assert.equal(visibleWidth(lines[1]), 24);
 		assert.equal(intervalCallbacks.length, 0);
 
-		await handlers.get("session_shutdown")({}, context);
+		await handlers.get('session_shutdown')({}, context);
 	} finally {
 		globalThis.setInterval = originalSetInterval;
 		globalThis.clearInterval = originalClearInterval;

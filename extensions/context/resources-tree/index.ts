@@ -1,18 +1,18 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { state } from "./state.js";
-import { loadAllSkillsFromFs, scanAllResources } from "./scanner.js";
-import { setHeader } from "./header.js";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { state } from './state.js';
+import { loadAllSkillsFromFs, scanAllResources } from './scanner.js';
+import { setHeader } from './header.js';
 import {
 	updateWidget,
 	scheduleUpdate,
 	cancelScheduledUpdate,
 	showWidget,
 	toggleCollapsed,
-} from "./widget/core.js";
-import { openSettings } from "./widget/settings.js";
-import { createLogger } from "@zenone/pi-logger";
+} from './widget/core.js';
+import { openSettings } from './widget/settings.js';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("resources-tree");
+const log = createLogger('resources-tree');
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ const log = createLogger("resources-tree");
  * Handles both simple string and array-of-content-blocks formats.
  */
 function extractSystemText(payload: unknown): string | null {
-	if (typeof payload !== "object" || payload === null) return null;
+	if (typeof payload !== 'object' || payload === null) return null;
 	const p = payload as Record<string, unknown>;
 
 	// Anthropic-style: messages[].role === "system"
@@ -30,17 +30,17 @@ function extractSystemText(payload: unknown): string | null {
 		for (const msg of p.messages) {
 			if (
 				msg &&
-				typeof msg === "object" &&
-				(msg as Record<string, unknown>).role === "system"
+				typeof msg === 'object' &&
+				(msg as Record<string, unknown>).role === 'system'
 			) {
 				const content = (msg as Record<string, unknown>).content;
-				if (typeof content === "string") return content;
+				if (typeof content === 'string') return content;
 				if (Array.isArray(content)) {
 					for (const block of content) {
 						if (
 							block &&
-							typeof block === "object" &&
-							typeof (block as Record<string, unknown>).text === "string"
+							typeof block === 'object' &&
+							typeof (block as Record<string, unknown>).text === 'string'
 						) {
 							return (block as Record<string, unknown>).text as string;
 						}
@@ -52,13 +52,13 @@ function extractSystemText(payload: unknown): string | null {
 
 	// Anthropic-style: top-level system field
 	if (p.system !== undefined && p.system !== null) {
-		if (typeof p.system === "string") return p.system;
+		if (typeof p.system === 'string') return p.system;
 		if (Array.isArray(p.system)) {
 			for (const block of p.system) {
 				if (
 					block &&
-					typeof block === "object" &&
-					typeof (block as Record<string, unknown>).text === "string"
+					typeof block === 'object' &&
+					typeof (block as Record<string, unknown>).text === 'string'
 				) {
 					return (block as Record<string, unknown>).text as string;
 				}
@@ -78,9 +78,7 @@ function countSkillsInPayload(payload: unknown): number | null {
 	const systemText = extractSystemText(payload);
 	if (systemText === null) return null;
 
-	const m = systemText.match(
-		/<available_skills>([\s\S]*?)<\/available_skills>/,
-	);
+	const m = systemText.match(/<available_skills>([\s\S]*?)<\/available_skills>/);
 	if (!m) return 0; // System text exists but no XML block → 0 skills
 
 	return (m[1].match(/<name>/g) || []).length;
@@ -92,7 +90,7 @@ export default function (pi: ExtensionAPI): void {
 
 	// ── Events ────────────────────────────────────────────────
 
-	pi.on("session_start", async (_event, ctx) => {
+	pi.on('session_start', async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 
 		// Load skills from FS immediately (correct grouping from the start).
@@ -102,14 +100,9 @@ export default function (pi: ExtensionAPI): void {
 		try {
 			const branches = ctx.sessionManager.getBranch();
 			for (const entry of branches) {
-				if (entry.type === "custom" && entry.customType === "skills-cache") {
-					const data = entry.data as
-						| { skills: typeof state.loadedSkills }
-						| undefined;
-					if (
-						data?.skills &&
-						data.skills.length > (state.loadedSkills?.length ?? 0)
-					) {
+				if (entry.type === 'custom' && entry.customType === 'skills-cache') {
+					const data = entry.data as { skills: typeof state.loadedSkills } | undefined;
+					if (data?.skills && data.skills.length > (state.loadedSkills?.length ?? 0)) {
 						state.loadedSkills = data.skills;
 					}
 					break;
@@ -120,24 +113,19 @@ export default function (pi: ExtensionAPI): void {
 		}
 
 		// FS skill count = same logic as startup header (scanAllResources).
-		state.fsSkillCount = new Set(
-			scanAllResources(ctx).skills.map((s) => s.name),
-		).size;
+		state.fsSkillCount = new Set(scanAllResources(ctx).skills.map((s) => s.name)).size;
 
 		setHeader(ctx);
 		state.widgetVisible = true;
 		showWidget(ctx);
 	});
 
-	pi.on("before_agent_start", async (event, ctx) => {
+	pi.on('before_agent_start', async (event, ctx) => {
 		// ── System prompt deduplication ─────────────────────────────
 		// Strip duplicate "Available skills:" line injected by prompt-customizer.
 		// The native <available_skills> XML is the canonical source.
 		let promptResult: { systemPrompt: string } | undefined;
-		const cleanedPrompt = event.systemPrompt.replace(
-			/^Available skills: .+$/m,
-			"",
-		);
+		const cleanedPrompt = event.systemPrompt.replace(/^Available skills: .+$/m, '');
 		if (cleanedPrompt !== event.systemPrompt) {
 			promptResult = { systemPrompt: cleanedPrompt };
 		}
@@ -165,10 +153,7 @@ export default function (pi: ExtensionAPI): void {
 			}
 
 			const all = event.systemPromptOptions.skills;
-			const use =
-				enabledNames.size > 0
-					? all.filter((s) => enabledNames.has(s.name))
-					: all;
+			const use = enabledNames.size > 0 ? all.filter((s) => enabledNames.has(s.name)) : all;
 			state.loadedSkills = use.map((s) => ({
 				name: s.name,
 				filePath: s.filePath,
@@ -177,20 +162,18 @@ export default function (pi: ExtensionAPI): void {
 					: undefined,
 			}));
 
-			pi.appendEntry("skills-cache", { skills: state.loadedSkills });
+			pi.appendEntry('skills-cache', { skills: state.loadedSkills });
 		}
 
 		// ── Denominator from Pi's authoritative total ──────────────
 		// Update fsSkillCount from systemPromptOptions.skills (Pi's full loaded
 		// list, including sources like ~/.agents/ that loadAllSkillsFromFs misses).
 		if (event.systemPromptOptions.skills) {
-			state.fsSkillCount = new Set(
-				event.systemPromptOptions.skills.map((s) => s.name),
-			).size;
+			state.fsSkillCount = new Set(event.systemPromptOptions.skills.map((s) => s.name)).size;
 		}
 
 		// ── Debug logging (emitted to pi-logger EventBus if available) ──
-		log.info("before_agent_start skill_counts", {
+		log.info('before_agent_start skill_counts', {
 			xmlSkillCount: state.xmlSkillCount,
 			fsSkillCount: state.fsSkillCount,
 		});
@@ -207,12 +190,12 @@ export default function (pi: ExtensionAPI): void {
 
 	// ── Skill usage tracking ──────────────────────────────────
 
-	pi.on("input", (event, ctx) => {
+	pi.on('input', (event, ctx) => {
 		if (!ctx.hasUI) return;
 
-		if (event.text.startsWith("/skill:")) {
+		if (event.text.startsWith('/skill:')) {
 			const rest = event.text.slice(7).trim();
-			const spaceIdx = rest.indexOf(" ");
+			const spaceIdx = rest.indexOf(' ');
 			const skillName = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
 			if (skillName) {
 				state.skillUsageCounts.set(
@@ -227,21 +210,21 @@ export default function (pi: ExtensionAPI): void {
 			}
 		}
 
-		if (event.text.startsWith("/reload")) {
+		if (event.text.startsWith('/reload')) {
 			state.loadedSkills = null;
 			state.loadedContextFiles = null;
 			updateWidget(ctx);
 		}
 	});
 
-	pi.on("message_start", (event, ctx) => {
+	pi.on('message_start', (event, ctx) => {
 		if (!ctx.hasUI) return;
 		const msg = event.message;
-		if (msg.role === "user" && msg.content && Array.isArray(msg.content)) {
+		if (msg.role === 'user' && msg.content && Array.isArray(msg.content)) {
 			for (const block of msg.content) {
 				if (
-					block.type === "text" &&
-					typeof block.text === "string" &&
+					block.type === 'text' &&
+					typeof block.text === 'string' &&
 					block.text.startsWith('<skill name="')
 				) {
 					const match = block.text.match(/^<skill name="([^"]+)"/);
@@ -262,13 +245,10 @@ export default function (pi: ExtensionAPI): void {
 		}
 	});
 
-	pi.on("tool_call", async (event, ctx) => {
-		if ("toolName" in event) {
+	pi.on('tool_call', async (event, ctx) => {
+		if ('toolName' in event) {
 			const name = (event as any).toolName as string;
-			state.toolUsageCounts.set(
-				name,
-				(state.toolUsageCounts.get(name) ?? 0) + 1,
-			);
+			state.toolUsageCounts.set(name, (state.toolUsageCounts.get(name) ?? 0) + 1);
 			state.totalToolCalls++;
 			state.recentToolNames = [
 				name,
@@ -278,7 +258,7 @@ export default function (pi: ExtensionAPI): void {
 		if (ctx.hasUI) scheduleUpdate(ctx);
 	});
 
-	pi.on("tool_execution_start", async (_event, ctx) => {
+	pi.on('tool_execution_start', async (_event, ctx) => {
 		if (ctx.hasUI) scheduleUpdate(ctx);
 	});
 
@@ -289,13 +269,13 @@ export default function (pi: ExtensionAPI): void {
 	// If the payload has system prompt text but no <available_skills> XML,
 	// assume 0 skills (the XML was removed entirely by some extension).
 	// If no system text is found at all, keep the previous estimate.
-	pi.on("before_provider_request", (event, ctx) => {
+	pi.on('before_provider_request', (event, ctx) => {
 		const actualCount = countSkillsInPayload(event.payload);
 		if (actualCount === null) return; // No system text in payload yet
 
 		const oldCount = state.xmlSkillCount;
 		if (oldCount !== actualCount) {
-			log.info("xmlSkillCount set from provider payload", {
+			log.info('xmlSkillCount set from provider payload', {
 				old: oldCount,
 				new: actualCount,
 			});
@@ -304,23 +284,23 @@ export default function (pi: ExtensionAPI): void {
 		if (ctx.hasUI) scheduleUpdate(ctx);
 	});
 
-	pi.on("session_shutdown", async () => {
+	pi.on('session_shutdown', async () => {
 		cancelScheduledUpdate();
 	});
 
 	// ── Command & Shortcut ──────────────────────────────────────
 
-	pi.registerCommand("resource-tree", {
-		description: "Open resource tree settings panel",
+	pi.registerCommand('resource-tree', {
+		description: 'Open resource tree settings panel',
 		handler: async (_args, ctx) => {
 			openSettings(ctx);
 		},
 	});
 
-	pi.registerShortcut("ctrl+shift+z", {
-		description: "Toggle resource tree panel expand/collapse",
+	pi.registerShortcut('ctrl+shift+z', {
+		description: 'Toggle resource tree panel expand/collapse',
 		handler: (ctx) => {
-			log.debug("toggleCollapsed fired", {
+			log.debug('toggleCollapsed fired', {
 				collapsed: state.widgetCollapsed,
 			});
 			toggleCollapsed(ctx);

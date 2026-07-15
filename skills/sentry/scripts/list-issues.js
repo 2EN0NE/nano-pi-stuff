@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
-import { SENTRY_API_BASE, getAuthToken, fetchJson, formatTimestamp, resolveProjectId } from "../lib/auth.js";
+import {
+	SENTRY_API_BASE,
+	getAuthToken,
+	fetchJson,
+	formatTimestamp,
+	resolveProjectId,
+} from '../lib/auth.js';
 
 const HELP = `Usage: list-issues.js [options]
 
@@ -59,181 +65,181 @@ Examples:
 `;
 
 function parseArgs(args) {
-  const options = {
-    org: null,
-    projects: [],
-    query: null,
-    status: null,
-    level: null,
-    period: "14d",
-    limit: 25,
-    sort: null,
-    json: false,
-    help: false,
-  };
+	const options = {
+		org: null,
+		projects: [],
+		query: null,
+		status: null,
+		level: null,
+		period: '14d',
+		limit: 25,
+		sort: null,
+		json: false,
+		help: false,
+	};
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
 
-    switch (arg) {
-      case "--help":
-      case "-h":
-        options.help = true;
-        break;
-      case "--json":
-        options.json = true;
-        break;
-      case "--org":
-      case "-o":
-        options.org = args[++i];
-        break;
-      case "--project":
-      case "-p":
-        options.projects.push(args[++i]);
-        break;
-      case "--query":
-      case "-q":
-        options.query = args[++i];
-        break;
-      case "--status":
-        options.status = args[++i];
-        break;
-      case "--level":
-        options.level = args[++i];
-        break;
-      case "--period":
-      case "-t":
-        options.period = args[++i];
-        break;
-      case "--limit":
-      case "-n":
-        options.limit = parseInt(args[++i], 10);
-        break;
-      case "--sort":
-        options.sort = args[++i];
-        break;
-    }
-  }
+		switch (arg) {
+			case '--help':
+			case '-h':
+				options.help = true;
+				break;
+			case '--json':
+				options.json = true;
+				break;
+			case '--org':
+			case '-o':
+				options.org = args[++i];
+				break;
+			case '--project':
+			case '-p':
+				options.projects.push(args[++i]);
+				break;
+			case '--query':
+			case '-q':
+				options.query = args[++i];
+				break;
+			case '--status':
+				options.status = args[++i];
+				break;
+			case '--level':
+				options.level = args[++i];
+				break;
+			case '--period':
+			case '-t':
+				options.period = args[++i];
+				break;
+			case '--limit':
+			case '-n':
+				options.limit = parseInt(args[++i], 10);
+				break;
+			case '--sort':
+				options.sort = args[++i];
+				break;
+		}
+	}
 
-  return options;
+	return options;
 }
 
 function formatIssue(issue) {
-  const lines = [];
+	const lines = [];
 
-  const id = issue.shortId || issue.id;
-  const title = issue.title || "(no title)";
-  const level = issue.level || "?";
-  const status = issue.status || "?";
-  const count = issue.count || 0;
-  const userCount = issue.userCount || 0;
-  const firstSeen = formatTimestamp(issue.firstSeen);
-  const lastSeen = formatTimestamp(issue.lastSeen);
-  const project = issue.project?.slug || "?";
-  const culprit = issue.culprit || "";
-  const permalink = issue.permalink || "";
+	const id = issue.shortId || issue.id;
+	const title = issue.title || '(no title)';
+	const level = issue.level || '?';
+	const status = issue.status || '?';
+	const count = issue.count || 0;
+	const userCount = issue.userCount || 0;
+	const firstSeen = formatTimestamp(issue.firstSeen);
+	const lastSeen = formatTimestamp(issue.lastSeen);
+	const project = issue.project?.slug || '?';
+	const culprit = issue.culprit || '';
+	const permalink = issue.permalink || '';
 
-  lines.push(`[${id}] ${title}`);
-  lines.push(`  level: ${level} | status: ${status} | project: ${project}`);
-  lines.push(`  events: ${count} | users: ${userCount}`);
-  lines.push(`  first: ${firstSeen} | last: ${lastSeen}`);
+	lines.push(`[${id}] ${title}`);
+	lines.push(`  level: ${level} | status: ${status} | project: ${project}`);
+	lines.push(`  events: ${count} | users: ${userCount}`);
+	lines.push(`  first: ${firstSeen} | last: ${lastSeen}`);
 
-  if (culprit) {
-    lines.push(`  culprit: ${culprit}`);
-  }
+	if (culprit) {
+		lines.push(`  culprit: ${culprit}`);
+	}
 
-  if (permalink) {
-    lines.push(`  url: ${permalink}`);
-  }
+	if (permalink) {
+		lines.push(`  url: ${permalink}`);
+	}
 
-  return lines.join("\n");
+	return lines.join('\n');
 }
 
 function formatOutput(issues) {
-  if (!issues || issues.length === 0) {
-    return "No issues found matching your query.";
-  }
+	if (!issues || issues.length === 0) {
+		return 'No issues found matching your query.';
+	}
 
-  const lines = [];
-  lines.push(`Found ${issues.length} issues:\n`);
+	const lines = [];
+	lines.push(`Found ${issues.length} issues:\n`);
 
-  for (const issue of issues) {
-    lines.push(formatIssue(issue));
-    lines.push("");
-  }
+	for (const issue of issues) {
+		lines.push(formatIssue(issue));
+		lines.push('');
+	}
 
-  return lines.join("\n").trimEnd();
+	return lines.join('\n').trimEnd();
 }
 
 async function main() {
-  const args = process.argv.slice(2);
-  const options = parseArgs(args);
+	const args = process.argv.slice(2);
+	const options = parseArgs(args);
 
-  if (options.help) {
-    console.log(HELP);
-    process.exit(0);
-  }
+	if (options.help) {
+		console.log(HELP);
+		process.exit(0);
+	}
 
-  if (!options.org) {
-    console.error("Error: --org is required");
-    console.error("Run with --help for usage information");
-    process.exit(1);
-  }
+	if (!options.org) {
+		console.error('Error: --org is required');
+		console.error('Run with --help for usage information');
+		process.exit(1);
+	}
 
-  const token = getAuthToken();
+	const token = getAuthToken();
 
-  // Build query parameters
-  const params = new URLSearchParams();
+	// Build query parameters
+	const params = new URLSearchParams();
 
-  if (options.period) {
-    params.set("statsPeriod", options.period);
-  }
+	if (options.period) {
+		params.set('statsPeriod', options.period);
+	}
 
-  params.set("limit", Math.min(options.limit, 100).toString());
+	params.set('limit', Math.min(options.limit, 100).toString());
 
-  // Build search query
-  const queryParts = [];
+	// Build search query
+	const queryParts = [];
 
-  if (options.query) {
-    queryParts.push(options.query);
-  }
+	if (options.query) {
+		queryParts.push(options.query);
+	}
 
-  if (options.status) {
-    queryParts.push(`is:${options.status}`);
-  }
+	if (options.status) {
+		queryParts.push(`is:${options.status}`);
+	}
 
-  if (options.level) {
-    queryParts.push(`level:${options.level}`);
-  }
+	if (options.level) {
+		queryParts.push(`level:${options.level}`);
+	}
 
-  if (queryParts.length > 0) {
-    params.set("query", queryParts.join(" "));
-  }
+	if (queryParts.length > 0) {
+		params.set('query', queryParts.join(' '));
+	}
 
-  if (options.sort) {
-    params.set("sort", options.sort);
-  }
+	if (options.sort) {
+		params.set('sort', options.sort);
+	}
 
-  // Build URL - always use org endpoint with resolved project IDs
-  // This handles both slugs and numeric IDs uniformly
-  for (const project of options.projects) {
-    const projectId = await resolveProjectId(options.org, project, token);
-    params.append("project", projectId);
-  }
-  const url = `${SENTRY_API_BASE}/organizations/${encodeURIComponent(options.org)}/issues/?${params.toString()}`;
+	// Build URL - always use org endpoint with resolved project IDs
+	// This handles both slugs and numeric IDs uniformly
+	for (const project of options.projects) {
+		const projectId = await resolveProjectId(options.org, project, token);
+		params.append('project', projectId);
+	}
+	const url = `${SENTRY_API_BASE}/organizations/${encodeURIComponent(options.org)}/issues/?${params.toString()}`;
 
-  try {
-    const data = await fetchJson(url, token);
+	try {
+		const data = await fetchJson(url, token);
 
-    if (options.json) {
-      console.log(JSON.stringify(data, null, 2));
-    } else {
-      console.log(formatOutput(data));
-    }
-  } catch (err) {
-    console.error("Error:", err.message);
-    process.exit(1);
-  }
+		if (options.json) {
+			console.log(JSON.stringify(data, null, 2));
+		} else {
+			console.log(formatOutput(data));
+		}
+	} catch (err) {
+		console.error('Error:', err.message);
+		process.exit(1);
+	}
 }
 
 main();

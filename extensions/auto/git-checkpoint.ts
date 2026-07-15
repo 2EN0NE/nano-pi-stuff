@@ -5,35 +5,35 @@
  * When forking, offers to restore code to that point in history.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("git-checkpoint");
+const log = createLogger('git-checkpoint');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 export default function (pi: ExtensionAPI) {
 	const checkpoints = new Map<string, string>();
 	let currentEntryId: string | undefined;
 
 	// Track the current entry ID when user messages are saved
-	pi.on("tool_result", async (_event, ctx) => {
+	pi.on('tool_result', async (_event, ctx) => {
 		const leaf = ctx.sessionManager.getLeafEntry();
 		if (leaf) currentEntryId = leaf.id;
 	});
 
-	pi.on("turn_start", async () => {
-		log.debug("event: turn_start");
+	pi.on('turn_start', async () => {
+		log.debug('event: turn_start');
 		// Create a git stash entry before LLM makes changes
-		const { stdout } = await pi.exec("git", ["stash", "create"]);
+		const { stdout } = await pi.exec('git', ['stash', 'create']);
 		const ref = stdout.trim();
 		if (ref && currentEntryId) {
 			checkpoints.set(currentEntryId, ref);
 		}
 	});
 
-	pi.on("session_before_fork", async (event, ctx) => {
-		log.debug("event: session_before_fork");
+	pi.on('session_before_fork', async (event, ctx) => {
+		log.debug('event: session_before_fork');
 		const ref = checkpoints.get(event.entryId);
 		if (!ref) return;
 
@@ -42,19 +42,19 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		const choice = await ctx.ui.select("Restore code state?", [
-			"Yes, restore code to that point",
-			"No, keep current code",
+		const choice = await ctx.ui.select('Restore code state?', [
+			'Yes, restore code to that point',
+			'No, keep current code',
 		]);
 
-		if (choice?.startsWith("Yes")) {
-			await pi.exec("git", ["stash", "apply", ref]);
-			ctx.ui.notify("Code restored to checkpoint", "info");
+		if (choice?.startsWith('Yes')) {
+			await pi.exec('git', ['stash', 'apply', ref]);
+			ctx.ui.notify('Code restored to checkpoint', 'info');
 		}
 	});
 
-	pi.on("agent_end", async () => {
-		log.debug("event: agent_end");
+	pi.on('agent_end', async () => {
+		log.debug('event: agent_end');
 		// Clear checkpoints after agent completes
 		checkpoints.clear();
 	});

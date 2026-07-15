@@ -19,27 +19,22 @@
  *     mechanism: { type: "adapter", adapterId: "smart_compact" } }
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
-import type { CompactionProfile } from "../types.js";
-import { registerAdapter } from "./index.js";
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
+import type { CompactionProfile } from '../types.js';
+import { registerAdapter } from './index.js';
 
-const log = createLogger("custom-compaction:adapter:smart-compact");
+const log = createLogger('custom-compaction:adapter:smart-compact');
 
 registerAdapter({
-	id: "smart_compact",
-	name: "Smart Compact (EESV)",
+	id: 'smart_compact',
+	name: 'Smart Compact (EESV)',
 	description:
-		"EESV pipeline with deterministic extraction, exploration, synthesis, verification (requires pi-smart-compact extension)",
+		'EESV pipeline with deterministic extraction, exploration, synthesis, verification (requires pi-smart-compact extension)',
 
 	register: (_pi: ExtensionAPI) => {
-		log.info("Adapter registered (collaboration mode)");
-		log.info(
-			"Requires pi-smart-compact to be loaded separately for actual compaction logic",
-		);
+		log.info('Adapter registered (collaboration mode)');
+		log.info('Requires pi-smart-compact to be loaded separately for actual compaction logic');
 	},
 
 	beforeCompact: async (
@@ -48,7 +43,7 @@ registerAdapter({
 	): Promise<boolean> => {
 		// Return false → do NOT intercept.
 		// Let smart_compact's own session_before_compact handler (or Pi default) run.
-		log.info("████ adapter invoked, passing through to smart_compact handler");
+		log.info('████ adapter invoked, passing through to smart_compact handler');
 		return false;
 	},
 });

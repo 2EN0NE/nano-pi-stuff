@@ -1,6 +1,6 @@
 ---
 name: summarize
-description: "使用 `uvx markitdown` 获取 URL 或将本地文件（PDF/DOCX/HTML 等）转换为 Markdown，可选地生成摘要"
+description: '使用 `uvx markitdown` 获取 URL 或将本地文件（PDF/DOCX/HTML 等）转换为 Markdown，可选地生成摘要'
 ---
 
 将"各种内容"（URL、PDF、Word 文档、PowerPoint、HTML 页面、文本文件等）转换为 **Markdown**，以便像普通文本一样检查/引用/处理。
@@ -11,6 +11,7 @@ description: "使用 `uvx markitdown` 获取 URL 或将本地文件（PDF/DOCX/H
 ## 何时使用
 
 当需要以下场景时使用此技能：
+
 - 将网页以类似文档的 Markdown 格式拉取下来
 - 将二进制文档（PDF/DOCX/PPTX）转换为 Markdown 进行分析
 - 在深度阅读前快速生成长文档的简短摘要
@@ -54,6 +55,7 @@ node to-markdown.mjs <url-or-path> --summary --prompt "Focus on security implica
 ```
 
 该过程将：
-1) 通过 `uvx --from 'markitdown[pdf]' markitdown` 转换为 Markdown
-2) 将完整 Markdown 写入临时 `.md` 文件并打印路径作为 "Hint" 行
-3) 运行 `pi --model claude-haiku-4-5`（无工具、无会话）使用你的额外提示进行摘要
+
+1. 通过 `uvx --from 'markitdown[pdf]' markitdown` 转换为 Markdown
+2. 将完整 Markdown 写入临时 `.md` 文件并打印路径作为 "Hint" 行
+3. 运行 `pi --model claude-haiku-4-5`（无工具、无会话）使用你的额外提示进行摘要

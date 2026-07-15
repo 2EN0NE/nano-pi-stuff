@@ -1,6 +1,6 @@
 ---
 name: uv
-description: "使用 `uv` 替代 pip/python/venv。用 `uv run script.py` 运行脚本，用 `uv add` 添加依赖，在独立脚本中使用内联脚本元数据。"
+description: '使用 `uv` 替代 pip/python/venv。用 `uv run script.py` 运行脚本，用 `uv add` 添加依赖，在独立脚本中使用内联脚本元数据。'
 ---
 
 ## 快速参考

@@ -12,20 +12,20 @@
  *   in the options. Without this, the model call will fail with an auth error.
  */
 
-import { type Api, type Model, complete } from "@earendil-works/pi-ai";
+import { type Api, type Model, complete } from '@earendil-works/pi-ai';
 import {
 	convertToLlm,
 	serializeConversation,
 	type ExtensionContext,
 	type SessionBeforeCompactEvent,
-} from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
-import { getActiveProfile } from "./config.js";
-import type { CompactionProfile } from "./types.js";
-import { DEFAULT_COMPACTION_PROMPT } from "./types.js";
-import { getAdapter } from "./mechanisms/index.js";
+} from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
+import { getActiveProfile } from './config.js';
+import type { CompactionProfile } from './types.js';
+import { DEFAULT_COMPACTION_PROMPT } from './types.js';
+import { getAdapter } from './mechanisms/index.js';
 
-const log = createLogger("custom-compaction:compactor");
+const log = createLogger('custom-compaction:compactor');
 
 // ── Pending supplement ──────────────────────────────────────────
 // Stored before compact() is called, consumed in session_before_compact.
@@ -55,11 +55,8 @@ export function getAndClearPendingSupplement(): string | undefined {
  *
  * Returns the full Model object (needed by complete() for api resolution).
  */
-function resolveModel(
-	profile: CompactionProfile,
-	ctx: ExtensionContext,
-): Model<Api> | null {
-	if (profile.model === "current") {
+function resolveModel(profile: CompactionProfile, ctx: ExtensionContext): Model<Api> | null {
+	if (profile.model === 'current') {
 		if (ctx.model) {
 			return ctx.model;
 		}
@@ -68,9 +65,9 @@ function resolveModel(
 	}
 
 	// profile.model is "provider/modelId"
-	const slashIdx = profile.model.indexOf("/");
+	const slashIdx = profile.model.indexOf('/');
 	if (slashIdx <= 0 || slashIdx >= profile.model.length - 1) {
-		log.warn("invalid model spec in profile:", profile.model);
+		log.warn('invalid model spec in profile:', profile.model);
 		return ctx.model ?? null;
 	}
 
@@ -82,7 +79,7 @@ function resolveModel(
 		return found;
 	}
 
-	log.warn("configured model not found in registry:", profile.model);
+	log.warn('configured model not found in registry:', profile.model);
 	return ctx.model ?? null;
 }
 
@@ -108,25 +105,21 @@ export function buildCompactionHandler() {
 			tokensBefore: number;
 		};
 	} | void> => {
-		log.debug("session_before_compact fired");
+		log.debug('session_before_compact fired');
 
 		const profile = getActiveProfile();
 
 		// ── Dispatch by compaction mechanism ──────────
 		switch (profile.mechanism.type) {
-			case "pass_through":
+			case 'pass_through':
 				// Don't intercept — let Pi default or other extensions handle it.
-				log.debug(
-					'Mechanism is "pass_through" — skipping custom-compaction handler',
-				);
+				log.debug('Mechanism is "pass_through" — skipping custom-compaction handler');
 				return;
 
-			case "adapter": {
+			case 'adapter': {
 				const adapterId = profile.mechanism.adapterId;
 				if (!adapterId) {
-					log.warn(
-						'Mechanism is "adapter" but no adapterId set — falling through',
-					);
+					log.warn('Mechanism is "adapter" but no adapterId set — falling through');
 					break;
 				}
 				const adp = getAdapter(adapterId);
@@ -150,7 +143,7 @@ export function buildCompactionHandler() {
 				return;
 			}
 
-			case "summarize":
+			case 'summarize':
 				// Proceed with LLM summarization below
 				break;
 		}
@@ -159,8 +152,8 @@ export function buildCompactionHandler() {
 
 		if (!modelInfo) {
 			ctx.ui.notify(
-				"Custom compaction: no model available, using default compaction",
-				"warning",
+				'Custom compaction: no model available, using default compaction',
+				'warning',
 			);
 			return; // fall back to default
 		}
@@ -168,17 +161,13 @@ export function buildCompactionHandler() {
 		// If modelInfo differs from ctx.model, notify the user
 		if (
 			ctx.model &&
-			(ctx.model.provider !== modelInfo.provider ||
-				ctx.model.id !== modelInfo.id)
+			(ctx.model.provider !== modelInfo.provider || ctx.model.id !== modelInfo.id)
 		) {
-			ctx.ui.notify(
-				`Compaction using ${modelInfo.provider}/${modelInfo.id}`,
-				"info",
-			);
+			ctx.ui.notify(`Compaction using ${modelInfo.provider}/${modelInfo.id}`, 'info');
 		} else {
 			ctx.ui.notify(
 				`Compaction using current model (${modelInfo.provider}/${modelInfo.id})`,
-				"info",
+				'info',
 			);
 		}
 
@@ -196,30 +185,28 @@ export function buildCompactionHandler() {
 
 		ctx.ui.notify(
 			`Custom compaction: summarizing ${allMessages.length} messages (${tokensBefore.toLocaleString()} tokens)...`,
-			"info",
+			'info',
 		);
 
 		// Build the summarization prompt
 		const conversationText = serializeConversation(convertToLlm(allMessages));
 		const previousContext = previousSummary
 			? `\n\nPrevious session summary for context:\n${previousSummary}`
-			: "";
+			: '';
 
 		// Use the profile's custom prompt, or the default
 		const basePrompt = profile.prompt.trim() || DEFAULT_COMPACTION_PROMPT;
 
 		// Prepend any supplement from the manual trigger's Tab input
 		const supplement = getAndClearPendingSupplement();
-		const promptText = supplement
-			? `${supplement}\n\n---\n\n${basePrompt}`
-			: basePrompt;
+		const promptText = supplement ? `${supplement}\n\n---\n\n${basePrompt}` : basePrompt;
 
 		const summaryMessages = [
 			{
-				role: "user" as const,
+				role: 'user' as const,
 				content: [
 					{
-						type: "text" as const,
+						type: 'text' as const,
 						text: `${promptText}${previousContext}
 
 <conversation>
@@ -246,8 +233,8 @@ ${conversationText}
 				if (auth.apiKey) completeOptions.apiKey = auth.apiKey;
 				if (auth.headers) completeOptions.headers = auth.headers;
 			} else {
-				log.error("Auth resolution failed:", auth.error);
-				ctx.ui.notify(`Compaction auth failed: ${auth.error}`, "error");
+				log.error('Auth resolution failed:', auth.error);
+				ctx.ui.notify(`Compaction auth failed: ${auth.error}`, 'error');
 				return; // fall back to default compaction
 			}
 
@@ -260,56 +247,52 @@ ${conversationText}
 			// Extract summary: prefer text content, fall back to thinking blocks,
 			// then fall back to raw serialization of all content.
 			let summary = response.content
-				.filter((c): c is { type: "text"; text: string } => c.type === "text")
+				.filter((c): c is { type: 'text'; text: string } => c.type === 'text')
 				.map((c) => c.text)
-				.join("\n");
+				.join('\n');
 
 			if (!summary.trim()) {
 				// Try thinking blocks (some reasoning models return thinking-only)
 				summary = response.content
 					.filter(
-						(c): c is { type: "thinking"; thinking: string } =>
-							c.type === "thinking",
+						(c): c is { type: 'thinking'; thinking: string } => c.type === 'thinking',
 					)
 					.map((c) => c.thinking)
-					.join("\n");
+					.join('\n');
 			}
 
 			if (!summary.trim()) {
 				// Last resort: serialize all content blocks as JSON
 				summary = response.content
 					.map((c) => {
-						if ("text" in c && typeof c.text === "string") return c.text;
-						if ("thinking" in c && typeof c.thinking === "string")
-							return c.thinking;
+						if ('text' in c && typeof c.text === 'string') return c.text;
+						if ('thinking' in c && typeof c.thinking === 'string') return c.thinking;
 						try {
 							return JSON.stringify(c);
 						} catch {
-							return "";
+							return '';
 						}
 					})
 					.filter(Boolean)
-					.join("\n");
+					.join('\n');
 			}
 
 			if (!summary.trim()) {
 				if (!signal.aborted) {
-					const errorDetail = response.errorMessage
-						? `: ${response.errorMessage}`
-						: "";
-					log.error("Empty compaction response", {
+					const errorDetail = response.errorMessage ? `: ${response.errorMessage}` : '';
+					log.error('Empty compaction response', {
 						stopReason: response.stopReason,
 						errorMessage: response.errorMessage,
 					});
 					ctx.ui.notify(
 						`Compaction response had no content (stopReason: ${response.stopReason}${errorDetail}), using default`,
-						"warning",
+						'warning',
 					);
 				}
 				return;
 			}
 
-			log.info("Compaction summary generated", {
+			log.info('Compaction summary generated', {
 				length: summary.length,
 				tokensBefore,
 			});
@@ -323,7 +306,7 @@ ${conversationText}
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			ctx.ui.notify(`Compaction failed: ${message}`, "error");
+			ctx.ui.notify(`Compaction failed: ${message}`, 'error');
 			// Fall back to default compaction
 			return;
 		}

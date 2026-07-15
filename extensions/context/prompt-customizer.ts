@@ -12,12 +12,12 @@
  * 2. Use the extension — it automatically adapts to your active tools and skills
  */
 
-import type { BuildSystemPromptOptions, ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { BuildSystemPromptOptions, ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("prompt-customizer");
+const log = createLogger('prompt-customizer');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 /**
  * Adds tool-specific guidance that adapts to the active tool set.
@@ -29,30 +29,37 @@ function addToolGuidance(options: BuildSystemPromptOptions, basePrompt: string):
 
 	const parts: string[] = [];
 
-	if (hasTool("read")) {
+	if (hasTool('read')) {
 		parts.push(
-			"• Use the `read` tool for file contents (supports text and images).",
-			"  - For large files, use `offset` and `limit` to read in chunks.",
+			'• Use the `read` tool for file contents (supports text and images).',
+			'  - For large files, use `offset` and `limit` to read in chunks.',
 		);
 	}
 
-	if (hasTool("bash")) {
-		parts.push("• Execute commands with the `bash` tool. Use it for file operations like `ls`, `find`, `grep`.");
-	}
-
-	if (hasTool("edit")) {
+	if (hasTool('bash')) {
 		parts.push(
-			"• Use the `edit` tool for precise text replacements in files. Match exact content including whitespace.",
+			'• Execute commands with the `bash` tool. Use it for file operations like `ls`, `find`, `grep`.',
 		);
 	}
 
-	if (hasTool("write")) {
-		parts.push("• Use the `write` tool to create new files or overwrite existing ones completely.");
+	if (hasTool('edit')) {
+		parts.push(
+			'• Use the `edit` tool for precise text replacements in files. Match exact content including whitespace.',
+		);
 	}
-// 注意下面的可用技能，和原生代码所体现的Prompt里的<skills>有区别，两者可能都发送给大模型
+
+	if (hasTool('write')) {
+		parts.push(
+			'• Use the `write` tool to create new files or overwrite existing ones completely.',
+		);
+	}
+	// 注意下面的可用技能，和原生代码所体现的Prompt里的<skills>有区别，两者可能都发送给大模型
 	if (options.skills && options.skills.length > 0) {
-		const skillNames = options.skills.map((s) => s.name).join(", ");
-		parts.push(`\nAvailable skills: ${skillNames}`, "Use skill documentation for best practices on specific tools.");
+		const skillNames = options.skills.map((s) => s.name).join(', ');
+		parts.push(
+			`\nAvailable skills: ${skillNames}`,
+			'Use skill documentation for best practices on specific tools.',
+		);
 	}
 
 	if (parts.length === 0) {
@@ -63,7 +70,7 @@ function addToolGuidance(options: BuildSystemPromptOptions, basePrompt: string):
 
 ## Tool Guidance
 
-${parts.join("\n")}
+${parts.join('\n')}
 `;
 }
 
@@ -89,8 +96,8 @@ If you have additional requirements, configure them via --append-system-prompt o
 }
 
 export default function promptCustomizer(pi: ExtensionAPI) {
-	pi.on("before_agent_start", async (event) => {
-		log.debug("event: before_agent_start");
+	pi.on('before_agent_start', async (event) => {
+		log.debug('event: before_agent_start');
 		const { systemPrompt, systemPromptOptions } = event;
 
 		const customPrompt = addToolGuidance(systemPromptOptions, systemPrompt);

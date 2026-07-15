@@ -1,6 +1,6 @@
 ---
 name: web-browser
-description: "通过执行点击按钮、填写表单、导航链接等操作与网页交互。通过 Chrome DevTools Protocol (CDP) 远程控制 Google Chrome 或 Chromium 浏览器来实现。当 Claude 需要浏览网页时，可以使用此技能。"
+description: '通过执行点击按钮、填写表单、导航链接等操作与网页交互。通过 Chrome DevTools Protocol (CDP) 远程控制 Google Chrome 或 Chromium 浏览器来实现。当 Claude 需要浏览网页时，可以使用此技能。'
 license: Stolen from Mario
 ---
 
@@ -19,6 +19,7 @@ license: Stolen from Mario
 以远程调试模式启动 Chrome（默认端口 `:9222`）。
 
 配置文件行为：
+
 - 默认模式使用：`~/.cache/agent-web/browser/fresh-profile`
 - `--profile` 模式使用：`~/.cache/agent-web/browser/profile-copy`
 - 该技能**不会直接附加到你正在使用的 Chrome 配置文件**
@@ -103,6 +104,7 @@ BROWSER_DEBUG_PORT=9333 ./scripts/start.js
 自动关闭欧盟 Cookie 同意对话框。
 
 在导航到页面后运行：
+
 ```bash
 ./scripts/nav.js https://example.com && ./scripts/dismiss-cookies.js
 ```
@@ -127,17 +129,20 @@ BROWSER_DEBUG_PORT=9333 ./scripts/start.js
 ```
 
 手动启动：
+
 ```bash
 ./scripts/watch.js
 ```
 
 查看最新日志：
+
 ```bash
 ./scripts/logs-tail.js           # 导出当前日志并退出
 ./scripts/logs-tail.js --follow  # 持续跟踪
 ```
 
 汇总网络响应：
+
 ```bash
 ./scripts/net-summary.js
 ```

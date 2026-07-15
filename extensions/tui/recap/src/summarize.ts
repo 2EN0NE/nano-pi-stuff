@@ -1,7 +1,7 @@
-import { createLogger } from "@zenone/pi-logger";
-import { getComplete } from "./host-ai.js";
+import { createLogger } from '@zenone/pi-logger';
+import { getComplete } from './host-ai.js';
 
-const log = createLogger("pi-recap:summarize");
+const log = createLogger('pi-recap:summarize');
 
 const RECAP_PROMPT = `You write a session recap for a developer returning to an AI coding session.
 
@@ -20,9 +20,7 @@ type SummarizeCtx = {
 	cwd?: string;
 	modelRegistry?: {
 		find?: (provider: string, model: string) => any;
-		getApiKeyAndHeaders: (
-			model: any,
-		) => Promise<{
+		getApiKeyAndHeaders: (model: any) => Promise<{
 			ok: boolean;
 			apiKey?: string;
 			headers?: Record<string, string>;
@@ -50,13 +48,13 @@ export async function summarizeRecap(
 ): Promise<string | null> {
 	const model = resolveModel(ctx);
 	if (!model || !ctx.modelRegistry) {
-		log.warn("No model or modelRegistry available, skipping recap");
+		log.warn('No model or modelRegistry available, skipping recap');
 		return null;
 	}
 
 	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 	if (!auth.ok || !auth.apiKey) {
-		log.warn("Auth failed for model", {
+		log.warn('Auth failed for model', {
 			provider: model?.provider,
 			modelId: model?.id ?? model?.modelId,
 		});
@@ -65,7 +63,7 @@ export async function summarizeRecap(
 
 	const complete = await getComplete();
 	if (!complete) {
-		log.warn("No complete() function found from host pi-ai");
+		log.warn('No complete() function found from host pi-ai');
 		return null;
 	}
 
@@ -76,10 +74,10 @@ export async function summarizeRecap(
 				systemPrompt: RECAP_PROMPT,
 				messages: [
 					{
-						role: "user" as const,
+						role: 'user' as const,
 						content: [
 							{
-								type: "text" as const,
+								type: 'text' as const,
 								text: `<transcript>\n${transcript}\n</transcript>`,
 							},
 						],
@@ -96,24 +94,21 @@ export async function summarizeRecap(
 
 		const text = response.content
 			.filter(
-				(c: {
-					type: string;
-					text?: string;
-				}): c is { type: "text"; text: string } =>
-					c.type === "text" && typeof c.text === "string",
+				(c: { type: string; text?: string }): c is { type: 'text'; text: string } =>
+					c.type === 'text' && typeof c.text === 'string',
 			)
 			.map((c: { text: string }) => c.text.trim())
-			.join(" ")
+			.join(' ')
 			.trim();
 
 		if (text) {
-			log.info("Recap generated successfully", { length: text.length });
+			log.info('Recap generated successfully', { length: text.length });
 		} else {
-			log.debug("Recap response was empty");
+			log.debug('Recap response was empty');
 		}
 		return text || null;
 	} catch (err) {
-		log.error("Model call failed in summarizeRecap", {
+		log.error('Model call failed in summarizeRecap', {
 			error: err instanceof Error ? err.message : String(err),
 			provider: model?.provider,
 			modelId: model?.id ?? model?.modelId,

@@ -20,24 +20,23 @@
  * blocks disallowed invocations at bash spawn time.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("uv");
+const log = createLogger('uv');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const interceptedCommandsPath = join(__dirname, "..", "intercepted-commands");
+const interceptedCommandsPath = join(__dirname, '..', 'intercepted-commands');
 
 function getBlockedCommandMessage(command: string): string | null {
 	// Match commands at the start of a shell segment (start/newline/; /&& /|| /|)
 	const pipCommandPattern = /(?:^|\n|[;|&]{1,2})\s*(?:\S+\/)?pip\s*(?:$|\s)/m;
 	const pip3CommandPattern = /(?:^|\n|[;|&]{1,2})\s*(?:\S+\/)?pip3\s*(?:$|\s)/m;
-	const poetryCommandPattern =
-		/(?:^|\n|[;|&]{1,2})\s*(?:\S+\/)?poetry\s*(?:$|\s)/m;
+	const poetryCommandPattern = /(?:^|\n|[;|&]{1,2})\s*(?:\S+\/)?poetry\s*(?:$|\s)/m;
 
 	// Match python invocations including explicit paths like .venv/bin/python
 	// and .venv/bin/python3.12.
@@ -50,62 +49,62 @@ function getBlockedCommandMessage(command: string): string | null {
 
 	if (pipCommandPattern.test(command)) {
 		return [
-			"Error: pip is disabled. Use uv instead:",
-			"",
-			"  To install a package for a script: uv run --with PACKAGE python script.py",
-			"  To add a dependency to the project: uv add PACKAGE",
-			"",
-		].join("\n");
+			'Error: pip is disabled. Use uv instead:',
+			'',
+			'  To install a package for a script: uv run --with PACKAGE python script.py',
+			'  To add a dependency to the project: uv add PACKAGE',
+			'',
+		].join('\n');
 	}
 
 	if (pip3CommandPattern.test(command)) {
 		return [
-			"Error: pip3 is disabled. Use uv instead:",
-			"",
-			"  To install a package for a script: uv run --with PACKAGE python script.py",
-			"  To add a dependency to the project: uv add PACKAGE",
-			"",
-		].join("\n");
+			'Error: pip3 is disabled. Use uv instead:',
+			'',
+			'  To install a package for a script: uv run --with PACKAGE python script.py',
+			'  To add a dependency to the project: uv add PACKAGE',
+			'',
+		].join('\n');
 	}
 
 	if (poetryCommandPattern.test(command)) {
 		return [
-			"Error: poetry is disabled. Use uv instead:",
-			"",
-			"  To initialize a project: uv init",
-			"  To add a dependency: uv add PACKAGE",
-			"  To sync dependencies: uv sync",
-			"  To run commands: uv run COMMAND",
-			"",
-		].join("\n");
+			'Error: poetry is disabled. Use uv instead:',
+			'',
+			'  To initialize a project: uv init',
+			'  To add a dependency: uv add PACKAGE',
+			'  To sync dependencies: uv sync',
+			'  To run commands: uv run COMMAND',
+			'',
+		].join('\n');
 	}
 
 	if (pythonPipPattern.test(command)) {
 		return [
 			"Error: 'python -m pip' is disabled. Use uv instead:",
-			"",
-			"  To install a package for a script: uv run --with PACKAGE python script.py",
-			"  To add a dependency to the project: uv add PACKAGE",
-			"",
-		].join("\n");
+			'',
+			'  To install a package for a script: uv run --with PACKAGE python script.py',
+			'  To add a dependency to the project: uv add PACKAGE',
+			'',
+		].join('\n');
 	}
 
 	if (pythonVenvPattern.test(command)) {
 		return [
 			"Error: 'python -m venv' is disabled. Use uv instead:",
-			"",
-			"  To create a virtual environment: uv venv",
-			"",
-		].join("\n");
+			'',
+			'  To create a virtual environment: uv venv',
+			'',
+		].join('\n');
 	}
 
 	if (pythonPyCompilePattern.test(command)) {
 		return [
 			"Error: 'python -m py_compile' is disabled because it writes .pyc files to __pycache__.",
-			"",
-			"  To verify syntax without bytecode output: uv run python -m ast path/to/file.py >/dev/null",
-			"",
-		].join("\n");
+			'',
+			'  To verify syntax without bytecode output: uv run python -m ast path/to/file.py >/dev/null',
+			'',
+		].join('\n');
 	}
 
 	return null;
@@ -116,8 +115,8 @@ export default function (pi: ExtensionAPI) {
 	// prepend the intercepted-commands PATH and block disallowed commands.
 	// This avoids conflicts with other extensions (e.g. sandbox) that also
 	// register or replace the bash tool.
-	pi.on("tool_call", (event, _ctx) => {
-		if (event.toolName !== "bash") return;
+	pi.on('tool_call', (event, _ctx) => {
+		if (event.toolName !== 'bash') return;
 
 		const input = event.input as { command: string; timeout?: number };
 

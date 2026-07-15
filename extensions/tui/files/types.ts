@@ -2,7 +2,7 @@
  * Files Extension — Shared Types
  */
 
-import type { SessionEntry } from "@earendil-works/pi-coding-agent";
+import type { SessionEntry } from '@earendil-works/pi-coding-agent';
 
 // ── File References ─────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ export type GitStatusEntry = {
 
 // ── Change Recording ───────────────────────────────────────────────────────
 
-export type ChangeSource = "write" | "edit" | "bash_result" | "output_detected";
+export type ChangeSource = 'write' | 'edit' | 'bash_result' | 'output_detected';
 
 export interface ChangeRecord {
 	path: string;
@@ -50,7 +50,7 @@ export interface ChangeRecord {
 
 // ── Session File Changes ───────────────────────────────────────────────────
 
-export type FileToolName = "write" | "edit";
+export type FileToolName = 'write' | 'edit';
 
 export type SessionFileChange = {
 	operations: Set<FileToolName>;

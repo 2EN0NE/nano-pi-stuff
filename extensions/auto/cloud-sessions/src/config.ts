@@ -1,10 +1,10 @@
-import { execSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { execSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
-export type ProviderKind = "git" | "icloud";
+export type ProviderKind = 'git' | 'icloud';
 
 export interface GitProviderConfig {
 	repo: string;
@@ -28,42 +28,35 @@ export interface CloudSessionsConfig {
 }
 
 function expandTilde(value: string): string {
-	if (value === "~") return homedir();
-	if (value.startsWith("~/")) return join(homedir(), value.slice(2));
+	if (value === '~') return homedir();
+	if (value.startsWith('~/')) return join(homedir(), value.slice(2));
 	return value;
 }
 
-const CONFIG_DIR = join(homedir(), ".config", "pi");
-const CONFIG_FILE = join(CONFIG_DIR, "cloud-sessions.json");
+const CONFIG_DIR = join(homedir(), '.config', 'pi');
+const CONFIG_FILE = join(CONFIG_DIR, 'cloud-sessions.json');
 
 function defaultIcloudDir(): string {
-	return join(
-		homedir(),
-		"Library",
-		"Mobile Documents",
-		"com~apple~CloudDocs",
-		"pi-sessions",
-	);
+	return join(homedir(), 'Library', 'Mobile Documents', 'com~apple~CloudDocs', 'pi-sessions');
 }
 
 function defaultMachineId(): string {
-	if (process.env.PI_CLOUD_SESSIONS_MACHINE_ID)
-		return process.env.PI_CLOUD_SESSIONS_MACHINE_ID;
+	if (process.env.PI_CLOUD_SESSIONS_MACHINE_ID) return process.env.PI_CLOUD_SESSIONS_MACHINE_ID;
 	if (process.env.HOSTNAME) return process.env.HOSTNAME;
 	if (process.env.HOST) return process.env.HOST;
 	try {
-		return execSync("hostname -s", { encoding: "utf-8" }).trim();
+		return execSync('hostname -s', { encoding: 'utf-8' }).trim();
 	} catch {
 		/* continue */
 	}
 	try {
-		return execSync("scutil --get ComputerName", { encoding: "utf-8" })
+		return execSync('scutil --get ComputerName', { encoding: 'utf-8' })
 			.trim()
-			.replace(/\s+/g, "-");
+			.replace(/\s+/g, '-');
 	} catch {
 		/* continue */
 	}
-	return "unknown-machine";
+	return 'unknown-machine';
 }
 
 interface RawConfig {
@@ -80,12 +73,12 @@ interface RawConfig {
 async function readRawConfig(): Promise<RawConfig> {
 	if (!existsSync(CONFIG_FILE)) return {};
 	try {
-		return JSON.parse(await readFile(CONFIG_FILE, "utf-8")) as RawConfig;
+		return JSON.parse(await readFile(CONFIG_FILE, 'utf-8')) as RawConfig;
 	} catch (err) {
 		console.warn(
-			"cloud-sessions: failed to parse config file at",
+			'cloud-sessions: failed to parse config file at',
 			CONFIG_FILE,
-			"using defaults:",
+			'using defaults:',
 			(err as Error).message ?? err,
 		);
 		return {};
@@ -94,12 +87,12 @@ async function readRawConfig(): Promise<RawConfig> {
 
 function resolveProvider(raw: RawConfig): ProviderKind {
 	const value = process.env.PI_CLOUD_SESSIONS_PROVIDER || raw.provider;
-	return value === "icloud" ? "icloud" : "git";
+	return value === 'icloud' ? 'icloud' : 'git';
 }
 
 function asBool(value: string | undefined, fallback: boolean): boolean {
 	if (value === undefined) return fallback;
-	return value !== "0" && value.toLowerCase() !== "false";
+	return value !== '0' && value.toLowerCase() !== 'false';
 }
 
 function numberFrom(
@@ -107,12 +100,11 @@ function numberFrom(
 	fileValue: number | undefined,
 	fallback: number,
 ): number {
-	if (value !== undefined && value.trim() !== "") {
+	if (value !== undefined && value.trim() !== '') {
 		const n = Number(value);
 		if (Number.isFinite(n)) return n;
 	}
-	if (typeof fileValue === "number" && Number.isFinite(fileValue))
-		return fileValue;
+	if (typeof fileValue === 'number' && Number.isFinite(fileValue)) return fileValue;
 	return fallback;
 }
 
@@ -121,14 +113,8 @@ export async function loadConfig(): Promise<CloudSessionsConfig> {
 
 	return {
 		provider: resolveProvider(raw),
-		autoPush: asBool(
-			process.env.PI_CLOUD_SESSIONS_AUTO_PUSH,
-			raw.autoPush ?? true,
-		),
-		pullOnStart: asBool(
-			process.env.PI_CLOUD_SESSIONS_PULL_ON_START,
-			raw.pullOnStart ?? true,
-		),
+		autoPush: asBool(process.env.PI_CLOUD_SESSIONS_AUTO_PUSH, raw.autoPush ?? true),
+		pullOnStart: asBool(process.env.PI_CLOUD_SESSIONS_PULL_ON_START, raw.pullOnStart ?? true),
 		pushDebounceMs: numberFrom(
 			process.env.PI_CLOUD_SESSIONS_DEBOUNCE_MS,
 			raw.pushDebounceMs,
@@ -139,21 +125,15 @@ export async function loadConfig(): Promise<CloudSessionsConfig> {
 			raw.pollIntervalMs,
 			60000,
 		),
-		machineId:
-			process.env.PI_CLOUD_SESSIONS_MACHINE_ID ||
-			raw.machineId ||
-			defaultMachineId(),
+		machineId: process.env.PI_CLOUD_SESSIONS_MACHINE_ID || raw.machineId || defaultMachineId(),
 		git: {
-			repo: process.env.PI_CLOUD_SESSIONS_GIT_REPO || raw.git?.repo || "",
-			branch:
-				process.env.PI_CLOUD_SESSIONS_GIT_BRANCH || raw.git?.branch || "main",
-			remoteName: raw.git?.remoteName || "origin",
+			repo: process.env.PI_CLOUD_SESSIONS_GIT_REPO || raw.git?.repo || '',
+			branch: process.env.PI_CLOUD_SESSIONS_GIT_BRANCH || raw.git?.branch || 'main',
+			remoteName: raw.git?.remoteName || 'origin',
 		},
 		icloud: {
 			dir: expandTilde(
-				process.env.PI_CLOUD_SESSIONS_ICLOUD_DIR ||
-					raw.icloud?.dir ||
-					defaultIcloudDir(),
+				process.env.PI_CLOUD_SESSIONS_ICLOUD_DIR || raw.icloud?.dir || defaultIcloudDir(),
 			),
 		},
 	};
@@ -164,7 +144,7 @@ export async function readRawConfigFile(): Promise<Record<string, unknown>> {
 }
 
 export function isProviderConfigured(config: CloudSessionsConfig): boolean {
-	if (config.provider === "git") return config.git.repo.length > 0;
+	if (config.provider === 'git') return config.git.repo.length > 0;
 	return config.icloud.dir.length > 0;
 }
 

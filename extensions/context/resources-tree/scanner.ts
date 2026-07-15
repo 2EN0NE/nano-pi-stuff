@@ -1,33 +1,33 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent";
-import { readdirSync, existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import type { ResourceItem, SkillEntry } from "./types.js";
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { loadSkillsFromDir } from '@earendil-works/pi-coding-agent';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { ResourceItem, SkillEntry } from './types.js';
 
 // ── Resource Discovery (startup header) ───────────────────────────
 
 function scanDirResources(agentDir: string, label: string): ResourceItem[] {
 	const items: ResourceItem[] = [];
-	const agentsFile = join(agentDir, "AGENTS.md");
+	const agentsFile = join(agentDir, 'AGENTS.md');
 	if (existsSync(agentsFile))
 		items.push({
-			name: "AGENTS.md",
-			type: "context",
+			name: 'AGENTS.md',
+			type: 'context',
 			sourceLabel: label,
 			path: agentsFile,
 		});
 
-	const skillsDir = join(agentDir, "skills");
+	const skillsDir = join(agentDir, 'skills');
 	if (existsSync(skillsDir)) {
 		try {
 			for (const e of readdirSync(skillsDir, { withFileTypes: true })) {
-				if (e.isDirectory() && existsSync(join(skillsDir, e.name, "SKILL.md")))
+				if (e.isDirectory() && existsSync(join(skillsDir, e.name, 'SKILL.md')))
 					items.push({
 						name: e.name,
-						type: "skill",
+						type: 'skill',
 						sourceLabel: label,
-						path: join(skillsDir, e.name, "SKILL.md"),
+						path: join(skillsDir, e.name, 'SKILL.md'),
 					});
 			}
 		} catch {
@@ -35,23 +35,23 @@ function scanDirResources(agentDir: string, label: string): ResourceItem[] {
 		}
 	}
 
-	const extDir = join(agentDir, "extensions");
+	const extDir = join(agentDir, 'extensions');
 	if (existsSync(extDir)) {
 		try {
 			for (const e of readdirSync(extDir, { withFileTypes: true })) {
-				if (e.isFile() && e.name.endsWith(".ts"))
+				if (e.isFile() && e.name.endsWith('.ts'))
 					items.push({
-						name: e.name.replace(/\.ts$/, ""),
-						type: "extension",
+						name: e.name.replace(/\.ts$/, ''),
+						type: 'extension',
 						sourceLabel: label,
 						path: join(extDir, e.name),
 					});
-				else if (e.isDirectory() && !e.name.startsWith(".")) {
-					const idx = join(extDir, e.name, "index.ts");
+				else if (e.isDirectory() && !e.name.startsWith('.')) {
+					const idx = join(extDir, e.name, 'index.ts');
 					if (existsSync(idx))
 						items.push({
 							name: e.name,
-							type: "extension",
+							type: 'extension',
 							sourceLabel: label,
 							path: idx,
 						});
@@ -62,14 +62,14 @@ function scanDirResources(agentDir: string, label: string): ResourceItem[] {
 		}
 	}
 
-	const themesDir = join(agentDir, "themes");
+	const themesDir = join(agentDir, 'themes');
 	if (existsSync(themesDir)) {
 		try {
 			for (const e of readdirSync(themesDir, { withFileTypes: true })) {
-				if (e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".ts")))
+				if (e.isFile() && (e.name.endsWith('.json') || e.name.endsWith('.ts')))
 					items.push({
-						name: e.name.replace(/\.(json|ts)$/, ""),
-						type: "theme",
+						name: e.name.replace(/\.(json|ts)$/, ''),
+						type: 'theme',
 						sourceLabel: label,
 						path: join(themesDir, e.name),
 					});
@@ -82,11 +82,11 @@ function scanDirResources(agentDir: string, label: string): ResourceItem[] {
 }
 
 function resolveNpmPackageDir(pkg: string): string | null {
-	const base = join(homedir(), ".pi", "agent", "npm", "node_modules");
+	const base = join(homedir(), '.pi', 'agent', 'npm', 'node_modules');
 	const dir = join(base, pkg);
 	if (existsSync(dir)) return dir;
-	if (pkg.startsWith("@")) {
-		const parts = pkg.split("/");
+	if (pkg.startsWith('@')) {
+		const parts = pkg.split('/');
 		if (parts.length === 2) {
 			const scoped = join(base, parts[0], parts[1]);
 			if (existsSync(scoped)) return scoped;
@@ -100,12 +100,12 @@ function scanNpmPackage(name: string, dir: string): ResourceItem[] {
 	const label = `npm:${name}`;
 	try {
 		for (const e of readdirSync(dir, { withFileTypes: true })) {
-			if (e.isFile() && e.name.endsWith(".ts")) {
-				const n = e.name.replace(/\.ts$/, "");
-				if (n === "index" || n === "types" || n.startsWith("_")) continue;
+			if (e.isFile() && e.name.endsWith('.ts')) {
+				const n = e.name.replace(/\.ts$/, '');
+				if (n === 'index' || n === 'types' || n.startsWith('_')) continue;
 				items.push({
 					name: n,
-					type: "extension",
+					type: 'extension',
 					sourceLabel: label,
 					path: join(dir, e.name),
 				});
@@ -114,29 +114,29 @@ function scanNpmPackage(name: string, dir: string): ResourceItem[] {
 	} catch {
 		/* skip */
 	}
-	const sd = join(dir, "skills");
+	const sd = join(dir, 'skills');
 	if (existsSync(sd)) {
 		try {
 			for (const e of readdirSync(sd, { withFileTypes: true }))
-				if (e.isDirectory() && existsSync(join(sd, e.name, "SKILL.md")))
+				if (e.isDirectory() && existsSync(join(sd, e.name, 'SKILL.md')))
 					items.push({
 						name: e.name,
-						type: "skill",
+						type: 'skill',
 						sourceLabel: label,
-						path: join(sd, e.name, "SKILL.md"),
+						path: join(sd, e.name, 'SKILL.md'),
 					});
 		} catch {
 			/* skip */
 		}
 	}
-	const td = join(dir, "themes");
+	const td = join(dir, 'themes');
 	if (existsSync(td)) {
 		try {
 			for (const e of readdirSync(td, { withFileTypes: true }))
-				if (e.isFile() && (e.name.endsWith(".json") || e.name.endsWith(".ts")))
+				if (e.isFile() && (e.name.endsWith('.json') || e.name.endsWith('.ts')))
 					items.push({
-						name: e.name.replace(/\.(json|ts)$/, ""),
-						type: "theme",
+						name: e.name.replace(/\.(json|ts)$/, ''),
+						type: 'theme',
 						sourceLabel: label,
 						path: join(td, e.name),
 					});
@@ -150,13 +150,10 @@ function scanNpmPackage(name: string, dir: string): ResourceItem[] {
 function scanNpmPackagesFromSettings(): ResourceItem[] {
 	const items: ResourceItem[] = [];
 	try {
-		const raw = readFileSync(
-			join(homedir(), ".pi", "agent", "settings.json"),
-			"utf8",
-		);
+		const raw = readFileSync(join(homedir(), '.pi', 'agent', 'settings.json'), 'utf8');
 		const settings = JSON.parse(raw);
 		for (const pkg of settings.packages ?? []) {
-			if (!pkg.startsWith("npm:")) continue;
+			if (!pkg.startsWith('npm:')) continue;
 			const name = pkg.slice(4);
 			const dir = resolveNpmPackageDir(name);
 			if (dir) items.push(...scanNpmPackage(name, dir));
@@ -175,19 +172,19 @@ export interface ScannedResources {
 }
 
 export function scanAllResources(ctx: ExtensionContext): ScannedResources {
-	const userDir = join(homedir(), ".pi", "agent");
-	const projDir = join(ctx.cwd, ".pi");
-	const agentsDir = join(homedir(), ".agents");
-	const user = scanDirResources(userDir, "~/.pi/agent");
-	const project = scanDirResources(projDir, ".pi");
-	const agents = scanDirResources(agentsDir, ".agents");
+	const userDir = join(homedir(), '.pi', 'agent');
+	const projDir = join(ctx.cwd, '.pi');
+	const agentsDir = join(homedir(), '.agents');
+	const user = scanDirResources(userDir, '~/.pi/agent');
+	const project = scanDirResources(projDir, '.pi');
+	const agents = scanDirResources(agentsDir, '.agents');
 	const npm = scanNpmPackagesFromSettings();
 
 	const byType = (items: ResourceItem[]) => ({
-		context: items.filter((i) => i.type === "context"),
-		skills: items.filter((i) => i.type === "skill"),
-		extensions: items.filter((i) => i.type === "extension"),
-		themes: items.filter((i) => i.type === "theme"),
+		context: items.filter((i) => i.type === 'context'),
+		skills: items.filter((i) => i.type === 'skill'),
+		extensions: items.filter((i) => i.type === 'extension'),
+		themes: items.filter((i) => i.type === 'theme'),
 	});
 
 	const u = byType(user);
@@ -208,9 +205,9 @@ export function scanAllResources(ctx: ExtensionContext): ScannedResources {
 export function loadAllSkillsFromFs(): SkillEntry[] {
 	const result: SkillEntry[] = [];
 
-	const userDir = join(homedir(), ".pi", "agent", "skills");
+	const userDir = join(homedir(), '.pi', 'agent', 'skills');
 	if (existsSync(userDir)) {
-		const loaded = loadSkillsFromDir({ dir: userDir, source: "user" });
+		const loaded = loadSkillsFromDir({ dir: userDir, source: 'user' });
 		for (const s of loaded.skills) {
 			result.push({
 				name: s.name,
@@ -220,9 +217,9 @@ export function loadAllSkillsFromFs(): SkillEntry[] {
 		}
 	}
 
-	const projectDir = join(process.cwd(), ".pi", "skills");
+	const projectDir = join(process.cwd(), '.pi', 'skills');
 	if (existsSync(projectDir)) {
-		const loaded = loadSkillsFromDir({ dir: projectDir, source: "project" });
+		const loaded = loadSkillsFromDir({ dir: projectDir, source: 'project' });
 		for (const s of loaded.skills) {
 			result.push({
 				name: s.name,
@@ -232,11 +229,11 @@ export function loadAllSkillsFromFs(): SkillEntry[] {
 		}
 	}
 
-	const npmRoot = join(homedir(), ".pi", "agent", "npm", "node_modules");
+	const npmRoot = join(homedir(), '.pi', 'agent', 'npm', 'node_modules');
 	if (existsSync(npmRoot)) {
 		for (const pkg of readdirSync(npmRoot, { withFileTypes: true })) {
 			if (!pkg.isDirectory()) continue;
-			const skillsDir = join(npmRoot, pkg.name, "skills");
+			const skillsDir = join(npmRoot, pkg.name, 'skills');
 			if (!existsSync(skillsDir)) continue;
 			const loaded = loadSkillsFromDir({
 				dir: skillsDir,
@@ -256,9 +253,9 @@ export function loadAllSkillsFromFs(): SkillEntry[] {
 	}
 
 	// Agent-private skills (~/.agents/skills/ — used by Pi's native loader).
-	const agentsDir = join(homedir(), ".agents", "skills");
+	const agentsDir = join(homedir(), '.agents', 'skills');
 	if (existsSync(agentsDir)) {
-		const loaded = loadSkillsFromDir({ dir: agentsDir, source: "local" });
+		const loaded = loadSkillsFromDir({ dir: agentsDir, source: 'local' });
 		for (const s of loaded.skills) {
 			result.push({
 				name: s.name,

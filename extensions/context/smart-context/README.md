@@ -78,20 +78,20 @@ flash 看到的是：
 
 当前分类器会识别以下认同性回复为"看上下文定义任务"：
 
-| 触发词 | 效果 |
-|---|---|
-| 好的、可以、行、来 | 查看前一条消息决定复杂度 |
-| 继续、搞、干、做吧、开工、走起 | 同上 |
+| 触发词                         | 效果                     |
+| ------------------------------ | ------------------------ |
+| 好的、可以、行、来             | 查看前一条消息决定复杂度 |
+| 继续、搞、干、做吧、开工、走起 | 同上                     |
 
 ## Profile 配置
 
 ### 内置 Profile
 
-| Profile | 分类器 | trivial | simple | medium | complex | largeCtx |
-|---|---|---|---|---|---|---|
-| **balanced** 🌟（默认） | flash | flash | **pro** | **pro** | **pro** | **pro** |
-| **fast** ⚡ | flash | flash | flash | flash | flash | flash |
-| **quality** 🎯 | flash | pro | pro | pro | pro | pro |
+| Profile                 | 分类器 | trivial | simple  | medium  | complex | largeCtx |
+| ----------------------- | ------ | ------- | ------- | ------- | ------- | -------- |
+| **balanced** 🌟（默认） | flash  | flash   | **pro** | **pro** | **pro** | **pro**  |
+| **fast** ⚡             | flash  | flash   | flash   | flash   | flash   | flash    |
+| **quality** 🎯          | flash  | pro     | pro     | pro     | pro     | pro      |
 
 ### 推荐用法
 
@@ -99,7 +99,7 @@ deepseek-v4-flash 和 pro 的能力差距没有 claude haiku/opus 那么大。fl
 
 ```json
 {
-  "activeProfile": "balanced"
+	"activeProfile": "balanced"
 }
 ```
 
@@ -111,32 +111,32 @@ deepseek-v4-flash 和 pro 的能力差距没有 claude haiku/opus 那么大。fl
 
 > 💡 **对 deepseek 用户的价值评估**
 >
-> | 价值 | 功能 | 理由 |
-> |---|---|---|
-> | ⭐⭐⭐ | **大上下文保护** | 500K+tokens 时自动用 pro，避免 flash 在超长上下文下质量下降 |
-> | ⭐⭐ | **trivial 轮次不切换** | 减少无意义的模型切换 |
-> | ⭐ | **分类路由** | deepseek flash/pro 差距较小，路由收益有限 |
+> | 价值   | 功能                   | 理由                                                        |
+> | ------ | ---------------------- | ----------------------------------------------------------- |
+> | ⭐⭐⭐ | **大上下文保护**       | 500K+tokens 时自动用 pro，避免 flash 在超长上下文下质量下降 |
+> | ⭐⭐   | **trivial 轮次不切换** | 减少无意义的模型切换                                        |
+> | ⭐     | **分类路由**           | deepseek flash/pro 差距较小，路由收益有限                   |
 
 ### 自定义 Profile
 
 ```json
 {
-  "activeProfile": "my-profile",
-  "profiles": {
-    "my-profile": {
-      "classifier": { "provider": "deepseek", "model": "deepseek-v4-flash" },
-      "routing": {
-        "trivial": { "provider": "deepseek", "model": "deepseek-v4-flash" },
-        "simple": { "provider": "litellm", "model": "gpt-4o" },
-        "medium": { "provider": "deepseek", "model": "deepseek-v4-pro" },
-        "complex": { "provider": "deepseek", "model": "deepseek-v4-pro" }
-      },
-      "largeContext": {
-        "thresholdTokens": 600000,
-        "model": { "provider": "deepseek", "model": "deepseek-v4-pro" }
-      }
-    }
-  }
+	"activeProfile": "my-profile",
+	"profiles": {
+		"my-profile": {
+			"classifier": { "provider": "deepseek", "model": "deepseek-v4-flash" },
+			"routing": {
+				"trivial": { "provider": "deepseek", "model": "deepseek-v4-flash" },
+				"simple": { "provider": "litellm", "model": "gpt-4o" },
+				"medium": { "provider": "deepseek", "model": "deepseek-v4-pro" },
+				"complex": { "provider": "deepseek", "model": "deepseek-v4-pro" }
+			},
+			"largeContext": {
+				"thresholdTokens": 600000,
+				"model": { "provider": "deepseek", "model": "deepseek-v4-pro" }
+			}
+		}
+	}
 }
 ```
 
@@ -146,14 +146,14 @@ deepseek-v4-flash 和 pro 的能力差距没有 claude haiku/opus 那么大。fl
 
 ```json
 {
-  "classifier": { "provider": "deepseek", "model": "deepseek-v4-flash" },
-  "routing": {
-    "trivial": { "provider": "deepseek", "model": "deepseek-v4-flash" }
-  },
-  "largeContext": {
-    "thresholdTokens": 600000,
-    "model": { "provider": "deepseek", "model": "deepseek-v4-pro" }
-  }
+	"classifier": { "provider": "deepseek", "model": "deepseek-v4-flash" },
+	"routing": {
+		"trivial": { "provider": "deepseek", "model": "deepseek-v4-flash" }
+	},
+	"largeContext": {
+		"thresholdTokens": 600000,
+		"model": { "provider": "deepseek", "model": "deepseek-v4-pro" }
+	}
 }
 ```
 
@@ -180,12 +180,12 @@ deepseek-v4-flash 和 pro 的能力差距没有 claude haiku/opus 那么大。fl
 
 除了路由，smart-context 还提供压缩能力，减少上下文体积：
 
-| 阶段 | 技术 | 安全性 |
-|---|---|---|
-| **工具输出（结构化）** | 日志折叠、n-gram 去重、JSON 表格化、跨轮差量 | 无损 / 近无损 |
-| **BM25 相关性** | 对旧消息与当前查询进行评分 | — |
-| **摘要** | 用 flash 对旧消息做摘要，按哈希缓存 | 有损但可恢复 |
-| **检索丢弃** | 低相关性内容替换为存根 + `recover_context("id")` | 可恢复 |
+| 阶段                   | 技术                                             | 安全性        |
+| ---------------------- | ------------------------------------------------ | ------------- |
+| **工具输出（结构化）** | 日志折叠、n-gram 去重、JSON 表格化、跨轮差量     | 无损 / 近无损 |
+| **BM25 相关性**        | 对旧消息与当前查询进行评分                       | —             |
+| **摘要**               | 用 flash 对旧消息做摘要，按哈希缓存              | 有损但可恢复  |
+| **检索丢弃**           | 低相关性内容替换为存根 + `recover_context("id")` | 可恢复        |
 
 压缩内容可通过 `recover_context("id")` 工具恢复完整原文。
 

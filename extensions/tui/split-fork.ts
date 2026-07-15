@@ -1,12 +1,12 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { existsSync, promises as fs } from "node:fs";
-import * as path from "node:path";
-import { randomUUID } from "node:crypto";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
+import { existsSync, promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("split-fork");
+const log = createLogger('split-fork');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 const GHOSTTY_SPLIT_SCRIPT = `on run argv
 	set targetCwd to item 1 of argv
@@ -47,21 +47,21 @@ function getPiInvocationParts(): string[] {
 		return [process.execPath];
 	}
 
-	return ["pi"];
+	return ['pi'];
 }
 
 function buildPiStartupInput(sessionFile: string | undefined, prompt: string): string {
 	const commandParts = [...getPiInvocationParts()];
 
 	if (sessionFile) {
-		commandParts.push("--session", sessionFile);
+		commandParts.push('--session', sessionFile);
 	}
 
 	if (prompt.length > 0) {
-		commandParts.push("--", prompt);
+		commandParts.push('--', prompt);
 	}
 
-	return `${commandParts.map(shellQuote).join(" ")}\n`;
+	return `${commandParts.map(shellQuote).join(' ')}\n`;
 }
 
 async function createForkedSession(ctx: ExtensionCommandContext): Promise<string | undefined> {
@@ -75,12 +75,12 @@ async function createForkedSession(ctx: ExtensionCommandContext): Promise<string
 	const currentHeader = ctx.sessionManager.getHeader();
 
 	const timestamp = new Date().toISOString();
-	const fileTimestamp = timestamp.replace(/[:.]/g, "-");
+	const fileTimestamp = timestamp.replace(/[:.]/g, '-');
 	const newSessionId = randomUUID();
 	const newSessionFile = path.join(sessionDir, `${fileTimestamp}_${newSessionId}.jsonl`);
 
 	const newHeader = {
-		type: "session",
+		type: 'session',
 		version: currentHeader?.version ?? 3,
 		id: newSessionId,
 		timestamp,
@@ -88,21 +88,28 @@ async function createForkedSession(ctx: ExtensionCommandContext): Promise<string
 		parentSession: sessionFile,
 	};
 
-	const lines = [JSON.stringify(newHeader), ...branchEntries.map((entry) => JSON.stringify(entry))].join("\n") + "\n";
+	const lines =
+		[JSON.stringify(newHeader), ...branchEntries.map((entry) => JSON.stringify(entry))].join(
+			'\n',
+		) + '\n';
 
 	await fs.mkdir(sessionDir, { recursive: true });
-	await fs.writeFile(newSessionFile, lines, "utf8");
+	await fs.writeFile(newSessionFile, lines, 'utf8');
 
 	return newSessionFile;
 }
 
 export default function (pi: ExtensionAPI): void {
-	log.debug("registerCommand: split-fork");
-	pi.registerCommand("split-fork", {
-		description: "Fork this session into a new pi process in a right-hand Ghostty split. Usage: /split-fork [optional prompt]",
+	log.debug('registerCommand: split-fork');
+	pi.registerCommand('split-fork', {
+		description:
+			'Fork this session into a new pi process in a right-hand Ghostty split. Usage: /split-fork [optional prompt]',
 		handler: async (args, ctx) => {
-			if (process.platform !== "darwin") {
-				ctx.ui.notify("/split-fork currently requires macOS (Ghostty AppleScript).", "warning");
+			if (process.platform !== 'darwin') {
+				ctx.ui.notify(
+					'/split-fork currently requires macOS (Ghostty AppleScript).',
+					'warning',
+				);
 				return;
 			}
 
@@ -111,25 +118,38 @@ export default function (pi: ExtensionAPI): void {
 			const forkedSessionFile = await createForkedSession(ctx);
 			const startupInput = buildPiStartupInput(forkedSessionFile, prompt);
 
-			const result = await pi.exec("osascript", ["-e", GHOSTTY_SPLIT_SCRIPT, "--", ctx.cwd, startupInput]);
+			const result = await pi.exec('osascript', [
+				'-e',
+				GHOSTTY_SPLIT_SCRIPT,
+				'--',
+				ctx.cwd,
+				startupInput,
+			]);
 			if (result.code !== 0) {
-				const reason = result.stderr?.trim() || result.stdout?.trim() || "unknown osascript error";
-				ctx.ui.notify(`Failed to launch Ghostty split: ${reason}`, "error");
+				const reason =
+					result.stderr?.trim() || result.stdout?.trim() || 'unknown osascript error';
+				ctx.ui.notify(`Failed to launch Ghostty split: ${reason}`, 'error');
 				if (forkedSessionFile) {
-					ctx.ui.notify(`Forked session was created: ${forkedSessionFile}`, "info");
+					ctx.ui.notify(`Forked session was created: ${forkedSessionFile}`, 'info');
 				}
 				return;
 			}
 
 			if (forkedSessionFile) {
 				const fileName = path.basename(forkedSessionFile);
-				const suffix = prompt ? " and sent prompt" : "";
-				ctx.ui.notify(`Forked to ${fileName} in a new Ghostty split${suffix}.`, "info");
+				const suffix = prompt ? ' and sent prompt' : '';
+				ctx.ui.notify(`Forked to ${fileName} in a new Ghostty split${suffix}.`, 'info');
 				if (wasBusy) {
-					ctx.ui.notify("Forked from current committed state (in-flight turn continues in original session).", "info");
+					ctx.ui.notify(
+						'Forked from current committed state (in-flight turn continues in original session).',
+						'info',
+					);
 				}
 			} else {
-				ctx.ui.notify("Opened a new Ghostty split (no persisted session to fork).", "warning");
+				ctx.ui.notify(
+					'Opened a new Ghostty split (no persisted session to fork).',
+					'warning',
+				);
 			}
 		},
 	});

@@ -4,34 +4,26 @@ import type {
 	ExtensionUIContext,
 	ExtensionWidgetOptions,
 	WidgetPlacement,
-} from "@earendil-works/pi-coding-agent";
-import {
-	getAgentDir,
-	getSettingsListTheme,
-} from "@earendil-works/pi-coding-agent";
-import {
-	Container,
-	type SettingItem,
-	SettingsList,
-	Text,
-} from "@earendil-works/pi-tui";
-import { createLogger } from "@zenone/pi-logger";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+} from '@earendil-works/pi-coding-agent';
+import { getAgentDir, getSettingsListTheme } from '@earendil-works/pi-coding-agent';
+import { Container, type SettingItem, SettingsList, Text } from '@earendil-works/pi-tui';
+import { createLogger } from '@zenone/pi-logger';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
-const log = createLogger("widget-wrangler");
+const log = createLogger('widget-wrangler');
 
-const CUSTOM_TYPE = "widget-wrangler-config";
-const OWN_WIDGET_KEY = "widget-wrangler";
-const STATUS_PREFIX = "status:";
+const CUSTOM_TYPE = 'widget-wrangler-config';
+const OWN_WIDGET_KEY = 'widget-wrangler';
+const STATUS_PREFIX = 'status:';
 
 function configPath(): string {
-	return join(getAgentDir(), "widget-wrangler.json");
+	return join(getAgentDir(), 'widget-wrangler.json');
 }
 
 function loadGlobalConfig(): string[] | null {
 	try {
-		const raw = readFileSync(configPath(), "utf8");
+		const raw = readFileSync(configPath(), 'utf8');
 		const data = JSON.parse(raw) as WranglerState | undefined;
 		return Array.isArray(data?.disabled) ? data.disabled : null;
 	} catch {
@@ -44,16 +36,16 @@ function saveGlobalConfig(state: WranglerState): boolean {
 		const path = configPath();
 		mkdirSync(dirname(path), { recursive: true });
 		const tmp = `${path}.${process.pid}.tmp`;
-		writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+		writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 		renameSync(tmp, path);
 		return true;
 	} catch (err) {
-		log.error("saveGlobalConfig: failed to persist config", err);
+		log.error('saveGlobalConfig: failed to persist config', err);
 		return false;
 	}
 }
 
-type WidgetContent = Parameters<ExtensionUIContext["setWidget"]>[1];
+type WidgetContent = Parameters<ExtensionUIContext['setWidget']>[1];
 
 interface WidgetRecord {
 	content: WidgetContent;
@@ -74,8 +66,8 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 	const registry = new Map<string, WidgetRecord>();
 	const statusRegistry = new Map<string, StatusRecord>();
 	const disabled = new Set<string>();
-	let originalSetWidget: ExtensionUIContext["setWidget"] | null = null;
-	let originalSetStatus: ExtensionUIContext["setStatus"] | null = null;
+	let originalSetWidget: ExtensionUIContext['setWidget'] | null = null;
+	let originalSetStatus: ExtensionUIContext['setStatus'] | null = null;
 	let patchedUi: ExtensionUIContext | null = null;
 
 	function persist(): boolean {
@@ -97,7 +89,7 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 		const entries = ctx.sessionManager.getBranch();
 		let saved: string[] | undefined;
 		for (const entry of entries) {
-			if (entry.type === "custom" && entry.customType === CUSTOM_TYPE) {
+			if (entry.type === 'custom' && entry.customType === CUSTOM_TYPE) {
 				const data = entry.data as WranglerState | undefined;
 				if (data?.disabled) saved = data.disabled;
 			}
@@ -165,7 +157,7 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 		originalSetWidget = ui.setWidget.bind(ui);
 		patchedUi = ui;
 
-		const wrapped: ExtensionUIContext["setWidget"] = ((
+		const wrapped: ExtensionUIContext['setWidget'] = ((
 			key: string,
 			content: WidgetContent,
 			options?: ExtensionWidgetOptions,
@@ -186,12 +178,12 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 				rendered: existing?.rendered ?? false,
 			});
 			applyWidget(key);
-		}) as ExtensionUIContext["setWidget"];
+		}) as ExtensionUIContext['setWidget'];
 
-		(ui as { setWidget: ExtensionUIContext["setWidget"] }).setWidget = wrapped;
+		(ui as { setWidget: ExtensionUIContext['setWidget'] }).setWidget = wrapped;
 
 		originalSetStatus = ui.setStatus.bind(ui);
-		const wrappedStatus: ExtensionUIContext["setStatus"] = ((
+		const wrappedStatus: ExtensionUIContext['setStatus'] = ((
 			key: string,
 			text: string | undefined,
 		) => {
@@ -207,14 +199,13 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 			const existing = statusRegistry.get(key);
 			statusRegistry.set(key, { text, rendered: existing?.rendered ?? false });
 			applyStatus(key);
-		}) as ExtensionUIContext["setStatus"];
+		}) as ExtensionUIContext['setStatus'];
 
-		(ui as { setStatus: ExtensionUIContext["setStatus"] }).setStatus =
-			wrappedStatus;
+		(ui as { setStatus: ExtensionUIContext['setStatus'] }).setStatus = wrappedStatus;
 	}
 
 	function placementLabel(placement: WidgetPlacement | undefined): string {
-		return placement === "belowEditor" ? "below" : "above";
+		return placement === 'belowEditor' ? 'below' : 'above';
 	}
 
 	function buildItems(): SettingItem[] {
@@ -226,9 +217,9 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 				return {
 					id: key,
 					label: key,
-					description: `widget · ${placementLabel(record?.options?.placement)} editor${record?.content === undefined ? " · idle" : ""}`,
-					currentValue: enabled ? "shown" : "hidden",
-					values: ["shown", "hidden"],
+					description: `widget · ${placementLabel(record?.options?.placement)} editor${record?.content === undefined ? ' · idle' : ''}`,
+					currentValue: enabled ? 'shown' : 'hidden',
+					values: ['shown', 'hidden'],
 				};
 			});
 
@@ -241,9 +232,9 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 				return {
 					id: toggleKey,
 					label: `${key} (status)`,
-					description: `footer status${record?.text === undefined ? " · idle" : ` · "${record?.text}"`}`,
-					currentValue: enabled ? "shown" : "hidden",
-					values: ["shown", "hidden"],
+					description: `footer status${record?.text === undefined ? ' · idle' : ` · "${record?.text}"`}`,
+					currentValue: enabled ? 'shown' : 'hidden',
+					values: ['shown', 'hidden'],
 				};
 			});
 
@@ -259,19 +250,19 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 			applyWidget(key);
 		}
 		if (!persist()) {
-			ui?.notify(`保存小组件管理配置失败: ${configPath()} 🤠`, "error");
+			ui?.notify(`保存小组件管理配置失败: ${configPath()} 🤠`, 'error');
 		}
 	}
 
 	async function openPanel(ctx: ExtensionContext) {
-		if ((ctx as any).mode !== "tui") {
-			ctx.ui.notify("小组件管理需要 TUI 模式 🤠", "error");
+		if ((ctx as any).mode !== 'tui') {
+			ctx.ui.notify('小组件管理需要 TUI 模式 🤠', 'error');
 			return;
 		}
 
 		const items = buildItems();
 		if (items.length === 0) {
-			ctx.ui.notify("还没有发现任何小组件 🤠 — 围栏是空的", "info");
+			ctx.ui.notify('还没有发现任何小组件 🤠 — 围栏是空的', 'info');
 			return;
 		}
 
@@ -279,7 +270,7 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 			const container = new Container();
 			container.addChild(
 				new Text(
-					`${theme.fg("accent", theme.bold("🤠 小组件管理"))}  ${theme.fg("muted", "空格/回车切换 · Esc 关闭")}`,
+					`${theme.fg('accent', theme.bold('🤠 小组件管理'))}  ${theme.fg('muted', '空格/回车切换 · Esc 关闭')}`,
 					1,
 					1,
 				),
@@ -290,7 +281,7 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 				Math.min(items.length + 2, 15),
 				getSettingsListTheme(),
 				(id, newValue) => {
-					setHidden(id, newValue === "hidden", ctx.ui);
+					setHidden(id, newValue === 'hidden', ctx.ui);
 					tui.requestRender();
 				},
 				() => done(undefined),
@@ -309,34 +300,30 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 		});
 	}
 
-	pi.registerCommand("wrangle", {
-		description: "🤠 管理所有小组件和底部状态栏的显示/隐藏",
+	pi.registerCommand('wrangle', {
+		description: '🤠 管理所有小组件和底部状态栏的显示/隐藏',
 		handler: async (_args, ctx) => {
 			await openPanel(ctx);
 		},
 	});
 
-	pi.registerFlag("widget-wrangler-key", {
-		description:
-			"打开小组件管理面板的快捷键 (如 ctrl+shift+g, alt+w)。空值禁用快捷键。",
-		type: "string",
-		default: "ctrl+shift+g",
+	pi.registerFlag('widget-wrangler-key', {
+		description: '打开小组件管理面板的快捷键 (如 ctrl+shift+g, alt+w)。空值禁用快捷键。',
+		type: 'string',
+		default: 'ctrl+shift+g',
 	});
 
-	const shortcutKey = String(pi.getFlag("widget-wrangler-key") ?? "").trim();
+	const shortcutKey = String(pi.getFlag('widget-wrangler-key') ?? '').trim();
 	if (shortcutKey) {
-		pi.registerShortcut(
-			shortcutKey as Parameters<ExtensionAPI["registerShortcut"]>[0],
-			{
-				description: "🤠 打开小组件管理面板",
-				handler: async (ctx) => {
-					await openPanel(ctx);
-				},
+		pi.registerShortcut(shortcutKey as Parameters<ExtensionAPI['registerShortcut']>[0], {
+			description: '🤠 打开小组件管理面板',
+			handler: async (ctx) => {
+				await openPanel(ctx);
 			},
-		);
+		});
 	}
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.on('session_start', (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		patchSetWidget(ctx.ui);
 		restoreConfig(ctx);
@@ -345,7 +332,7 @@ export default function widgetWranglerExtension(pi: ExtensionAPI) {
 		for (const key of statusRegistry.keys()) applyStatus(key);
 	});
 
-	pi.on("session_tree", (_event, ctx) => {
+	pi.on('session_tree', (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		patchSetWidget(ctx.ui);
 		restoreConfig(ctx);

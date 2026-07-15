@@ -36,8 +36,8 @@ pi 将会话存储为 `<agent-dir>/sessions/--<project-path>--/<timestamp>_<uuid
 ```jsonc
 // ~/.config/pi/cloud-sessions.json
 {
-  "provider": "git",
-  "git": { "repo": "git@github.com:you/pi-sessions.git", "branch": "main" }
+	"provider": "git",
+	"git": { "repo": "git@github.com:you/pi-sessions.git", "branch": "main" },
 }
 ```
 
@@ -47,10 +47,10 @@ pi 将会话存储为 `<agent-dir>/sessions/--<project-path>--/<timestamp>_<uuid
 
 ```jsonc
 {
-  "provider": "icloud",
-  "icloud": {
-    "dir": "~/Library/Mobile Documents/com~apple~CloudDocs/pi-sessions"
-  }
+	"provider": "icloud",
+	"icloud": {
+		"dir": "~/Library/Mobile Documents/com~apple~CloudDocs/pi-sessions",
+	},
 }
 ```
 
@@ -76,17 +76,17 @@ pi 将会话存储为 `<agent-dir>/sessions/--<project-path>--/<timestamp>_<uuid
 
 所有选项都可以在 `~/.config/pi/cloud-sessions.json` 中设置，或通过环境变量设置：
 
-| 设置项        | JSON 键           | 环境变量                            | 默认值                 |
-| -------------- | ----------------- | ----------------------------------- | ---------------------- |
-| 后端           | `provider`        | `PI_CLOUD_SESSIONS_PROVIDER`        | `git`                  |
-| 自动推送       | `autoPush`        | `PI_CLOUD_SESSIONS_AUTO_PUSH`       | `true`                 |
-| 启动时拉取     | `pullOnStart`     | `PI_CLOUD_SESSIONS_PULL_ON_START`   | `true`                 |
-| 推送防抖       | `pushDebounceMs`  | `PI_CLOUD_SESSIONS_DEBOUNCE_MS`     | `4000`                 |
-| 轮询间隔       | `pollIntervalMs`  | `PI_CLOUD_SESSIONS_POLL_MS`         | `60000`（0 表示禁用）   |
-| 机器标签       | `machineId`       | `PI_CLOUD_SESSIONS_MACHINE_ID`      | 主机名                 |
-| Git 仓库       | `git.repo`        | `PI_CLOUD_SESSIONS_GIT_REPO`        | —                      |
-| Git 分支       | `git.branch`      | `PI_CLOUD_SESSIONS_GIT_BRANCH`      | `main`                 |
-| iCloud 文件夹  | `icloud.dir`      | `PI_CLOUD_SESSIONS_ICLOUD_DIR`      | iCloud Drive/pi-sessions |
+| 设置项        | JSON 键          | 环境变量                          | 默认值                   |
+| ------------- | ---------------- | --------------------------------- | ------------------------ |
+| 后端          | `provider`       | `PI_CLOUD_SESSIONS_PROVIDER`      | `git`                    |
+| 自动推送      | `autoPush`       | `PI_CLOUD_SESSIONS_AUTO_PUSH`     | `true`                   |
+| 启动时拉取    | `pullOnStart`    | `PI_CLOUD_SESSIONS_PULL_ON_START` | `true`                   |
+| 推送防抖      | `pushDebounceMs` | `PI_CLOUD_SESSIONS_DEBOUNCE_MS`   | `4000`                   |
+| 轮询间隔      | `pollIntervalMs` | `PI_CLOUD_SESSIONS_POLL_MS`       | `60000`（0 表示禁用）    |
+| 机器标签      | `machineId`      | `PI_CLOUD_SESSIONS_MACHINE_ID`    | 主机名                   |
+| Git 仓库      | `git.repo`       | `PI_CLOUD_SESSIONS_GIT_REPO`      | —                        |
+| Git 分支      | `git.branch`     | `PI_CLOUD_SESSIONS_GIT_BRANCH`    | `main`                   |
+| iCloud 文件夹 | `icloud.dir`     | `PI_CLOUD_SESSIONS_ICLOUD_DIR`    | iCloud Drive/pi-sessions |
 
 ## 隐私
 

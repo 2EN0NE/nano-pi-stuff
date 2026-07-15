@@ -1,21 +1,25 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { CustomEditor, ModelSelectorComponent, SettingsManager } from "@earendil-works/pi-coding-agent";
-import path from "node:path";
-import os from "node:os";
-import fs from "node:fs/promises";
-import type { Dirent } from "node:fs";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import {
+	CustomEditor,
+	ModelSelectorComponent,
+	SettingsManager,
+} from '@earendil-works/pi-coding-agent';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("prompt-editor");
+const log = createLogger('prompt-editor');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 // =============================================================================
 // Modes
 // =============================================================================
 
 type ModeName = string;
-type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 type ModeSpec = {
 	provider?: string;
@@ -35,12 +39,12 @@ type ModesFile = {
 };
 
 // Only "default" is a forced/built-in mode. Others are just initial suggestions and can be renamed/deleted.
-const DEFAULT_MODE_ORDER = ["default"] as const;
-const CUSTOM_MODE_NAME = "custom" as const;
+const DEFAULT_MODE_ORDER = ['default'] as const;
+const CUSTOM_MODE_NAME = 'custom' as const;
 
 function expandUserPath(p: string): string {
-	if (p === "~") return os.homedir();
-	if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+	if (p === '~') return os.homedir();
+	if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
 	return p;
 }
 
@@ -49,15 +53,15 @@ function getGlobalAgentDir(): string {
 	// For the canonical implementation see pi-mono/packages/coding-agent/src/config.ts
 	const env = process.env.PI_CODING_AGENT_DIR;
 	if (env) return expandUserPath(env);
-	return path.join(os.homedir(), ".pi", "agent");
+	return path.join(os.homedir(), '.pi', 'agent');
 }
 
 function getGlobalModesPath(): string {
-	return path.join(getGlobalAgentDir(), "modes.json");
+	return path.join(getGlobalAgentDir(), 'modes.json');
 }
 
 function getProjectModesPath(cwd: string): string {
-	return path.join(cwd, ".pi", "modes.json");
+	return path.join(cwd, '.pi', 'modes.json');
 }
 
 async function fileExists(p: string): Promise<boolean> {
@@ -98,12 +102,13 @@ async function withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<
 	const start = Date.now();
 	while (true) {
 		try {
-			const handle = await fs.open(lockPath, "wx");
+			const handle = await fs.open(lockPath, 'wx');
 			try {
 				// Best-effort metadata for debugging stale locks.
 				await handle.writeFile(
-					JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }) + "\n",
-					"utf8"
+					JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }) +
+						'\n',
+					'utf8',
 				);
 			} catch {
 				// ignore
@@ -116,7 +121,7 @@ async function withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<
 				await fs.unlink(lockPath).catch(() => {});
 			}
 		} catch (err: any) {
-			if (err?.code !== "EEXIST") throw err;
+			if (err?.code !== 'EEXIST') throw err;
 
 			// If the lock looks stale (crash), break it.
 			try {
@@ -143,16 +148,19 @@ async function atomicWriteUtf8(filePath: string, content: string): Promise<void>
 
 	const dir = path.dirname(filePath);
 	const base = path.basename(filePath);
-	const tmpPath = path.join(dir, `.${base}.tmp.${process.pid}.${Math.random().toString(16).slice(2)}`);
+	const tmpPath = path.join(
+		dir,
+		`.${base}.tmp.${process.pid}.${Math.random().toString(16).slice(2)}`,
+	);
 
-	await fs.writeFile(tmpPath, content, "utf8");
+	await fs.writeFile(tmpPath, content, 'utf8');
 
 	try {
 		// POSIX: atomic replace.
 		await fs.rename(tmpPath, filePath);
 	} catch (err: any) {
 		// Windows: rename can't overwrite.
-		if (err?.code === "EEXIST" || err?.code === "EPERM") {
+		if (err?.code === 'EEXIST' || err?.code === 'EPERM') {
 			await fs.unlink(filePath).catch(() => {});
 			await fs.rename(tmpPath, filePath);
 		} else {
@@ -180,7 +188,11 @@ type ModesPatch = {
 	modes?: Record<ModeName, ModeSpecPatch | null>;
 };
 
-function computeModesPatch(base: ModesFile, next: ModesFile, includeCurrentMode: boolean): ModesPatch | null {
+function computeModesPatch(
+	base: ModesFile,
+	next: ModesFile,
+	includeCurrentMode: boolean,
+): ModesPatch | null {
 	const patch: ModesPatch = {};
 
 	if (includeCurrentMode && base.currentMode !== next.currentMode) {
@@ -204,7 +216,7 @@ function computeModesPatch(base: ModesFile, next: ModesFile, includeCurrentMode:
 		}
 
 		const diff: ModeSpecPatch = {};
-		const fields: (keyof ModeSpec)[] = ["provider", "modelId", "thinkingLevel", "color"];
+		const fields: (keyof ModeSpec)[] = ['provider', 'modelId', 'thinkingLevel', 'color'];
 		for (const f of fields) {
 			const av = a[f];
 			const bv = b[f];
@@ -237,7 +249,10 @@ function applyModesPatch(target: ModesFile, patch: ModesPatch): void {
 			continue;
 		}
 
-		const targetSpec: Record<string, unknown> = (target.modes[mode] ??= {}) as Record<string, unknown>;
+		const targetSpec: Record<string, unknown> = (target.modes[mode] ??= {}) as Record<
+			string,
+			unknown
+		>;
 		for (const [k, v] of Object.entries(specPatch)) {
 			if (v === null || v === undefined) {
 				delete targetSpec[k];
@@ -249,20 +264,20 @@ function applyModesPatch(target: ModesFile, patch: ModesPatch): void {
 }
 
 function normalizeThinkingLevel(level: unknown): ThinkingLevel | undefined {
-	if (typeof level !== "string") return undefined;
+	if (typeof level !== 'string') return undefined;
 	const v = level as ThinkingLevel;
 	// Keep the list local to avoid importing internal enums.
-	const allowed: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+	const allowed: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 	return allowed.includes(v) ? v : undefined;
 }
 
 function sanitizeModeSpec(spec: unknown): ModeSpec {
-	const obj = (spec && typeof spec === "object" ? spec : {}) as Record<string, unknown>;
+	const obj = (spec && typeof spec === 'object' ? spec : {}) as Record<string, unknown>;
 	return {
-		provider: typeof obj.provider === "string" ? obj.provider : undefined,
-		modelId: typeof obj.modelId === "string" ? obj.modelId : undefined,
+		provider: typeof obj.provider === 'string' ? obj.provider : undefined,
+		modelId: typeof obj.modelId === 'string' ? obj.modelId : undefined,
 		thinkingLevel: normalizeThinkingLevel(obj.thinkingLevel),
-		color: typeof obj.color === "string" ? obj.color : undefined,
+		color: typeof obj.color === 'string' ? obj.color : undefined,
 	};
 }
 
@@ -278,12 +293,12 @@ function createDefaultModes(ctx: ExtensionContext, pi: ExtensionAPI): ModesFile 
 
 	return {
 		version: 1,
-		currentMode: "default",
+		currentMode: 'default',
 		modes: {
 			// Forced default mode
 			default: { ...base },
 			// Convenience mode (user can delete/rename)
-			fast: { ...base, thinkingLevel: "off" },
+			fast: { ...base, thinkingLevel: 'off' },
 		},
 	};
 }
@@ -298,21 +313,32 @@ function ensureDefaultModeEntries(file: ModesFile, ctx: ExtensionContext, pi: Ex
 
 	// "custom" is an overlay mode; never treat it as a valid persisted current mode.
 	if (file.currentMode === CUSTOM_MODE_NAME) {
-		file.currentMode = "" as any;
+		file.currentMode = '' as any;
 	}
 
-	if (!file.currentMode || !(file.currentMode in file.modes) || file.currentMode === CUSTOM_MODE_NAME) {
+	if (
+		!file.currentMode ||
+		!(file.currentMode in file.modes) ||
+		file.currentMode === CUSTOM_MODE_NAME
+	) {
 		const first = Object.keys(file.modes).find((k) => k !== CUSTOM_MODE_NAME);
-		file.currentMode = file.modes.default ? "default" : first || "default";
+		file.currentMode = file.modes.default ? 'default' : first || 'default';
 	}
 }
 
-async function loadModesFile(filePath: string, ctx: ExtensionContext, pi: ExtensionAPI): Promise<ModesFile> {
+async function loadModesFile(
+	filePath: string,
+	ctx: ExtensionContext,
+	pi: ExtensionAPI,
+): Promise<ModesFile> {
 	try {
-		const raw = await fs.readFile(filePath, "utf8");
+		const raw = await fs.readFile(filePath, 'utf8');
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
-		const currentMode = typeof parsed.currentMode === "string" ? parsed.currentMode : "default";
-		const modesRaw = parsed.modes && typeof parsed.modes === "object" ? (parsed.modes as Record<string, unknown>) : {};
+		const currentMode = typeof parsed.currentMode === 'string' ? parsed.currentMode : 'default';
+		const modesRaw =
+			parsed.modes && typeof parsed.modes === 'object'
+				? (parsed.modes as Record<string, unknown>)
+				: {};
 		const modes: Record<string, ModeSpec> = {};
 		for (const [k, v] of Object.entries(modesRaw)) {
 			modes[k] = sanitizeModeSpec(v);
@@ -330,7 +356,7 @@ async function loadModesFile(filePath: string, ctx: ExtensionContext, pi: Extens
 }
 
 async function saveModesFile(filePath: string, data: ModesFile): Promise<void> {
-	await atomicWriteUtf8(filePath, JSON.stringify(data, null, 2) + "\n");
+	await atomicWriteUtf8(filePath, JSON.stringify(data, null, 2) + '\n');
 }
 
 function orderedModeNames(modes: Record<string, ModeSpec>): string[] {
@@ -358,7 +384,7 @@ function getModeBorderColor(theme: any, pi: ExtensionAPI, mode: string): (text: 
 	try {
 		return theme.getThinkingBorderColor(pi.getThinkingLevel());
 	} catch {
-		return theme.getThinkingBorderColor("off");
+		return theme.getThinkingBorderColor('off');
 	}
 }
 
@@ -372,7 +398,11 @@ async function resolveModesPath(cwd: string): Promise<string> {
 	return getGlobalModesPath();
 }
 
-function inferModeFromSelection(ctx: ExtensionContext, pi: ExtensionAPI, data: ModesFile): string | null {
+function inferModeFromSelection(
+	ctx: ExtensionContext,
+	pi: ExtensionAPI,
+	data: ModesFile,
+): string | null {
 	const provider = ctx.model?.provider;
 	const modelId = ctx.model?.id;
 	const thinkingLevel = pi.getThinkingLevel();
@@ -410,7 +440,7 @@ function inferModeFromSelection(ctx: ExtensionContext, pi: ExtensionAPI, data: M
 	for (const name of candidates) {
 		const spec = data.modes[name];
 		if (!spec) continue;
-		if ((spec.thinkingLevel ?? "off") === thinkingLevel) return name;
+		if ((spec.thinkingLevel ?? 'off') === thinkingLevel) return name;
 	}
 
 	// Next prefer a candidate with no thinkingLevel configured.
@@ -448,12 +478,12 @@ type ModeRuntime = {
 };
 
 const runtime: ModeRuntime = {
-	filePath: "",
+	filePath: '',
 	fileMtimeMs: null,
 	baseline: null,
-	data: { version: 1, currentMode: "default", modes: {} },
-	lastRealMode: "default",
-	currentMode: "default",
+	data: { version: 1, currentMode: 'default', modes: {} },
+	lastRealMode: 'default',
+	currentMode: 'default',
 	applying: false,
 };
 
@@ -531,7 +561,12 @@ function getCurrentSelectionSpec(pi: ExtensionAPI, _ctx: ExtensionContext): Mode
 	};
 }
 
-async function storeSelectionIntoMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string, selection: ModeSpec): Promise<void> {
+async function storeSelectionIntoMode(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	mode: string,
+	selection: ModeSpec,
+): Promise<void> {
 	// "custom" is an overlay; it is not persisted.
 	if (mode === CUSTOM_MODE_NAME) return;
 
@@ -565,7 +600,7 @@ async function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string):
 	const spec = runtime.data.modes[mode];
 	if (!spec) {
 		if (ctx.hasUI) {
-			ctx.ui.notify(`Unknown mode: ${mode}`, "warning");
+			ctx.ui.notify(`Unknown mode: ${mode}`, 'warning');
 		}
 		return;
 	}
@@ -584,12 +619,18 @@ async function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string):
 				const ok = await pi.setModel(m);
 				modelAppliedOk = ok;
 				if (!ok && ctx.hasUI) {
-					ctx.ui.notify(`No API key available for ${spec.provider}/${spec.modelId}`, "warning");
+					ctx.ui.notify(
+						`No API key available for ${spec.provider}/${spec.modelId}`,
+						'warning',
+					);
 				}
 			} else {
 				modelAppliedOk = false;
 				if (ctx.hasUI) {
-					ctx.ui.notify(`Mode "${mode}" references unknown model ${spec.provider}/${spec.modelId}`, "warning");
+					ctx.ui.notify(
+						`Mode "${mode}" references unknown model ${spec.provider}/${spec.modelId}`,
+						'warning',
+					);
 				}
 			}
 		}
@@ -615,11 +656,11 @@ async function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string):
 	}
 }
 
-const MODE_UI_CONFIGURE = "Configure modes…";
-const MODE_UI_ADD = "Add mode…";
-const MODE_UI_BACK = "Back";
+const MODE_UI_CONFIGURE = 'Configure modes…';
+const MODE_UI_ADD = 'Add mode…';
+const MODE_UI_BACK = 'Back';
 
-const ALL_THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+const ALL_THINKING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 const THINKING_UNSET_LABEL = "(don't change)";
 
 function isDefaultModeName(name: string): boolean {
@@ -627,11 +668,16 @@ function isDefaultModeName(name: string): boolean {
 }
 
 function isReservedModeName(name: string): boolean {
-	return name === CUSTOM_MODE_NAME || name === MODE_UI_CONFIGURE || name === MODE_UI_ADD || name === MODE_UI_BACK;
+	return (
+		name === CUSTOM_MODE_NAME ||
+		name === MODE_UI_CONFIGURE ||
+		name === MODE_UI_ADD ||
+		name === MODE_UI_BACK
+	);
 }
 
 function normalizeModeNameInput(name: string | undefined): string {
-	return (name ?? "").trim();
+	return (name ?? '').trim();
 }
 
 function validateModeNameOrError(
@@ -639,21 +685,25 @@ function validateModeNameOrError(
 	existing: Record<string, ModeSpec>,
 	opts?: { allowExisting?: boolean },
 ): string | null {
-	if (!name) return "Mode name cannot be empty";
-	if (/\s/.test(name)) return "Mode name cannot contain whitespace";
+	if (!name) return 'Mode name cannot be empty';
+	if (/\s/.test(name)) return 'Mode name cannot contain whitespace';
 	if (isReservedModeName(name)) return `Mode name \"${name}\" is reserved`;
 	if (!opts?.allowExisting && existing[name]) return `Mode \"${name}\" already exists`;
 	return null;
 }
 
-async function handleModeChoiceUI(pi: ExtensionAPI, ctx: ExtensionContext, choice: string): Promise<void> {
+async function handleModeChoiceUI(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	choice: string,
+): Promise<void> {
 	// Special behavior: when we're in "custom" and select another mode,
 	// offer to either *use* it (switch) or *store* the current custom selection into it.
 	if (runtime.currentMode === CUSTOM_MODE_NAME && choice !== CUSTOM_MODE_NAME) {
-		const action = await ctx.ui.select(`Mode \"${choice}\"`, ["use", "store"]);
+		const action = await ctx.ui.select(`Mode \"${choice}\"`, ['use', 'store']);
 		if (!action) return;
 
-		if (action === "use") {
+		if (action === 'use') {
 			await applyMode(pi, ctx, choice);
 			return;
 		}
@@ -663,7 +713,7 @@ async function handleModeChoiceUI(pi: ExtensionAPI, ctx: ExtensionContext, choic
 		const overlay = customOverlay ?? getCurrentSelectionSpec(pi, ctx);
 		await storeSelectionIntoMode(pi, ctx, choice, overlay);
 		await applyMode(pi, ctx, choice);
-		ctx.ui.notify(`Stored ${CUSTOM_MODE_NAME} into \"${choice}\"`, "info");
+		ctx.ui.notify(`Stored ${CUSTOM_MODE_NAME} into \"${choice}\"`, 'info');
 		return;
 	}
 
@@ -676,7 +726,10 @@ async function selectModeUI(pi: ExtensionAPI, ctx: ExtensionContext): Promise<vo
 	while (true) {
 		await ensureRuntime(pi, ctx);
 		const names = orderedModeNames(runtime.data.modes);
-		const choice = await ctx.ui.select(`Mode (current: ${runtime.currentMode})`, [...names, MODE_UI_CONFIGURE]);
+		const choice = await ctx.ui.select(`Mode (current: ${runtime.currentMode})`, [
+			...names,
+			MODE_UI_CONFIGURE,
+		]);
 		if (!choice) return;
 
 		if (choice === MODE_UI_CONFIGURE) {
@@ -695,7 +748,11 @@ async function configureModesUI(pi: ExtensionAPI, ctx: ExtensionContext): Promis
 	while (true) {
 		await ensureRuntime(pi, ctx);
 		const names = orderedModeNames(runtime.data.modes);
-		const choice = await ctx.ui.select("Configure modes", [...names, MODE_UI_ADD, MODE_UI_BACK]);
+		const choice = await ctx.ui.select('Configure modes', [
+			...names,
+			MODE_UI_ADD,
+			MODE_UI_BACK,
+		]);
 		if (!choice || choice === MODE_UI_BACK) return;
 
 		if (choice === MODE_UI_ADD) {
@@ -715,13 +772,13 @@ async function addModeUI(pi: ExtensionAPI, ctx: ExtensionContext): Promise<strin
 	await ensureRuntime(pi, ctx);
 
 	while (true) {
-		const raw = await ctx.ui.input("New mode name", "e.g. docs, review, planning");
+		const raw = await ctx.ui.input('New mode name', 'e.g. docs, review, planning');
 		if (raw === undefined) return undefined;
 
 		const name = normalizeModeNameInput(raw);
 		const err = validateModeNameOrError(name, runtime.data.modes);
 		if (err) {
-			ctx.ui.notify(err, "warning");
+			ctx.ui.notify(err, 'warning');
 			continue;
 		}
 
@@ -733,7 +790,7 @@ async function addModeUI(pi: ExtensionAPI, ctx: ExtensionContext): Promise<strin
 			thinkingLevel: selection.thinkingLevel,
 		};
 		await persistRuntime(pi, ctx);
-		ctx.ui.notify(`Added mode \"${name}\"`, "info");
+		ctx.ui.notify(`Added mode \"${name}\"`, 'info');
 		return name;
 	}
 }
@@ -748,11 +805,12 @@ async function editModeUI(pi: ExtensionAPI, ctx: ExtensionContext, mode: string)
 		const spec = runtime.data.modes[modeName];
 		if (!spec) return;
 
-		const modelLabel = spec.provider && spec.modelId ? `${spec.provider}/${spec.modelId}` : "(no model)";
+		const modelLabel =
+			spec.provider && spec.modelId ? `${spec.provider}/${spec.modelId}` : '(no model)';
 		const thinkingLabel = spec.thinkingLevel ?? THINKING_UNSET_LABEL;
 
-		const actions = ["Change name", "Change model", "Change thinking level"];
-		if (!isDefaultModeName(modeName)) actions.push("Delete mode");
+		const actions = ['Change name', 'Change model', 'Change thinking level'];
+		if (!isDefaultModeName(modeName)) actions.push('Delete mode');
 		actions.push(MODE_UI_BACK);
 
 		const action = await ctx.ui.select(
@@ -761,20 +819,20 @@ async function editModeUI(pi: ExtensionAPI, ctx: ExtensionContext, mode: string)
 		);
 		if (!action || action === MODE_UI_BACK) return;
 
-		if (action === "Change name") {
+		if (action === 'Change name') {
 			const renamed = await renameModeUI(pi, ctx, modeName);
 			if (renamed) modeName = renamed;
 			continue;
 		}
 
-		if (action === "Change model") {
+		if (action === 'Change model') {
 			const selected = await pickModelForModeUI(ctx, spec);
 			if (!selected) continue;
 			spec.provider = selected.provider;
 			spec.modelId = selected.modelId;
 			runtime.data.modes[modeName] = spec;
 			await persistRuntime(pi, ctx);
-			ctx.ui.notify(`Updated model for \"${modeName}\"`, "info");
+			ctx.ui.notify(`Updated model for \"${modeName}\"`, 'info');
 
 			if (runtime.currentMode === modeName) {
 				await applyMode(pi, ctx, modeName);
@@ -782,7 +840,7 @@ async function editModeUI(pi: ExtensionAPI, ctx: ExtensionContext, mode: string)
 			continue;
 		}
 
-		if (action === "Change thinking level") {
+		if (action === 'Change thinking level') {
 			const level = await pickThinkingLevelForModeUI(ctx, spec.thinkingLevel);
 			if (level === undefined) continue;
 
@@ -794,7 +852,7 @@ async function editModeUI(pi: ExtensionAPI, ctx: ExtensionContext, mode: string)
 
 			runtime.data.modes[modeName] = spec;
 			await persistRuntime(pi, ctx);
-			ctx.ui.notify(`Updated thinking level for \"${modeName}\"`, "info");
+			ctx.ui.notify(`Updated thinking level for \"${modeName}\"`, 'info');
 
 			if (runtime.currentMode === modeName) {
 				await applyMode(pi, ctx, modeName);
@@ -802,8 +860,8 @@ async function editModeUI(pi: ExtensionAPI, ctx: ExtensionContext, mode: string)
 			continue;
 		}
 
-		if (action === "Delete mode") {
-			const ok = await ctx.ui.confirm("Delete mode", `Delete mode \"${modeName}\"?`);
+		if (action === 'Delete mode') {
+			const ok = await ctx.ui.confirm('Delete mode', `Delete mode \"${modeName}\"?`);
 			if (!ok) continue;
 
 			delete runtime.data.modes[modeName];
@@ -814,16 +872,20 @@ async function editModeUI(pi: ExtensionAPI, ctx: ExtensionContext, mode: string)
 				customOverlay = getCurrentSelectionSpec(pi, ctx);
 			}
 			if (runtime.lastRealMode === modeName) {
-				runtime.lastRealMode = "default";
+				runtime.lastRealMode = 'default';
 			}
 			requestEditorRender?.();
-			ctx.ui.notify(`Deleted mode \"${modeName}\"`, "info");
+			ctx.ui.notify(`Deleted mode \"${modeName}\"`, 'info');
 			return;
 		}
 	}
 }
 
-function renameModesRecord(modes: Record<string, ModeSpec>, oldName: string, newName: string): Record<string, ModeSpec> {
+function renameModesRecord(
+	modes: Record<string, ModeSpec>,
+	oldName: string,
+	newName: string,
+): Record<string, ModeSpec> {
 	const out: Record<string, ModeSpec> = {};
 	for (const [k, v] of Object.entries(modes)) {
 		if (k === oldName) out[newName] = v;
@@ -832,11 +894,15 @@ function renameModesRecord(modes: Record<string, ModeSpec>, oldName: string, new
 	return out;
 }
 
-async function renameModeUI(pi: ExtensionAPI, ctx: ExtensionContext, oldName: string): Promise<string | undefined> {
+async function renameModeUI(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	oldName: string,
+): Promise<string | undefined> {
 	if (!ctx.hasUI) return undefined;
 
 	if (isDefaultModeName(oldName)) {
-		ctx.ui.notify(`Cannot rename default mode \"${oldName}\"`, "warning");
+		ctx.ui.notify(`Cannot rename default mode \"${oldName}\"`, 'warning');
 		return oldName;
 	}
 
@@ -851,7 +917,7 @@ async function renameModeUI(pi: ExtensionAPI, ctx: ExtensionContext, oldName: st
 
 		const err = validateModeNameOrError(newName, runtime.data.modes);
 		if (err) {
-			ctx.ui.notify(err, "warning");
+			ctx.ui.notify(err, 'warning');
 			continue;
 		}
 
@@ -862,7 +928,7 @@ async function renameModeUI(pi: ExtensionAPI, ctx: ExtensionContext, oldName: st
 		if (runtime.lastRealMode === oldName) runtime.lastRealMode = newName;
 		requestEditorRender?.();
 
-		ctx.ui.notify(`Renamed \"${oldName}\" → \"${newName}\"`, "info");
+		ctx.ui.notify(`Renamed \"${oldName}\" → \"${newName}\"`, 'info');
 		return newName;
 	}
 }
@@ -874,22 +940,27 @@ async function pickModelForModeUI(
 	if (!ctx.hasUI) return undefined;
 
 	const settingsManager = SettingsManager.inMemory();
-	const currentModel = spec.provider && spec.modelId ? ctx.modelRegistry.find(spec.provider, spec.modelId) : ctx.model;
+	const currentModel =
+		spec.provider && spec.modelId
+			? ctx.modelRegistry.find(spec.provider, spec.modelId)
+			: ctx.model;
 
 	const scopedModels: Array<{ model: any; thinkingLevel: string }> = [];
 
-	return ctx.ui.custom<{ provider: string; modelId: string } | undefined>((tui, _theme, _keybindings, done) => {
-		const selector = new ModelSelectorComponent(
-			tui,
-			currentModel,
-			settingsManager,
-			ctx.modelRegistry as any,
-			scopedModels as any,
-			(model) => done({ provider: model.provider, modelId: model.id }),
-			() => done(undefined),
-		);
-		return selector;
-	});
+	return ctx.ui.custom<{ provider: string; modelId: string } | undefined>(
+		(tui, _theme, _keybindings, done) => {
+			const selector = new ModelSelectorComponent(
+				tui,
+				currentModel,
+				settingsManager,
+				ctx.modelRegistry as any,
+				scopedModels as any,
+				(model) => done({ provider: model.provider, modelId: model.id }),
+				() => done(undefined),
+			);
+			return selector;
+		},
+	);
 }
 
 async function pickThinkingLevelForModeUI(
@@ -898,26 +969,31 @@ async function pickThinkingLevelForModeUI(
 ): Promise<ThinkingLevel | null | undefined> {
 	if (!ctx.hasUI) return undefined;
 
-	const defaultValue = current ?? "off";
+	const defaultValue = current ?? 'off';
 	const options = [...ALL_THINKING_LEVELS, THINKING_UNSET_LABEL];
 	// Prefer the current selection by ordering it first.
 	const ordered = [defaultValue, ...options.filter((x) => x !== defaultValue)];
 
-	const choice = await ctx.ui.select("Thinking level", ordered);
+	const choice = await ctx.ui.select('Thinking level', ordered);
 	if (!choice) return undefined;
 	if (choice === THINKING_UNSET_LABEL) return null;
 	if (ALL_THINKING_LEVELS.includes(choice as ThinkingLevel)) return choice as ThinkingLevel;
 	return undefined;
 }
 
-async function cycleMode(pi: ExtensionAPI, ctx: ExtensionContext, direction: 1 | -1 = 1): Promise<void> {
+async function cycleMode(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	direction: 1 | -1 = 1,
+): Promise<void> {
 	if (!ctx.hasUI) return;
 	await ensureRuntime(pi, ctx);
 	const names = orderedModeNames(runtime.data.modes);
 	if (names.length === 0) return;
 
 	// If we're currently in the overlay mode, cycle relative to the last real mode.
-	const baseMode = runtime.currentMode === CUSTOM_MODE_NAME ? runtime.lastRealMode : runtime.currentMode;
+	const baseMode =
+		runtime.currentMode === CUSTOM_MODE_NAME ? runtime.lastRealMode : runtime.currentMode;
 	const idx = Math.max(0, names.indexOf(baseMode));
 	const next = names[(idx + direction + names.length) % names.length] ?? names[0]!;
 	await applyMode(pi, ctx, next);
@@ -952,7 +1028,7 @@ class PromptEditor extends CustomEditor {
 	) {
 		super(tui, theme, keybindings);
 		delete (this as { borderColor?: (text: string) => string }).borderColor;
-		Object.defineProperty(this, "borderColor", {
+		Object.defineProperty(this, 'borderColor', {
 			get: () => this._borderColor ?? ((text: string) => text),
 			set: (value: (text: string) => string) => {
 				if (this.lockedBorder) return;
@@ -972,21 +1048,24 @@ class PromptEditor extends CustomEditor {
 		const mode = this.modeLabelProvider?.();
 		if (!mode) return lines;
 
-		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
-		const topPlain = stripAnsi(lines[0] ?? "");
+		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
+		const topPlain = stripAnsi(lines[0] ?? '');
 
 		// If the editor is scrolled, the built-in editor renders a scroll indicator on the top border.
 		// Preserve it, but still show the mode label.
 		const scrollPrefixMatch = topPlain.match(/^(─── ↑ \d+ more )/);
-		const prefix = scrollPrefixMatch?.[1] ?? "──";
+		const prefix = scrollPrefixMatch?.[1] ?? '──';
 
 		let label = formatModeLabel(mode);
 
 		// Compute how much room we have for the label core (without truncating the prefix).
-		const labelLeftSpace = prefix.endsWith(" ") ? "" : " ";
-		const labelRightSpace = " ";
+		const labelLeftSpace = prefix.endsWith(' ') ? '' : ' ';
+		const labelRightSpace = ' ';
 		const minRightBorder = 1; // keep at least one border cell on the right
-		const maxLabelLen = Math.max(0, width - prefix.length - labelLeftSpace.length - labelRightSpace.length - minRightBorder);
+		const maxLabelLen = Math.max(
+			0,
+			width - prefix.length - labelLeftSpace.length - labelRightSpace.length - minRightBorder,
+		);
 		if (maxLabelLen <= 0) return lines;
 		if (label.length > maxLabelLen) label = label.slice(0, maxLabelLen);
 
@@ -995,7 +1074,7 @@ class PromptEditor extends CustomEditor {
 		const remaining = width - prefix.length - labelChunk.length;
 		if (remaining < 0) return lines;
 
-		const right = "─".repeat(Math.max(0, remaining));
+		const right = '─'.repeat(Math.max(0, remaining));
 
 		const labelColor = this.modeLabelColor ?? ((text: string) => this.borderColor(text));
 		lines[0] = this.borderColor(prefix) + labelColor(labelChunk) + this.borderColor(right);
@@ -1009,9 +1088,9 @@ class PromptEditor extends CustomEditor {
 
 function extractText(content: Array<{ type: string; text?: string }>): string {
 	return content
-		.filter((item) => item.type === "text" && typeof item.text === "string")
-		.map((item) => item.text ?? "")
-		.join("")
+		.filter((item) => item.type === 'text' && typeof item.text === 'string')
+		.map((item) => item.text ?? '')
+		.join('')
 		.trim();
 }
 
@@ -1019,9 +1098,9 @@ function collectUserPromptsFromEntries(entries: Array<any>): PromptEntry[] {
 	const prompts: PromptEntry[] = [];
 
 	for (const entry of entries) {
-		if (entry?.type !== "message") continue;
+		if (entry?.type !== 'message') continue;
 		const message = entry?.message;
-		if (!message || message.role !== "user" || !Array.isArray(message.content)) continue;
+		if (!message || message.role !== 'user' || !Array.isArray(message.content)) continue;
 		const text = extractText(message.content);
 		if (!text) continue;
 		const timestamp = Number(message.timestamp ?? entry.timestamp ?? Date.now());
@@ -1032,8 +1111,8 @@ function collectUserPromptsFromEntries(entries: Array<any>): PromptEntry[] {
 }
 
 function getSessionDirForCwd(cwd: string): string {
-	const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-	return path.join(getGlobalAgentDir(), "sessions", safePath);
+	const safePath = `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`;
+	return path.join(getGlobalAgentDir(), 'sessions', safePath);
 }
 
 async function readTail(filePath: string, maxBytes = 256 * 1024): Promise<string> {
@@ -1043,28 +1122,31 @@ async function readTail(filePath: string, maxBytes = 256 * 1024): Promise<string
 		const size = stats.size;
 		const start = Math.max(0, size - maxBytes);
 		const length = size - start;
-		if (length <= 0) return "";
+		if (length <= 0) return '';
 
 		const buffer = Buffer.alloc(length);
-		fileHandle = await fs.open(filePath, "r");
+		fileHandle = await fs.open(filePath, 'r');
 		const { bytesRead } = await fileHandle.read(buffer, 0, length, start);
-		if (bytesRead === 0) return "";
-		let chunk = buffer.subarray(0, bytesRead).toString("utf8");
+		if (bytesRead === 0) return '';
+		let chunk = buffer.subarray(0, bytesRead).toString('utf8');
 		if (start > 0) {
-			const firstNewline = chunk.indexOf("\n");
+			const firstNewline = chunk.indexOf('\n');
 			if (firstNewline !== -1) {
 				chunk = chunk.slice(firstNewline + 1);
 			}
 		}
 		return chunk;
 	} catch {
-		return "";
+		return '';
 	} finally {
 		await fileHandle?.close();
 	}
 }
 
-async function loadPromptHistoryForCwd(cwd: string, excludeSessionFile?: string): Promise<PromptEntry[]> {
+async function loadPromptHistoryForCwd(
+	cwd: string,
+	excludeSessionFile?: string,
+): Promise<PromptEntry[]> {
 	const sessionDir = getSessionDirForCwd(path.resolve(cwd));
 	const resolvedExclude = excludeSessionFile ? path.resolve(excludeSessionFile) : undefined;
 	const prompts: PromptEntry[] = [];
@@ -1078,7 +1160,7 @@ async function loadPromptHistoryForCwd(cwd: string, excludeSessionFile?: string)
 
 	const files = await Promise.all(
 		entries
-			.filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+			.filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
 			.map(async (entry) => {
 				const filePath = path.join(sessionDir, entry.name);
 				try {
@@ -1099,7 +1181,7 @@ async function loadPromptHistoryForCwd(cwd: string, excludeSessionFile?: string)
 
 		const tail = await readTail(file.filePath);
 		if (!tail) continue;
-		const lines = tail.split("\n").filter(Boolean);
+		const lines = tail.split('\n').filter(Boolean);
 		for (const line of lines) {
 			let entry: any;
 			try {
@@ -1107,9 +1189,9 @@ async function loadPromptHistoryForCwd(cwd: string, excludeSessionFile?: string)
 			} catch {
 				continue;
 			}
-			if (entry?.type !== "message") continue;
+			if (entry?.type !== 'message') continue;
 			const message = entry?.message;
-			if (!message || message.role !== "user" || !Array.isArray(message.content)) continue;
+			if (!message || message.role !== 'user' || !Array.isArray(message.content)) continue;
 			const text = extractText(message.content);
 			if (!text) continue;
 			const timestamp = Number(message.timestamp ?? entry.timestamp ?? Date.now());
@@ -1122,7 +1204,10 @@ async function loadPromptHistoryForCwd(cwd: string, excludeSessionFile?: string)
 	return prompts;
 }
 
-function buildHistoryList(currentSession: PromptEntry[], previousSessions: PromptEntry[]): PromptEntry[] {
+function buildHistoryList(
+	currentSession: PromptEntry[],
+	previousSessions: PromptEntry[],
+): PromptEntry[] {
 	const all = [...currentSession, ...previousSessions];
 	all.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -1158,9 +1243,9 @@ function setEditor(pi: ExtensionAPI, ctx: ExtensionContext, history: PromptEntry
 		requestEditorRender = () => editor.requestRenderNow();
 		editor.modeLabelProvider = () => runtime.currentMode;
 		// Keep the mode label color stable (match footer/status bar).
-		editor.modeLabelColor = (text: string) => uiTheme.fg("dim", text);
+		editor.modeLabelColor = (text: string) => uiTheme.fg('dim', text);
 		const borderColor = (text: string) => {
-			const isBashMode = editor.getText().trimStart().startsWith("!");
+			const isBashMode = editor.getText().trimStart().startsWith('!');
 			if (isBashMode) {
 				return uiTheme.getBashModeBorderColor()(text);
 			}
@@ -1203,9 +1288,9 @@ function applyEditor(pi: ExtensionAPI, ctx: ExtensionContext) {
 // =============================================================================
 
 export default function (pi: ExtensionAPI) {
-	log.debug("registerCommand: mode");
-	pi.registerCommand("mode", {
-		description: "Select prompt mode",
+	log.debug('registerCommand: mode');
+	pi.registerCommand('mode', {
+		description: 'Select prompt mode',
 		handler: async (args, ctx) => {
 			const tokens = args
 				.split(/\s+/)
@@ -1219,25 +1304,26 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			// /mode store [name]
-			if (tokens[0] === "store") {
+			if (tokens[0] === 'store') {
 				await ensureRuntime(pi, ctx);
 
 				let target = tokens[1];
 				if (!target) {
 					if (!ctx.hasUI) return;
 					const names = orderedModeNames(runtime.data.modes);
-					target = await ctx.ui.select("Store current selection into mode", names);
+					target = await ctx.ui.select('Store current selection into mode', names);
 					if (!target) return;
 				}
 
 				if (target === CUSTOM_MODE_NAME) {
-					if (ctx.hasUI) ctx.ui.notify(`Cannot store into "${CUSTOM_MODE_NAME}"`, "warning");
+					if (ctx.hasUI)
+						ctx.ui.notify(`Cannot store into "${CUSTOM_MODE_NAME}"`, 'warning');
 					return;
 				}
 
 				const selection = customOverlay ?? getCurrentSelectionSpec(pi, ctx);
 				await storeSelectionIntoMode(pi, ctx, target, selection);
-				if (ctx.hasUI) ctx.ui.notify(`Stored current selection into "${target}"`, "info");
+				if (ctx.hasUI) ctx.ui.notify(`Stored current selection into "${target}"`, 'info');
 				return;
 			}
 
@@ -1246,22 +1332,22 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerShortcut("ctrl+shift+m", {
-		description: "Select prompt mode",
+	pi.registerShortcut('ctrl+shift+m', {
+		description: 'Select prompt mode',
 		handler: async (ctx) => {
 			await selectModeUI(pi, ctx);
 		},
 	});
 
-	pi.registerShortcut("ctrl+space", {
-		description: "Cycle prompt mode",
+	pi.registerShortcut('ctrl+space', {
+		description: 'Cycle prompt mode',
 		handler: async (ctx) => {
 			await cycleMode(pi, ctx, 1);
 		},
 	});
 
-	pi.on("session_start", async (_event, ctx) => {
-		log.debug("event: session_start");
+	pi.on('session_start', async (_event, ctx) => {
+		log.debug('event: session_start');
 		lastObservedModel = { provider: ctx.model?.provider, modelId: ctx.model?.id };
 		await ensureRuntime(pi, ctx);
 		customOverlay = null;
@@ -1279,8 +1365,8 @@ export default function (pi: ExtensionAPI) {
 		applyEditor(pi, ctx);
 	});
 
-	pi.on("model_select", async (event, ctx) => {
-		log.debug("event: model_select");
+	pi.on('model_select', async (event, ctx) => {
+		log.debug('event: model_select');
 		// Always track the last observed model for overlay/store correctness.
 		lastObservedModel = { provider: event.model.provider, modelId: event.model.id };
 
@@ -1306,5 +1392,4 @@ export default function (pi: ExtensionAPI) {
 			requestEditorRender?.();
 		}
 	});
-
 }

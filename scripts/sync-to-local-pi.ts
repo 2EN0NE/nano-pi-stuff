@@ -37,30 +37,25 @@ import {
 	appendFileSync,
 	readdirSync,
 	type Dirent,
-} from "node:fs";
-import { homedir } from "node:os";
-import { join, dirname, resolve, isAbsolute, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
-import * as yaml from "js-yaml";
+} from 'node:fs';
+import { homedir } from 'node:os';
+import { join, dirname, resolve, isAbsolute, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
+import * as yaml from 'js-yaml';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Constants
 // ══════════════════════════════════════════════════════════════════════════════
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = resolve(SCRIPT_DIR, "..");
-const DEFAULT_CONFIG_PATH = join(SCRIPT_DIR, "sync-profiles.yaml");
-const GLOBAL_CONFIG_PATH = join(
-	homedir(),
-	".pi",
-	"agent",
-	"sync-profiles.yaml",
-);
-const LOG_FILE = join(SCRIPT_DIR, "sync-to-local-pi.log");
+const PROJECT_ROOT = resolve(SCRIPT_DIR, '..');
+const DEFAULT_CONFIG_PATH = join(SCRIPT_DIR, 'sync-profiles.yaml');
+const GLOBAL_CONFIG_PATH = join(homedir(), '.pi', 'agent', 'sync-profiles.yaml');
+const LOG_FILE = join(SCRIPT_DIR, 'sync-to-local-pi.log');
 
 // Supported resource types (matching pi.dev resource directory names)
-const RESOURCE_TYPES = ["extensions", "skills", "themes", "prompts"] as const;
+const RESOURCE_TYPES = ['extensions', 'skills', 'themes', 'prompts'] as const;
 type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -70,10 +65,10 @@ type ResourceType = (typeof RESOURCE_TYPES)[number];
 interface ProfileConfig {
 	description?: string;
 	target: string; // target directory (relative to project root or absolute)
-	extensions: string[] | "*";
-	skills: string[] | "*";
-	themes: string[] | "*";
-	prompts: string[] | "*";
+	extensions: string[] | '*';
+	skills: string[] | '*';
+	themes: string[] | '*';
+	prompts: string[] | '*';
 	exclude?: Partial<Record<ResourceType, string[]>>;
 	// Extensions listed in npmBuild are treated as npm-style packages:
 	// they get npm install + npm run build, and an index.ts bridge is
@@ -93,7 +88,7 @@ interface ResolvedResource {
 	isDirectory: boolean; // true for dir-based extensions, skills, etc.
 }
 
-type SyncAction = "NEW" | "UPDATE" | "SKIP";
+type SyncAction = 'NEW' | 'UPDATE' | 'SKIP';
 
 // (SyncLogEntry type removed — unused; log entries are written directly)
 
@@ -132,46 +127,46 @@ function parseArgs(): CLIOptions {
 
 	for (let i = 0; i < args.length; i++) {
 		switch (args[i]) {
-			case "--profile":
-			case "-p":
+			case '--profile':
+			case '-p':
 				opts.profile = args[++i] ?? null;
 				break;
-			case "--all":
-			case "-a":
+			case '--all':
+			case '-a':
 				opts.all = true;
 				break;
-			case "--dry-run":
-			case "-n":
+			case '--dry-run':
+			case '-n':
 				opts.dryRun = true;
 				break;
-			case "--config":
-			case "-c":
+			case '--config':
+			case '-c':
 				opts.config = args[++i] ?? DEFAULT_CONFIG_PATH;
 				break;
-			case "--ext":
-			case "--extension":
+			case '--ext':
+			case '--extension':
 				opts.inline = true;
-				opts.inlineExtensions.push(args[++i] ?? "");
+				opts.inlineExtensions.push(args[++i] ?? '');
 				break;
-			case "--skill":
+			case '--skill':
 				opts.inline = true;
-				opts.inlineSkills.push(args[++i] ?? "");
+				opts.inlineSkills.push(args[++i] ?? '');
 				break;
-			case "--theme":
+			case '--theme':
 				opts.inline = true;
-				opts.inlineThemes.push(args[++i] ?? "");
+				opts.inlineThemes.push(args[++i] ?? '');
 				break;
-			case "--prompt":
+			case '--prompt':
 				opts.inline = true;
-				opts.inlinePrompts.push(args[++i] ?? "");
+				opts.inlinePrompts.push(args[++i] ?? '');
 				break;
-			case "--target":
-			case "-t":
+			case '--target':
+			case '-t':
 				opts.inlineTarget = args[++i] ?? null;
 				if (opts.inlineTarget) opts.inline = true;
 				break;
-			case "-h":
-			case "--help":
+			case '-h':
+			case '--help':
 				printHelp();
 				process.exit(0);
 			default:
@@ -221,14 +216,14 @@ Examples:
 // Logging
 // ══════════════════════════════════════════════════════════════════════════════
 
-function writeLog(level: "INFO" | "WARN" | "ERROR", message: string): void {
+function writeLog(level: 'INFO' | 'WARN' | 'ERROR', message: string): void {
 	const now = new Date();
-	const pad = (n: number) => String(n).padStart(2, "0");
+	const pad = (n: number) => String(n).padStart(2, '0');
 	const offset = -now.getTimezoneOffset();
-	const offsetSign = offset >= 0 ? "+" : "-";
+	const offsetSign = offset >= 0 ? '+' : '-';
 	const offsetHours = pad(Math.floor(Math.abs(offset) / 60));
 	const offsetMins = pad(Math.abs(offset) % 60);
-	const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${String(now.getMilliseconds()).padStart(3, "0")}${offsetSign}${offsetHours}:${offsetMins}`;
+	const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${String(now.getMilliseconds()).padStart(3, '0')}${offsetSign}${offsetHours}:${offsetMins}`;
 	const line = `[${timestamp}] [${level}] ${message}\n`;
 
 	// Always write to log file (create dir if needed)
@@ -237,17 +232,17 @@ function writeLog(level: "INFO" | "WARN" | "ERROR", message: string): void {
 		if (!existsSync(dir)) {
 			mkdirSync(dir, { recursive: true });
 		}
-		appendFileSync(LOG_FILE, line, "utf8");
+		appendFileSync(LOG_FILE, line, 'utf8');
 	} catch (err) {
 		console.error(`Failed to write log: ${err}`);
 	}
 
 	// Also print to console (with color for dry-run/warn/error)
-	if (level === "ERROR") {
+	if (level === 'ERROR') {
 		console.error(`  ${level}: ${message}`);
-	} else if (level === "WARN") {
+	} else if (level === 'WARN') {
 		console.warn(`  ${level}: ${message}`);
-	} else if (level === "INFO") {
+	} else if (level === 'INFO') {
 		console.log(`  ${level}: ${message}`);
 	}
 }
@@ -262,22 +257,20 @@ function loadConfig(configPath: string): SyncProfilesConfig {
 	// 1. Load global config (~/.pi/agent/sync-profiles.yaml)
 	if (existsSync(GLOBAL_CONFIG_PATH)) {
 		try {
-			const raw = readFileSync(GLOBAL_CONFIG_PATH, "utf8");
+			const raw = readFileSync(GLOBAL_CONFIG_PATH, 'utf8');
 			const parsed = yaml.load(raw) as SyncProfilesConfig;
 			if (parsed?.profiles) {
 				merged = parsed;
 			}
 		} catch (err) {
-			console.warn(
-				`Warning: Failed to load global config ${GLOBAL_CONFIG_PATH}: ${err}`,
-			);
+			console.warn(`Warning: Failed to load global config ${GLOBAL_CONFIG_PATH}: ${err}`);
 		}
 	}
 
 	// 2. Load project-local config (overrides global)
 	if (existsSync(configPath)) {
 		try {
-			const raw = readFileSync(configPath, "utf8");
+			const raw = readFileSync(configPath, 'utf8');
 			const parsed = yaml.load(raw) as SyncProfilesConfig;
 			if (parsed?.profiles) {
 				// Merge: project-local profiles override global ones with the same name
@@ -286,9 +279,7 @@ function loadConfig(configPath: string): SyncProfilesConfig {
 				};
 			}
 		} catch (err) {
-			console.error(
-				`Error: Failed to load project config ${configPath}: ${err}`,
-			);
+			console.error(`Error: Failed to load project config ${configPath}: ${err}`);
 			process.exit(1);
 		}
 	} else {
@@ -310,7 +301,7 @@ function selectProfiles(
 	const profileNames = Object.keys(config.profiles);
 
 	if (profileNames.length === 0) {
-		console.error("Error: No profiles defined in config.");
+		console.error('Error: No profiles defined in config.');
 		process.exit(1);
 	}
 
@@ -324,7 +315,7 @@ function selectProfiles(
 	if (opts.profile) {
 		if (!config.profiles[opts.profile]) {
 			console.error(
-				`Error: Profile "${opts.profile}" not found. Available: ${profileNames.join(", ")}`,
+				`Error: Profile "${opts.profile}" not found. Available: ${profileNames.join(', ')}`,
 			);
 			process.exit(1);
 		}
@@ -343,7 +334,7 @@ function selectProfiles(
 // ══════════════════════════════════════════════════════════════════════════════
 
 function expandTargetPath(target: string, projectRoot: string): string {
-	if (target.startsWith("~")) {
+	if (target.startsWith('~')) {
 		return join(homedir(), target.slice(1));
 	}
 	if (isAbsolute(target)) {
@@ -356,15 +347,11 @@ function expandTargetPath(target: string, projectRoot: string): string {
  * Check if a directory is an npm-style package directory (has package.json with "pi" field).
  */
 function isNpmPackageDir(dir: string): boolean {
-	const pkgPath = join(dir, "package.json");
+	const pkgPath = join(dir, 'package.json');
 	if (!existsSync(pkgPath)) return false;
 	try {
-		const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-		return !!(
-			pkg.pi &&
-			Array.isArray(pkg.pi.extensions) &&
-			pkg.pi.extensions.length > 0
-		);
+		const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+		return !!(pkg.pi && Array.isArray(pkg.pi.extensions) && pkg.pi.extensions.length > 0);
 	} catch {
 		return false;
 	}
@@ -386,16 +373,16 @@ function scanExtensionsRecursively(dir: string, depth: number): string[] {
 	}
 	for (const entry of entries) {
 		// Skip hidden, node_modules, and category directories at top level (tui/, auto/, etc.)
-		if (entry.name.startsWith(".")) continue;
-		if (entry.name === "node_modules") continue;
+		if (entry.name.startsWith('.')) continue;
+		if (entry.name === 'node_modules') continue;
 
 		const fullPath = join(dir, entry.name);
 
-		if (entry.isFile() && entry.name.endsWith(".ts")) {
+		if (entry.isFile() && entry.name.endsWith('.ts')) {
 			results.push(entry.name.slice(0, -3)); // remove .ts
 		} else if (entry.isDirectory()) {
 			// If it has an index.ts, it's an extension directory
-			if (existsSync(join(fullPath, "index.ts")) || isNpmPackageDir(fullPath)) {
+			if (existsSync(join(fullPath, 'index.ts')) || isNpmPackageDir(fullPath)) {
 				results.push(entry.name);
 			} else {
 				// Otherwise recurse into it (it's a category directory like tui/, auto/, etc.)
@@ -426,8 +413,8 @@ function findExtensionByName(
 			return null;
 		}
 		for (const entry of entries) {
-			if (entry.name.startsWith(".")) continue;
-			if (entry.name === "node_modules") continue;
+			if (entry.name.startsWith('.')) continue;
+			if (entry.name === 'node_modules') continue;
 
 			const fullPath = join(dir, entry.name);
 
@@ -441,7 +428,7 @@ function findExtensionByName(
 			if (
 				entry.isDirectory() &&
 				entry.name === name &&
-				(existsSync(join(fullPath, "index.ts")) || isNpmPackageDir(fullPath))
+				(existsSync(join(fullPath, 'index.ts')) || isNpmPackageDir(fullPath))
 			) {
 				return { relativePath: relative(extRoot, fullPath), isDirectory: true };
 			}
@@ -449,7 +436,7 @@ function findExtensionByName(
 			// (directories with index.ts — their internals aren't separate extensions)
 			if (
 				entry.isDirectory() &&
-				!existsSync(join(fullPath, "index.ts")) &&
+				!existsSync(join(fullPath, 'index.ts')) &&
 				!isNpmPackageDir(fullPath)
 			) {
 				const result = search(fullPath, depth + 1);
@@ -469,10 +456,7 @@ function findExtensionByName(
  * Scan the target directory for existing items per resource type.
  * Returns the list of item names (without extension for files) found in target.
  */
-function scanTargetExistingItems(
-	type: ResourceType,
-	targetDir: string,
-): string[] {
+function scanTargetExistingItems(type: ResourceType, targetDir: string): string[] {
 	const typeDir = join(targetDir, type);
 	if (!existsSync(typeDir)) return [];
 
@@ -481,29 +465,23 @@ function scanTargetExistingItems(
 		const entries = readdirSync(typeDir, { withFileTypes: true });
 		for (const entry of entries) {
 			const name = entry.name;
-			if (name.startsWith(".")) continue;
+			if (name.startsWith('.')) continue;
 
-			if (type === "extensions") {
-				if (entry.isFile() && name.endsWith(".ts")) {
+			if (type === 'extensions') {
+				if (entry.isFile() && name.endsWith('.ts')) {
 					items.push(name.slice(0, -3));
-				} else if (
-					entry.isDirectory() &&
-					existsSync(join(typeDir, name, "index.ts"))
-				) {
+				} else if (entry.isDirectory() && existsSync(join(typeDir, name, 'index.ts'))) {
 					items.push(name);
 				}
-			} else if (type === "skills") {
-				if (
-					entry.isDirectory() &&
-					existsSync(join(typeDir, name, "SKILL.md"))
-				) {
+			} else if (type === 'skills') {
+				if (entry.isDirectory() && existsSync(join(typeDir, name, 'SKILL.md'))) {
 					items.push(name);
 				}
-			} else if (type === "themes") {
-				if (entry.isFile() && name.endsWith(".json")) {
+			} else if (type === 'themes') {
+				if (entry.isFile() && name.endsWith('.json')) {
 					items.push(name.slice(0, -5));
 				}
-			} else if (type === "prompts") {
+			} else if (type === 'prompts') {
 				if (entry.isFile() || entry.isDirectory()) {
 					items.push(name);
 				}
@@ -517,7 +495,7 @@ function scanTargetExistingItems(
 
 function resolveSourceItems(
 	type: ResourceType,
-	names: string[] | "*",
+	names: string[] | '*',
 	exclude: string[] | undefined,
 	projectRoot: string,
 ): string[] {
@@ -529,7 +507,7 @@ function resolveSourceItems(
 	// Build list of available items
 	const available: string[] = [];
 
-	if (type === "extensions") {
+	if (type === 'extensions') {
 		// Recursively scan all subdirectories (tui/, auto/, etc.)
 		available.push(...scanExtensionsRecursively(sourceDir, 0));
 	} else {
@@ -538,18 +516,15 @@ function resolveSourceItems(
 		for (const entry of entries) {
 			const name = entry.name;
 
-			if (type === "skills") {
-				if (
-					entry.isDirectory() &&
-					existsSync(join(sourceDir, name, "SKILL.md"))
-				) {
+			if (type === 'skills') {
+				if (entry.isDirectory() && existsSync(join(sourceDir, name, 'SKILL.md'))) {
 					available.push(name);
 				}
-			} else if (type === "themes") {
-				if (entry.isFile() && name.endsWith(".json")) {
+			} else if (type === 'themes') {
+				if (entry.isFile() && name.endsWith('.json')) {
 					available.push(name.slice(0, -5)); // remove .json
 				}
-			} else if (type === "prompts") {
+			} else if (type === 'prompts') {
 				// Any file or directory in prompts/ dir
 				if (entry.isFile() || entry.isDirectory()) {
 					available.push(name);
@@ -560,17 +535,13 @@ function resolveSourceItems(
 
 	// Normalize ["*"] to "*" for cleaner wildcard handling
 	let effectiveNames = names;
-	if (
-		Array.isArray(effectiveNames) &&
-		effectiveNames.length === 1 &&
-		effectiveNames[0] === "*"
-	) {
-		effectiveNames = "*";
+	if (Array.isArray(effectiveNames) && effectiveNames.length === 1 && effectiveNames[0] === '*') {
+		effectiveNames = '*';
 	}
 
 	// Filter by names list
 	let selected: string[];
-	if (effectiveNames === "*") {
+	if (effectiveNames === '*') {
 		selected = [...available];
 	} else if (Array.isArray(effectiveNames)) {
 		selected = effectiveNames.filter((n) => available.includes(n));
@@ -606,7 +577,7 @@ function buildResource(
 	let targetPath: string;
 	let isDirectory = false;
 
-	if (type === "extensions") {
+	if (type === 'extensions') {
 		// Search recursively through subdirectories (tui/, auto/, etc.)
 		const found = findExtensionByName(name, sourceDir);
 		if (found) {
@@ -621,15 +592,15 @@ function buildResource(
 			targetPath = join(targetSubDir, `${name}.ts`);
 			isDirectory = false;
 		}
-	} else if (type === "skills") {
+	} else if (type === 'skills') {
 		sourcePath = join(sourceDir, name);
 		targetPath = join(targetSubDir, name);
 		isDirectory = true;
-	} else if (type === "themes") {
+	} else if (type === 'themes') {
 		sourcePath = join(sourceDir, `${name}.json`);
 		targetPath = join(targetSubDir, `${name}.json`);
 		isDirectory = false;
-	} else if (type === "prompts") {
+	} else if (type === 'prompts') {
 		// prompts can be files or directories
 		const filePath = join(sourceDir, name);
 		if (existsSync(filePath)) {
@@ -652,10 +623,7 @@ function buildResource(
 /**
  * Resolve all resources to sync for a given profile.
  */
-function resolveResources(
-	profile: ProfileConfig,
-	projectRoot: string,
-): ResolvedResource[] {
+function resolveResources(profile: ProfileConfig, projectRoot: string): ResolvedResource[] {
 	const targetDir = expandTargetPath(profile.target, projectRoot);
 	const resources: ResolvedResource[] = [];
 
@@ -703,7 +671,7 @@ function needsUpdate(sourcePath: string, targetPath: string): boolean {
 }
 
 /** Directories to skip when comparing for incremental sync */
-const IGNORE_DIRS = new Set(["node_modules", ".git", ".svn", ".hg"]);
+const IGNORE_DIRS = new Set(['node_modules', '.git', '.svn', '.hg']);
 
 /**
  * Recursively compare directories for incremental sync.
@@ -821,10 +789,10 @@ function syncResource(
 	}
 
 	if (!shouldUpdate && existsSync(targetPath)) {
-		return { action: "SKIP", resource };
+		return { action: 'SKIP', resource };
 	}
 
-	const action: SyncAction = existsSync(targetPath) ? "UPDATE" : "NEW";
+	const action: SyncAction = existsSync(targetPath) ? 'UPDATE' : 'NEW';
 
 	if (!dryRun) {
 		mkdirSync(dirname(targetPath), { recursive: true });
@@ -862,17 +830,14 @@ interface NpmInstallResult {
  * Check if a directory has a package.json with dependencies.
  */
 function hasDependencies(dir: string): boolean {
-	const pkgPath = join(dir, "package.json");
+	const pkgPath = join(dir, 'package.json');
 	if (!existsSync(pkgPath)) return false;
 
 	try {
-		const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-		if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0)
-			return true;
-		if (pkg.devDependencies && Object.keys(pkg.devDependencies).length > 0)
-			return true;
-		if (pkg.peerDependencies && Object.keys(pkg.peerDependencies).length > 0)
-			return true;
+		const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+		if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) return true;
+		if (pkg.devDependencies && Object.keys(pkg.devDependencies).length > 0) return true;
+		if (pkg.peerDependencies && Object.keys(pkg.peerDependencies).length > 0) return true;
 		return false;
 	} catch {
 		return false;
@@ -886,7 +851,7 @@ function hasDependencies(dir: string): boolean {
  */
 function findLocalPackages(targetDir: string): Map<string, string> {
 	const packages = new Map<string, string>();
-	const extDir = join(targetDir, "extensions");
+	const extDir = join(targetDir, 'extensions');
 	if (!existsSync(extDir)) return packages;
 
 	let entries: Dirent[];
@@ -897,20 +862,16 @@ function findLocalPackages(targetDir: string): Map<string, string> {
 	}
 
 	for (const entry of entries) {
-		if (entry.name.startsWith(".")) continue;
-		if (entry.name === "node_modules") continue;
+		if (entry.name.startsWith('.')) continue;
+		if (entry.name === 'node_modules') continue;
 		if (!entry.isDirectory()) continue;
 
-		const pkgPath = join(extDir, entry.name, "package.json");
+		const pkgPath = join(extDir, entry.name, 'package.json');
 		if (!existsSync(pkgPath)) continue;
 
 		try {
-			const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-			if (
-				pkg.name &&
-				typeof pkg.name === "string" &&
-				pkg.name.startsWith("@zenone/")
-			) {
+			const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+			if (pkg.name && typeof pkg.name === 'string' && pkg.name.startsWith('@zenone/')) {
 				packages.set(pkg.name, `./extensions/${entry.name}`);
 			}
 		} catch {
@@ -929,22 +890,21 @@ function runNpmInstall(dir: string, dryRun: boolean): NpmInstallResult {
 		return {
 			path: dir,
 			success: true,
-			output: "[dry-run] npm install would run here",
+			output: '[dry-run] npm install would run here',
 		};
 	}
 
 	try {
-		const output = execSync("npm install", {
+		const output = execSync('npm install', {
 			cwd: dir,
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "pipe"],
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'pipe'],
 			timeout: 120_000, // 2 minute timeout
 		});
 		return { path: dir, success: true, output: output.trim() };
 	} catch (err: unknown) {
 		const error = err as { stdout?: string; stderr?: string; message?: string };
-		const msg =
-			error.stderr || error.stdout || error.message || "unknown error";
+		const msg = error.stderr || error.stdout || error.message || 'unknown error';
 		return { path: dir, success: false, output: msg };
 	}
 }
@@ -961,18 +921,18 @@ async function processProfile(
 	profile: ProfileConfig,
 	opts: CLIOptions,
 ): Promise<void> {
-	writeLog("INFO", `Profile "${name}" started`);
+	writeLog('INFO', `Profile "${name}" started`);
 
 	const targetDir = expandTargetPath(profile.target, PROJECT_ROOT);
 	const resources = resolveResources(profile, PROJECT_ROOT);
 
 	if (resources.length === 0) {
 		console.log(`  📦 [${name}] No resources to sync.`);
-		writeLog("INFO", `Profile "${name}" completed (0 resources)`);
+		writeLog('INFO', `Profile "${name}" completed (0 resources)`);
 		return;
 	}
 
-	console.log(`  📦 [${name}] ${profile.description || ""}`);
+	console.log(`  📦 [${name}] ${profile.description || ''}`);
 	console.log(`      Target: ${targetDir}`);
 	console.log(`      Resources: ${resources.length} total`);
 	console.log();
@@ -984,9 +944,7 @@ async function processProfile(
 		byType[r.type].push(r);
 	}
 	for (const [type, items] of Object.entries(byType)) {
-		console.log(
-			`      ${type}/ (${items.length}): ${items.map((i) => i.name).join(", ")}`,
-		);
+		console.log(`      ${type}/ (${items.length}): ${items.map((i) => i.name).join(', ')}`);
 	}
 	console.log();
 
@@ -1032,17 +990,17 @@ async function processProfile(
 		const targetRel = relative(PROJECT_ROOT, resource.targetPath);
 
 		switch (result.action) {
-			case "NEW":
+			case 'NEW':
 				console.log(`    ✅ [NEW] ${label} → ${targetRel}`);
-				writeLog("INFO", `[NEW] ${label} → ${resource.targetPath}`);
+				writeLog('INFO', `[NEW] ${label} → ${resource.targetPath}`);
 				newItems[resource.type].push(resource.name);
 				break;
-			case "UPDATE":
+			case 'UPDATE':
 				console.log(`    🔄 [UPDATE] ${label} → ${targetRel}`);
-				writeLog("INFO", `[UPDATE] ${label} → ${resource.targetPath}`);
+				writeLog('INFO', `[UPDATE] ${label} → ${resource.targetPath}`);
 				updatedItems[resource.type].push(resource.name);
 				break;
-			case "SKIP":
+			case 'SKIP':
 				if (!opts.dryRun) {
 					console.log(`    ⏭️  [SKIP] ${label} (unchanged)`);
 				}
@@ -1056,23 +1014,19 @@ async function processProfile(
 	let npmFailCount = 0;
 
 	for (const resource of resources) {
-		const checkPath = resource.isDirectory
-			? resource.targetPath
-			: dirname(resource.targetPath);
+		const checkPath = resource.isDirectory ? resource.targetPath : dirname(resource.targetPath);
 
 		const hasDep = hasDependencies(checkPath);
 		if (hasDep && !opts.dryRun) {
-			console.log(
-				`      ⚙️  Running npm install in ${relative(PROJECT_ROOT, checkPath)}...`,
-			);
-			writeLog("WARN", `Running npm install in ${checkPath}`);
+			console.log(`      ⚙️  Running npm install in ${relative(PROJECT_ROOT, checkPath)}...`);
+			writeLog('WARN', `Running npm install in ${checkPath}`);
 
 			const result = runNpmInstall(checkPath, opts.dryRun);
 			if (result.success) {
 				console.log(
 					`      ✅ npm install completed in ${relative(PROJECT_ROOT, checkPath)}`,
 				);
-				writeLog("INFO", `npm install completed successfully in ${checkPath}`);
+				writeLog('INFO', `npm install completed successfully in ${checkPath}`);
 				npmCount++;
 			} else {
 				console.error(
@@ -1080,7 +1034,7 @@ async function processProfile(
 				);
 				console.error(`         ${result.output.slice(0, 200)}`);
 				writeLog(
-					"ERROR",
+					'ERROR',
 					`npm install failed in ${checkPath}: ${result.output.slice(0, 200)}`,
 				);
 				npmFailCount++;
@@ -1102,7 +1056,7 @@ async function processProfile(
 	// Also auto-detect: directories with package.json containing "pi" field.
 	// This ensures inline mode works without explicit npmBuild config.
 	for (const resource of resources) {
-		if (resource.type !== "extensions") continue;
+		if (resource.type !== 'extensions') continue;
 		if (!resource.isDirectory) continue;
 		if (npmBuildNames.has(resource.name)) continue;
 		if (isNpmPackageDir(resource.sourcePath)) {
@@ -1112,7 +1066,7 @@ async function processProfile(
 
 	if (npmBuildNames.size > 0) {
 		for (const resource of resources) {
-			if (resource.type !== "extensions") continue;
+			if (resource.type !== 'extensions') continue;
 			if (!resource.isDirectory) continue;
 			if (!npmBuildNames.has(resource.name)) continue;
 
@@ -1126,8 +1080,8 @@ async function processProfile(
 				continue;
 			}
 
-			const bridgePath = join(npmDir, "index.ts");
-			const srcEntry = join(npmDir, "src", "index.ts");
+			const bridgePath = join(npmDir, 'index.ts');
+			const srcEntry = join(npmDir, 'src', 'index.ts');
 			const bridgeContent = `// Auto-generated by sync-to-local-pi - do not edit\nexport { default } from "./src/index.ts";\n`;
 
 			if (opts.dryRun) {
@@ -1148,16 +1102,13 @@ async function processProfile(
 				console.error(
 					`      ❌ [npm:${resource.name}] src/index.ts not found in ${npmDir}`,
 				);
-				writeLog(
-					"ERROR",
-					`Bridge failed for ${resource.name}: src/index.ts not found`,
-				);
+				writeLog('ERROR', `Bridge failed for ${resource.name}: src/index.ts not found`);
 				npmBuildFailCount++;
 				continue;
 			}
 
 			// Ensure node_modules exists (npm install may have been skipped)
-			if (!existsSync(join(npmDir, "node_modules"))) {
+			if (!existsSync(join(npmDir, 'node_modules'))) {
 				console.log(`      ⚙️  [npm:${resource.name}] Running npm install...`);
 				const installResult = runNpmInstall(npmDir, false);
 				if (!installResult.success) {
@@ -1165,7 +1116,7 @@ async function processProfile(
 						`         ❌ npm install failed: ${installResult.output.slice(0, 200)}`,
 					);
 					writeLog(
-						"ERROR",
+						'ERROR',
 						`npm install failed for ${resource.name}: ${installResult.output.slice(0, 200)}`,
 					);
 					npmBuildFailCount++;
@@ -1174,14 +1125,9 @@ async function processProfile(
 			}
 
 			// Create bridge index.ts
-			writeFileSync(bridgePath, bridgeContent, "utf8");
-			console.log(
-				`      🌉  [npm:${resource.name}] Created bridge: index.ts → src/index.ts`,
-			);
-			writeLog(
-				"INFO",
-				`Bridge index.ts created for ${resource.name} in ${npmDir}`,
-			);
+			writeFileSync(bridgePath, bridgeContent, 'utf8');
+			console.log(`      🌉  [npm:${resource.name}] Created bridge: index.ts → src/index.ts`);
+			writeLog('INFO', `Bridge index.ts created for ${resource.name} in ${npmDir}`);
 			npmBuildCount++;
 		}
 	}
@@ -1189,18 +1135,18 @@ async function processProfile(
 	// ── Root-level local package resolution (link @zenone/* packages) ──
 	const localPackages = findLocalPackages(targetDir);
 	if (localPackages.size > 0) {
-		const rootPkgPath = join(targetDir, "package.json");
+		const rootPkgPath = join(targetDir, 'package.json');
 		let rootPkg: Record<string, unknown> = {};
 		if (existsSync(rootPkgPath)) {
 			try {
-				rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
+				rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf8'));
 			} catch {
 				rootPkg = {};
 			}
 		}
 
 		rootPkg.private = true;
-		rootPkg.type = "module";
+		rootPkg.type = 'module';
 		if (!rootPkg.dependencies) {
 			rootPkg.dependencies = {} as Record<string, string>;
 		}
@@ -1216,19 +1162,12 @@ async function processProfile(
 
 		if (packagesAdded > 0) {
 			if (!opts.dryRun) {
-				writeFileSync(
-					rootPkgPath,
-					JSON.stringify(rootPkg, null, 2) + "\n",
-					"utf8",
-				);
+				writeFileSync(rootPkgPath, JSON.stringify(rootPkg, null, 2) + '\n', 'utf8');
 			}
 			console.log(
 				`      📝 Added ${packagesAdded} local package(s) to ${relative(PROJECT_ROOT, rootPkgPath)}`,
 			);
-			writeLog(
-				"INFO",
-				`Added ${packagesAdded} local package(s) to ${rootPkgPath}`,
-			);
+			writeLog('INFO', `Added ${packagesAdded} local package(s) to ${rootPkgPath}`);
 		} else if (existsSync(rootPkgPath)) {
 			console.log(
 				`      ⏭️  Root package.json up-to-date (${localPackages.size} local package(s))`,
@@ -1237,16 +1176,14 @@ async function processProfile(
 
 		// Run npm install in target root (creates node_modules symlinks for file: deps)
 		if (!opts.dryRun) {
-			console.log(
-				`      ⚙️  Running npm install in ${relative(PROJECT_ROOT, targetDir)}...`,
-			);
-			writeLog("INFO", `Running npm install in ${targetDir}`);
+			console.log(`      ⚙️  Running npm install in ${relative(PROJECT_ROOT, targetDir)}...`);
+			writeLog('INFO', `Running npm install in ${targetDir}`);
 			const result = runNpmInstall(targetDir, opts.dryRun);
 			if (result.success) {
 				console.log(
 					`      ✅ npm install completed in ${relative(PROJECT_ROOT, targetDir)}`,
 				);
-				writeLog("INFO", `npm install completed successfully in ${targetDir}`);
+				writeLog('INFO', `npm install completed successfully in ${targetDir}`);
 				npmCount++;
 			} else {
 				console.error(
@@ -1254,7 +1191,7 @@ async function processProfile(
 				);
 				console.error(`         ${result.output.slice(0, 200)}`);
 				writeLog(
-					"ERROR",
+					'ERROR',
 					`npm install failed in ${targetDir}: ${result.output.slice(0, 200)}`,
 				);
 				npmFailCount++;
@@ -1265,32 +1202,23 @@ async function processProfile(
 			);
 		}
 	} else {
-		console.log(
-			`      ⏭️  No local @zenone/* packages found — skipping root npm install`,
-		);
+		console.log(`      ⏭️  No local @zenone/* packages found — skipping root npm install`);
 	}
 
 	// ── Summary for this profile ──
 	const newTotal = Object.values(newItems).reduce((a, b) => a + b.length, 0);
-	const updatedTotal = Object.values(updatedItems).reduce(
-		(a, b) => a + b.length,
-		0,
-	);
+	const updatedTotal = Object.values(updatedItems).reduce((a, b) => a + b.length, 0);
 	const summaryParts: string[] = [];
 	if (newTotal > 0) summaryParts.push(`${newTotal} new`);
 	if (updatedTotal > 0) summaryParts.push(`${updatedTotal} updated`);
-	if (skipCount > 0 && opts.dryRun)
-		summaryParts.push(`${skipCount} would-be-skipped`);
+	if (skipCount > 0 && opts.dryRun) summaryParts.push(`${skipCount} would-be-skipped`);
 	else if (skipCount > 0) summaryParts.push(`${skipCount} skipped`);
 	if (npmCount > 0) summaryParts.push(`${npmCount} npm installs`);
-	if (npmFailCount > 0)
-		summaryParts.push(`${npmFailCount} npm installs FAILED`);
+	if (npmFailCount > 0) summaryParts.push(`${npmFailCount} npm installs FAILED`);
 	if (npmBuildCount > 0) summaryParts.push(`${npmBuildCount} npm builds`);
-	if (npmBuildFailCount > 0)
-		summaryParts.push(`${npmBuildFailCount} npm builds FAILED`);
+	if (npmBuildFailCount > 0) summaryParts.push(`${npmBuildFailCount} npm builds FAILED`);
 
-	const summary =
-		summaryParts.length > 0 ? summaryParts.join(", ") : "no changes";
+	const summary = summaryParts.length > 0 ? summaryParts.join(', ') : 'no changes';
 	console.log(`\n  ✅ [${name}] Done — ${summary}`);
 
 	// ── Per-category breakdown (NEW / UPDATED / DELETE CANDIDATES) ──
@@ -1301,17 +1229,14 @@ async function processProfile(
 	for (const t of RESOURCE_TYPES) {
 		const n = newItems[t].length;
 		const u = updatedItems[t].length;
-		const candidates = targetExistingNames[t].filter(
-			(item) => !sourceNames[t].has(item),
-		);
+		const candidates = targetExistingNames[t].filter((item) => !sourceNames[t].has(item));
 		const d = candidates.length;
 
 		const parts: string[] = [];
 		if (n > 0) parts.push(`${n} NEW`);
 		if (u > 0) parts.push(`${u} UPDATED`);
-		if (d > 0) parts.push(`${d} DELETE CANDIDATE${d > 1 ? "S" : ""}`);
-		const status =
-			parts.length > 0 ? ` [${parts.join(" | ")}]` : " [no changes]";
+		if (d > 0) parts.push(`${d} DELETE CANDIDATE${d > 1 ? 'S' : ''}`);
+		const status = parts.length > 0 ? ` [${parts.join(' | ')}]` : ' [no changes]';
 
 		console.log(`    ${t}/${status}`);
 
@@ -1320,16 +1245,16 @@ async function processProfile(
 			for (const c of candidates) {
 				// Construct the correct path with original file extension
 				let fullPath: string;
-				if (t === "extensions") {
+				if (t === 'extensions') {
 					// Could be a .ts file or a directory with index.ts
-					const tsPath = join(absTarget, t, c + ".ts");
+					const tsPath = join(absTarget, t, c + '.ts');
 					if (existsSync(tsPath)) {
 						fullPath = tsPath;
 					} else {
 						fullPath = join(absTarget, t, c);
 					}
-				} else if (t === "themes") {
-					fullPath = join(absTarget, t, c + ".json");
+				} else if (t === 'themes') {
+					fullPath = join(absTarget, t, c + '.json');
 				} else {
 					fullPath = join(absTarget, t, c);
 				}
@@ -1343,10 +1268,7 @@ async function processProfile(
 	}
 	console.log();
 
-	writeLog(
-		"INFO",
-		`Profile "${name}" completed (${resources.length} resources, ${summary})`,
-	);
+	writeLog('INFO', `Profile "${name}" completed (${resources.length} resources, ${summary})`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1359,13 +1281,13 @@ async function main(): Promise<void> {
 	console.log(`\n🔧 Pi Sync Tool — Profile-Driven Resource Sync\n`);
 
 	if (opts.dryRun) {
-		console.log("  ⚠️  DRY RUN MODE — no files will be written\n");
+		console.log('  ⚠️  DRY RUN MODE — no files will be written\n');
 	}
 
 	// ── Inline mode: build ad-hoc profile from CLI args ─────────────
 	if (opts.inline) {
 		if (!opts.inlineTarget) {
-			console.error("Error: --target is required in inline mode");
+			console.error('Error: --target is required in inline mode');
 			process.exit(1);
 		}
 		if (
@@ -1375,7 +1297,7 @@ async function main(): Promise<void> {
 			opts.inlinePrompts.length === 0
 		) {
 			console.error(
-				"Error: At least one of --ext, --skill, --theme, or --prompt is required in inline mode",
+				'Error: At least one of --ext, --skill, --theme, or --prompt is required in inline mode',
 			);
 			process.exit(1);
 		}
@@ -1389,8 +1311,8 @@ async function main(): Promise<void> {
 			prompts: opts.inlinePrompts.length > 0 ? opts.inlinePrompts : [],
 		};
 
-		await processProfile("(inline)", inlineProfile, opts);
-		writeLog("INFO", `Inline sync completed (target: ${inlineProfile.target})`);
+		await processProfile('(inline)', inlineProfile, opts);
+		writeLog('INFO', `Inline sync completed (target: ${inlineProfile.target})`);
 		console.log(`  ✨ Inline sync done!`);
 		console.log(`     Log: ${LOG_FILE}`);
 		console.log();
@@ -1415,14 +1337,14 @@ async function main(): Promise<void> {
 	}
 
 	const totalProfiles = profiles.length;
-	const mode = opts.dryRun ? " (dry run)" : "";
+	const mode = opts.dryRun ? ' (dry run)' : '';
 	console.log(`  ✨ All done! ${totalProfiles} profile(s) synced${mode}`);
 	console.log(`     Log: ${LOG_FILE}`);
 	console.log();
 }
 
 main().catch((err) => {
-	console.error("Fatal error:", err);
-	writeLog("ERROR", `Fatal error: ${err}`);
+	console.error('Fatal error:', err);
+	writeLog('ERROR', `Fatal error: ${err}`);
 	process.exit(1);
 });

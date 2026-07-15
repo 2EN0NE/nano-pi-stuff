@@ -13,25 +13,14 @@
  * 3. Toggle skills on/off — changes take effect on the next LLM turn
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-import {
-	getSettingsListTheme,
-	formatSkillsForPrompt,
-} from "@earendil-works/pi-coding-agent";
-import {
-	Container,
-	type SettingItem,
-	SettingsList,
-	truncateToWidth,
-} from "@earendil-works/pi-tui";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { getSettingsListTheme, formatSkillsForPrompt } from '@earendil-works/pi-coding-agent';
+import { Container, type SettingItem, SettingsList, truncateToWidth } from '@earendil-works/pi-tui';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("skills");
+const log = createLogger('skills');
 
 // ── State ──────────────────────────────────────────────────────────
 
@@ -39,10 +28,10 @@ interface SkillsState {
 	enabledSkills: string[];
 }
 
-const CONFIG_FILE = "skills-config.json";
+const CONFIG_FILE = 'skills-config.json';
 
 export default function skillsExtension(pi: ExtensionAPI) {
-	log.info("Skills extension loaded");
+	log.info('Skills extension loaded');
 	let enabledSkills: Set<string> = new Set();
 	let allSkills: { name: string; description: string }[] = [];
 	let initialized = false;
@@ -60,9 +49,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 		if (!configFilePath) return undefined;
 		try {
 			if (existsSync(configFilePath)) {
-				const data = JSON.parse(
-					readFileSync(configFilePath, "utf-8"),
-				) as SkillsState;
+				const data = JSON.parse(readFileSync(configFilePath, 'utf-8')) as SkillsState;
 				if (data?.enabledSkills && Array.isArray(data.enabledSkills)) {
 					return data.enabledSkills;
 				}
@@ -80,7 +67,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 			writeFileSync(
 				configFilePath,
 				JSON.stringify({ enabledSkills: enabled }, null, 2),
-				"utf-8",
+				'utf-8',
 			);
 		} catch {
 			// Best-effort: don't crash if file can't be written
@@ -105,7 +92,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 	function persistState() {
 		const enabled = Array.from(enabledSkills);
 		// Session entries: branch-aware within-session navigation
-		pi.appendEntry<SkillsState>("skills-config", {
+		pi.appendEntry<SkillsState>('skills-config', {
 			enabledSkills: enabled,
 		});
 		// Config file: cross-session persistence
@@ -115,7 +102,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 	function getBranchSkills(ctx: ExtensionContext): string[] | undefined {
 		const branchEntries = ctx.sessionManager.getBranch();
 		for (const entry of branchEntries) {
-			if (entry.type === "custom" && entry.customType === "skills-config") {
+			if (entry.type === 'custom' && entry.customType === 'skills-config') {
 				const data = entry.data as SkillsState | undefined;
 				if (data?.enabledSkills) {
 					return data.enabledSkills;
@@ -130,13 +117,13 @@ export default function skillsExtension(pi: ExtensionAPI) {
 		initialized = true;
 
 		if (!configFilePath) {
-			configFilePath = join(ctx.cwd, ".pi", CONFIG_FILE);
+			configFilePath = join(ctx.cwd, '.pi', CONFIG_FILE);
 		}
 
 		const fileSkills = loadFromFile();
 		const branchSkills = getBranchSkills(ctx);
 		mergeSavedSkills(fileSkills, branchSkills);
-		log.info("Skills: initialized, %d skills enabled", enabledSkills.size);
+		log.info('Skills: initialized, %d skills enabled', enabledSkills.size);
 	}
 
 	// ── Deduplicate skills by name (same skill may load from multiple sources) ──
@@ -160,7 +147,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 		const lines: string[] = [];
 
 		for (const s of changedSkills) {
-			const glyph = enabledSkills.has(s.name) ? "● Enabled" : "○ Disabled";
+			const glyph = enabledSkills.has(s.name) ? '● Enabled' : '○ Disabled';
 			lines.push(`  ${glyph}: ${s.name}`);
 		}
 
@@ -171,8 +158,8 @@ export default function skillsExtension(pi: ExtensionAPI) {
 
 		pi.sendMessage(
 			{
-				customType: "skills-summary",
-				content: `${header}\n${lines.join("\n")}`,
+				customType: 'skills-summary',
+				content: `${header}\n${lines.join('\n')}`,
 				display: true,
 				details: {
 					enabledCount: enabled,
@@ -189,11 +176,11 @@ export default function skillsExtension(pi: ExtensionAPI) {
 
 	// ── Command ─────────────────────────────────────────────────────
 
-	pi.registerCommand("skills", {
-		description: "Enable/disable skills",
+	pi.registerCommand('skills', {
+		description: 'Enable/disable skills',
 		handler: async (_args, ctx) => {
-			if (ctx.mode !== "tui") {
-				ctx.ui.notify("/skills requires TUI mode", "error");
+			if (ctx.mode !== 'tui') {
+				ctx.ui.notify('/skills requires TUI mode', 'error');
 				return;
 			}
 
@@ -204,7 +191,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 			}));
 
 			if (skills.length === 0) {
-				ctx.ui.notify("No skills loaded", "warning");
+				ctx.ui.notify('No skills loaded', 'warning');
 				return;
 			}
 
@@ -215,17 +202,17 @@ export default function skillsExtension(pi: ExtensionAPI) {
 			const snippetTools = Object.keys(options.toolSnippets || {});
 			const knownTools = [
 				// Extension tools not always in toolSnippets
-				"send_to_session",
-				"list_sessions",
-				"get_goal",
-				"create_goal",
-				"update_goal",
-				"signal_loop_success",
-				"todo",
-				"questionnaire",
-				"rg",
-				"structured_output",
-				"subagent",
+				'send_to_session',
+				'list_sessions',
+				'get_goal',
+				'create_goal',
+				'update_goal',
+				'signal_loop_success',
+				'todo',
+				'questionnaire',
+				'rg',
+				'structured_output',
+				'subagent',
 				// Merge with active tool snippets
 				...snippetTools,
 			];
@@ -233,8 +220,8 @@ export default function skillsExtension(pi: ExtensionAPI) {
 			// ── Fuzzy match: skill name ↔ tool names ──
 			function findRelatedTools(skillName: string): string[] {
 				const norm = skillName.toLowerCase();
-				const forms = [norm, norm.replace(/-/g, "_"), norm.replace(/-/g, "")];
-				const genericTools = new Set(["read", "bash", "edit", "write", "rg"]);
+				const forms = [norm, norm.replace(/-/g, '_'), norm.replace(/-/g, '')];
+				const genericTools = new Set(['read', 'bash', 'edit', 'write', 'rg']);
 
 				return knownTools.filter((toolName) => {
 					if (genericTools.has(toolName)) return false;
@@ -255,15 +242,15 @@ export default function skillsExtension(pi: ExtensionAPI) {
 			}
 
 			const beforeSnapshot = new Set(enabledSkills);
-			let warningText = "";
+			let warningText = '';
 
 			await ctx.ui.custom((tui, theme, _kb, done) => {
 				const items: SettingItem[] = skills.map((skill) => ({
 					id: skill.name,
-					label: `${enabledSkills.has(skill.name) ? "●" : "○"}  ${skill.name}`,
+					label: `${enabledSkills.has(skill.name) ? '●' : '○'}  ${skill.name}`,
 					description: skill.description,
-					currentValue: "",
-					values: ["●"],
+					currentValue: '',
+					values: ['●'],
 				}));
 
 				const container = new Container();
@@ -271,9 +258,9 @@ export default function skillsExtension(pi: ExtensionAPI) {
 					new (class {
 						render(_width: number) {
 							return [
-								theme.fg("accent", theme.bold("Skill Configuration")),
-								theme.fg("dim", "  (Enter/Space toggle  ·  Esc/q close)"),
-								"",
+								theme.fg('accent', theme.bold('Skill Configuration')),
+								theme.fg('dim', '  (Enter/Space toggle  ·  Esc/q close)'),
+								'',
 							];
 						}
 						invalidate() {}
@@ -288,25 +275,25 @@ export default function skillsExtension(pi: ExtensionAPI) {
 						const wasEnabled = enabledSkills.has(id);
 						if (wasEnabled) {
 							enabledSkills.delete(id);
-							log.info("Skills: disabled %s", id);
+							log.info('Skills: disabled %s', id);
 						} else {
 							enabledSkills.add(id);
-							log.info("Skills: enabled %s", id);
+							log.info('Skills: enabled %s', id);
 						}
 
 						const item = items.find((i) => i.id === id);
 						if (item) {
-							item.label = `${enabledSkills.has(id) ? "●" : "○"}  ${id}`;
+							item.label = `${enabledSkills.has(id) ? '●' : '○'}  ${id}`;
 						}
 
 						// When disabling a skill, check for related tools
-						warningText = "";
+						warningText = '';
 						if (wasEnabled) {
 							const related = findRelatedTools(id);
 							if (related.length > 0) {
-								const toolList = related.slice(0, 5).join(", ");
+								const toolList = related.slice(0, 5).join(', ');
 								warningText = `⚠  "${id}" 与 tools: ${toolList}${
-									related.length > 5 ? "…" : ""
+									related.length > 5 ? '…' : ''
 								} 可能有联动，关闭 skill 不代表禁用这些 tool`;
 							}
 						}
@@ -315,7 +302,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 						tui.requestRender();
 					},
 					() => {
-						warningText = "";
+						warningText = '';
 						const changed = allSkills.filter(
 							(s) => beforeSnapshot.has(s.name) !== enabledSkills.has(s.name),
 						);
@@ -330,9 +317,9 @@ export default function skillsExtension(pi: ExtensionAPI) {
 					render(width: number) {
 						const lines = container.render(width);
 						if (warningText) {
-							lines.push("");
+							lines.push('');
 							lines.push(
-								theme.fg("warning", truncateToWidth(`  ${warningText}`, width)),
+								theme.fg('warning', truncateToWidth(`  ${warningText}`, width)),
 							);
 						}
 						return lines;
@@ -353,7 +340,7 @@ export default function skillsExtension(pi: ExtensionAPI) {
 
 	// ── Events ──────────────────────────────────────────────────────
 
-	pi.on("before_agent_start", async (event, ctx) => {
+	pi.on('before_agent_start', async (event, ctx) => {
 		const systemSkills = event.systemPromptOptions.skills;
 		if (!systemSkills || systemSkills.length === 0) return;
 
@@ -398,16 +385,16 @@ export default function skillsExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	pi.on("session_start", async () => {
-		log.info("Skills: session started");
+	pi.on('session_start', async () => {
+		log.info('Skills: session started');
 	});
 
-	pi.on("session_tree", async (_event, ctx) => {
+	pi.on('session_tree', async (_event, ctx) => {
 		if (!initialized) return;
 
 		// Re-evaluate on branch navigation: file baseline + branch entries
 		if (!configFilePath) {
-			configFilePath = join(ctx.cwd, ".pi", CONFIG_FILE);
+			configFilePath = join(ctx.cwd, '.pi', CONFIG_FILE);
 		}
 		const fileSkills = loadFromFile();
 		const branchSkills = getBranchSkills(ctx);

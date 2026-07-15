@@ -19,10 +19,10 @@ pi-logger/
 
 Three subsystems work together:
 
-| Subsystem | File | Purpose |
-|---|---|---|
-| **Logger API** | `api.ts` | Extensions import `createLogger()` and call `.info()`, `.debug()`, etc. |
-| **Config Engine** | `config.ts` | Hierarchical per-logger level control via JSON config file |
+| Subsystem             | File                   | Purpose                                                                    |
+| --------------------- | ---------------------- | -------------------------------------------------------------------------- |
+| **Logger API**        | `api.ts`               | Extensions import `createLogger()` and call `.info()`, `.debug()`, etc.    |
+| **Config Engine**     | `config.ts`            | Hierarchical per-logger level control via JSON config file                 |
 | **Lifecycle Capture** | `lifecycle-capture.ts` | Auto-log tool/turn/message/agent events for ALL extensions (even npm ones) |
 
 ---
@@ -40,10 +40,10 @@ const log = createLogger('my-extension');
 ### 2. Log at your level
 
 ```typescript
-log.trace('Entering function with args: %s', args);     // verbose debug
-log.debug('Processing item #%d', item.id);               // debug info
-log.info('Review complete for %s', filePath);             // normal info
-log.warn('File %s has %d issues', path, count);           // warnings
+log.trace('Entering function with args: %s', args); // verbose debug
+log.debug('Processing item #%d', item.id); // debug info
+log.info('Review complete for %s', filePath); // normal info
+log.warn('File %s has %d issues', path, count); // warnings
 log.error('Failed to process: %s', err.message, { err }); // errors
 ```
 
@@ -53,27 +53,27 @@ Pass an object as the last argument — it becomes the `details` field:
 
 ```typescript
 log.info('Processing complete', {
-  filePath: 'src/main.ts',
-  issues: 3,
-  duration: 1500,
+	filePath: 'src/main.ts',
+	issues: 3,
+	duration: 1500,
 });
 ```
 
 ### 4. printf-style formatting
 
-| Specifier | Description |
-|---|---|
-| `%s` | String |
-| `%d` | Number |
+| Specifier   | Description         |
+| ----------- | ------------------- |
+| `%s`        | String              |
+| `%d`        | Number              |
 | `%j` / `%o` | JSON pretty-printed |
-| `%%` | Literal `%` |
+| `%%`        | Literal `%`         |
 
 ### 5. Child loggers (hierarchical naming)
 
 ```typescript
 const log = createLogger('review');
 const scannerLog = childLogger(log, 'file-scanner');
-scannerLog.info('Scanning...');   // source = "review.file-scanner"
+scannerLog.info('Scanning...'); // source = "review.file-scanner"
 ```
 
 ---
@@ -82,35 +82,35 @@ scannerLog.info('Scanning...');   // source = "review.file-scanner"
 
 ### Config file locations (merged, later takes precedence)
 
-| Priority | Location | Description |
-|---|---|---|
-| 1 (lowest) | `~/.pi/logger.json` | Global user defaults |
-| 2 | `<cwd>/.pi/logger.json` | Project-level overrides |
-| 3 (highest) | CLI flag + `/log` commands | Runtime overrides |
+| Priority    | Location                   | Description             |
+| ----------- | -------------------------- | ----------------------- |
+| 1 (lowest)  | `~/.pi/logger.json`        | Global user defaults    |
+| 2           | `<cwd>/.pi/logger.json`    | Project-level overrides |
+| 3 (highest) | CLI flag + `/log` commands | Runtime overrides       |
 
 ### Config file example
 
 ```jsonc
 {
-  "defaultLevel": "info",
-  "loggers": {
-    "review": "debug",
-    "review.file-scanner": "error",
-    "sandbox": "warn",
-    "__lifecycle__": "info"
-  },
-  "appenders": {
-    "file": {
-      "enabled": true,
-      "path": "~/.pi/logs",
-      "level": "trace"
-    },
-    "console": {
-      "enabled": false,
-      "level": "info",
-      "color": true
-    }
-  }
+	"defaultLevel": "info",
+	"loggers": {
+		"review": "debug",
+		"review.file-scanner": "error",
+		"sandbox": "warn",
+		"__lifecycle__": "info",
+	},
+	"appenders": {
+		"file": {
+			"enabled": true,
+			"path": "~/.pi/logs",
+			"level": "trace",
+		},
+		"console": {
+			"enabled": false,
+			"level": "info",
+			"color": true,
+		},
+	},
 }
 ```
 
@@ -140,8 +140,8 @@ Given logger "review.file-scanner":
 
 ### CLI flags
 
-| Flag | Description |
-|---|---|
+| Flag                  | Description                           |
+| --------------------- | ------------------------------------- |
 | `--log-level <level>` | Override default log level at startup |
 
 ---
@@ -150,16 +150,16 @@ Given logger "review.file-scanner":
 
 Even without modifying existing extensions, pi-logger automatically captures:
 
-| Event | Log Level | Example Output |
-|---|---|---|
-| Tool execution start | `trace` | `[tool] → bash  args={"command":"npm test"}` |
-| Tool execution end | `info`/`warn` | `[tool] ← bash  3450ms  ✓` |
-| Turn start/end | `trace`/`info` | `[turn] ← #3  4789ms` |
-| Messages | `trace`/`info` | `[msg] ← assistant` |
-| Agent start/end | `info` | `[agent] →` |
-| Model select | `info` | `[model] anthropic/claude-sonnet-4` |
-| Bash commands | `info` | `[bash] ! npm test` |
-| Session events | `info` | `[session] → a1b2c3  reason=startup` |
+| Event                | Log Level      | Example Output                               |
+| -------------------- | -------------- | -------------------------------------------- |
+| Tool execution start | `trace`        | `[tool] → bash  args={"command":"npm test"}` |
+| Tool execution end   | `info`/`warn`  | `[tool] ← bash  3450ms  ✓`                   |
+| Turn start/end       | `trace`/`info` | `[turn] ← #3  4789ms`                        |
+| Messages             | `trace`/`info` | `[msg] ← assistant`                          |
+| Agent start/end      | `info`         | `[agent] →`                                  |
+| Model select         | `info`         | `[model] anthropic/claude-sonnet-4`          |
+| Bash commands        | `info`         | `[bash] ! npm test`                          |
+| Session events       | `info`         | `[session] → a1b2c3  reason=startup`         |
 
 All lifecycle logs use source `__lifecycle__`, configurable independently:
 
@@ -181,11 +181,9 @@ Or add to `package.json` for zero-config loading:
 
 ```json
 {
-  "pi": {
-    "extensions": [
-      "./pi-logger"
-    ]
-  }
+	"pi": {
+		"extensions": ["./pi-logger"]
+	}
 }
 ```
 

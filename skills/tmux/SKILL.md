@@ -1,6 +1,6 @@
 ---
 name: tmux
-description: "通过发送按键和抓取面板输出来远程控制 tmux 会话，用于交互式 CLI（python、gdb 等）。"
+description: '通过发送按键和抓取面板输出来远程控制 tmux 会话，用于交互式 CLI（python、gdb 等）。'
 license: Vibecoded
 ---
 
@@ -72,9 +72,9 @@ tmux -S "$SOCKET" kill-session -t "$SESSION"                   # 清理
 ## 同步 / 等待提示符
 
 - 使用定时轮询避免与交互式工具的竞态条件。示例：发送代码前等待 Python 提示符：
-  ```bash
-  ./scripts/wait-for-text.sh -t "$SESSION":0.0 -p '^>>>' -T 15 -l 4000
-  ```
+    ```bash
+    ./scripts/wait-for-text.sh -t "$SESSION":0.0 -p '^>>>' -T 15 -l 4000
+    ```
 - 对于长时间运行的命令，轮询完成文本（`"Type quit to exit"`、`"Program exited"` 等）后再继续
 
 ## 交互式工具配方

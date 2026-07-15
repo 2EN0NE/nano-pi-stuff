@@ -10,14 +10,10 @@
  * No commit is created. The user retains full control over commit messages.
  */
 
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 
 /** File-path (absolute) → SHA-256 hex hash of file contents at session start. */
 const initialFileHashes = new Map<string, string>();
@@ -30,7 +26,7 @@ const initialFileHashes = new Map<string, string>();
 async function getFileHash(filePath: string): Promise<string | null> {
 	try {
 		const content = await readFile(filePath);
-		return createHash("sha256").update(content).digest("hex");
+		return createHash('sha256').update(content).digest('hex');
 	} catch {
 		return null;
 	}
@@ -44,18 +40,15 @@ async function getFileHash(filePath: string): Promise<string | null> {
  */
 function parseDirtyFilePaths(statusOutput: string): string[] {
 	const paths: string[] = [];
-	for (const line of statusOutput.split("\n")) {
+	for (const line of statusOutput.split('\n')) {
 		if (!line || line.length < 3) continue;
 
 		const stagingStatus = line[0];
 		const worktreeStatus = line[1];
 
 		// Rename/Copy entries have format: "R  OLD -> NEW"
-		if (
-			(stagingStatus === "R" || stagingStatus === "C") &&
-			line.includes("->")
-		) {
-			const arrowIndex = line.indexOf("->");
+		if ((stagingStatus === 'R' || stagingStatus === 'C') && line.includes('->')) {
+			const arrowIndex = line.indexOf('->');
 			const newPath = line.slice(arrowIndex + 2).trim();
 			if (newPath) paths.push(newPath);
 			continue;
@@ -67,10 +60,10 @@ function parseDirtyFilePaths(statusOutput: string): string[] {
 
 		// Skip entries where the working tree deletion marker is set
 		// (file no longer exists on disk — nothing to hash or stage)
-		if (worktreeStatus === "D") continue;
+		if (worktreeStatus === 'D') continue;
 
 		// Skip entries that are only staged deletions
-		if (stagingStatus === "D") continue;
+		if (stagingStatus === 'D') continue;
 
 		paths.push(filePath);
 	}
@@ -88,16 +81,16 @@ async function stageFiles(
 ): Promise<number> {
 	if (files.length === 0) return 0;
 
-	const { code } = await pi.exec("git", ["add", "--", ...files]);
+	const { code } = await pi.exec('git', ['add', '--', ...files]);
 
 	if (ctx.hasUI) {
 		if (code === 0) {
 			ctx.ui.notify(
 				`Auto-staged ${files.length} file(s) that changed during the session`,
-				"info",
+				'info',
 			);
 		} else {
-			ctx.ui.notify("Auto-stage: git add failed", "error");
+			ctx.ui.notify('Auto-stage: git add failed', 'error');
 		}
 	}
 
@@ -108,14 +101,12 @@ export default function (pi: ExtensionAPI) {
 	// ---------------------------------------------------------------
 	// Session start: snapshot the dirty file set and their content hashes
 	// ---------------------------------------------------------------
-	pi.on("session_start", async (_event, ctx: ExtensionContext) => {
+	pi.on('session_start', async (_event, ctx: ExtensionContext) => {
 		initialFileHashes.clear();
 
-		const { stdout: status, code } = await pi.exec(
-			"git",
-			["status", "--porcelain"],
-			{ cwd: ctx.cwd },
-		);
+		const { stdout: status, code } = await pi.exec('git', ['status', '--porcelain'], {
+			cwd: ctx.cwd,
+		});
 
 		if (code !== 0 || status.trim().length === 0) {
 			return; // Not a git repo or clean working tree
@@ -134,16 +125,14 @@ export default function (pi: ExtensionAPI) {
 	// ---------------------------------------------------------------
 	// Session shutdown: compare current state, stage changed files only
 	// ---------------------------------------------------------------
-	pi.on("session_shutdown", async (_event, ctx: ExtensionContext) => {
+	pi.on('session_shutdown', async (_event, ctx: ExtensionContext) => {
 		if (initialFileHashes.size === 0) {
 			return; // Nothing was dirty at start — nothing to compare
 		}
 
-		const { stdout: status, code } = await pi.exec(
-			"git",
-			["status", "--porcelain"],
-			{ cwd: ctx.cwd },
-		);
+		const { stdout: status, code } = await pi.exec('git', ['status', '--porcelain'], {
+			cwd: ctx.cwd,
+		});
 
 		if (code !== 0) {
 			return; // Not a git repo (shouldn't happen, but be safe)

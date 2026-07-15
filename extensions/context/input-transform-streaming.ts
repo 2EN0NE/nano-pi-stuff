@@ -11,34 +11,34 @@
  * Start pi with this extension:
  *   pi -e ./examples/extensions/input-transform-streaming.ts
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("input-transform-streaming");
+const log = createLogger('input-transform-streaming');
 
-log.debug("Extension loaded");
+log.debug('Extension loaded');
 
 const TRIGGER = /\b(changes?|diff|modified)\b/i;
 
 export default function (pi: ExtensionAPI) {
-	pi.on("input", async (event) => {
-		log.debug("event: input");
+	pi.on('input', async (event) => {
+		log.debug('event: input');
 		// During steering, skip the exec call — corrections should be fast
-		if (event.streamingBehavior === "steer") {
-			return { action: "continue" };
+		if (event.streamingBehavior === 'steer') {
+			return { action: 'continue' };
 		}
 
 		if (!TRIGGER.test(event.text)) {
-			return { action: "continue" };
+			return { action: 'continue' };
 		}
 
-		const { stdout, code } = await pi.exec("git", ["diff", "--stat"]);
+		const { stdout, code } = await pi.exec('git', ['diff', '--stat']);
 		if (code !== 0 || !stdout.trim()) {
-			return { action: "continue" };
+			return { action: 'continue' };
 		}
 
 		return {
-			action: "transform",
+			action: 'transform',
 			text: `${event.text}\n\nCurrent uncommitted changes:\n\`\`\`\n${stdout.trim()}\n\`\`\``,
 		};
 	});

@@ -45,14 +45,14 @@
  *     直接键入文字输入
  */
 
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from '@earendil-works/pi-coding-agent';
 import {
 	Key,
 	matchesKey,
 	truncateToWidth,
 	visibleWidth,
 	wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
+} from '@earendil-works/pi-tui';
 
 // ============================================================
 // 类型定义
@@ -78,7 +78,7 @@ export interface SelectOptions {
 	/** 额外详细信息（在标题和选项之间显示），支持多行文本 */
 	detail?: string;
 	/** 视觉模式: default=普通, warning=告警, danger=危险 */
-	mode?: "default" | "warning" | "danger";
+	mode?: 'default' | 'warning' | 'danger';
 }
 
 // ============================================================
@@ -120,7 +120,7 @@ export async function showSelect<T = string>(
 		let state: SelectorState = {
 			selectedIndex: 0,
 			inputMode: false,
-			inputText: "",
+			inputText: '',
 			wrapMode: false,
 		};
 
@@ -139,8 +139,7 @@ export async function showSelect<T = string>(
 			const addContent = (s: string, contIndent?: string) => {
 				if (state.wrapMode) {
 					const indentWidth = contIndent ? visibleWidth(contIndent) : 0;
-					const available =
-						indentWidth > 0 ? Math.max(10, width - indentWidth) : width;
+					const available = indentWidth > 0 ? Math.max(10, width - indentWidth) : width;
 					const wrapped = wrapTextWithAnsi(s, available);
 					if (wrapped.length > 1 && contIndent) {
 						lines.push(wrapped[0]);
@@ -157,94 +156,82 @@ export async function showSelect<T = string>(
 
 			// ---- 根据 mode 选择颜色 ----
 			const borderColor =
-				opts?.mode === "danger"
-					? "error"
-					: opts?.mode === "warning"
-						? "warning"
-						: "accent";
+				opts?.mode === 'danger' ? 'error' : opts?.mode === 'warning' ? 'warning' : 'accent';
 			const selectColor = borderColor;
 
 			// ---- 顶部分隔线 ----
-			add(theme.fg(borderColor, "─".repeat(width)));
+			add(theme.fg(borderColor, '─'.repeat(width)));
 
 			// ---- 标题 ----
-			add(theme.fg("text", theme.bold(` ${title}`)));
-			add("");
+			add(theme.fg('text', theme.bold(` ${title}`)));
+			add('');
 
 			// ---- 详细信息（detail）----
 			if (opts?.detail) {
-				const detailLines = opts.detail.split("\n");
+				const detailLines = opts.detail.split('\n');
 				const maxCollapsed = 6;
 				const isLong = detailLines.length > maxCollapsed;
 				const showLines =
-					state.wrapMode || !isLong
-						? detailLines
-						: detailLines.slice(0, maxCollapsed);
+					state.wrapMode || !isLong ? detailLines : detailLines.slice(0, maxCollapsed);
 
 				// 缩进显示
-				const detailIndent = " │ ";
+				const detailIndent = ' │ ';
 				for (const dl of showLines) {
-					addContent(theme.fg("muted", `${detailIndent}${dl}`), detailIndent);
+					addContent(theme.fg('muted', `${detailIndent}${dl}`), detailIndent);
 				}
 				if (isLong && !state.wrapMode) {
-					add(
-						theme.fg(
-							"dim",
-							`  ... (Ctrl+O 换行显示, 共 ${detailLines.length} 行)`,
-						),
-					);
+					add(theme.fg('dim', `  ... (Ctrl+O 换行显示, 共 ${detailLines.length} 行)`));
 				}
-				add("");
+				add('');
 			}
 
 			// ---- 选项列表 ----
 			for (let i = 0; i < options.length; i++) {
 				const opt = options[i];
 				const isSelected = i === state.selectedIndex;
-				const prefix = isSelected ? theme.fg(selectColor, " › ") : "   ";
-				const color = isSelected ? selectColor : "text";
-				addContent(prefix + theme.fg(color, opt.label), "   ");
+				const prefix = isSelected ? theme.fg(selectColor, ' › ') : '   ';
+				const color = isSelected ? selectColor : 'text';
+				addContent(prefix + theme.fg(color, opt.label), '   ');
 				if (opt.description) {
-					addContent(`     ${theme.fg("muted", opt.description)}`, "     ");
+					addContent(`     ${theme.fg('muted', opt.description)}`, '     ');
 				}
 			}
 
 			// ---- allowOther 选项 ----
 			if (allowOther) {
 				const isOther = state.selectedIndex === options.length;
-				const prefix = isOther ? theme.fg(selectColor, " › ") : "   ";
-				const color = isOther ? selectColor : "muted";
-				add(prefix + theme.fg(color, "✎ 自定义输入..."));
+				const prefix = isOther ? theme.fg(selectColor, ' › ') : '   ';
+				const color = isOther ? selectColor : 'muted';
+				add(prefix + theme.fg(color, '✎ 自定义输入...'));
 			}
 
 			// ---- 底部：补充输入框 或 导航提示 ----
-			add(""); // 空行分隔
+			add(''); // 空行分隔
 
 			if (state.inputMode) {
 				// === 补充输入模式：一行输入框 ===
-				const placeholder =
-					opts?.otherPlaceholder ?? " 输入额外信息给大模型...";
+				const placeholder = opts?.otherPlaceholder ?? ' 输入额外信息给大模型...';
 				const isEmpty = !state.inputText;
-				const cursor = isEmpty ? "" : " "; // 光标位置后跟空格
+				const cursor = isEmpty ? '' : ' '; // 光标位置后跟空格
 				const inputLine =
-					theme.fg("dim", " ┊ ") +
+					theme.fg('dim', ' ┊ ') +
 					(isEmpty
-						? theme.fg("dim", placeholder)
-						: theme.fg("text", state.inputText + cursor));
+						? theme.fg('dim', placeholder)
+						: theme.fg('text', state.inputText + cursor));
 				add(inputLine);
-				add("");
+				add('');
 				// 底部快捷键提示（浅色）
-				add(theme.fg("dim", " Enter 确认  ·  Esc 取消补充"));
+				add(theme.fg('dim', ' Enter 确认  ·  Esc 取消补充'));
 			} else {
 				// === 选择模式：底部快捷键提示（浅色） ===
 				const hint = state.wrapMode
-					? " ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 退出换行  ·  Tab 补充  ·  Esc 取消"
-					: " ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 换行展开  ·  Tab 补充  ·  Esc 取消";
-				add(theme.fg("dim", hint));
+					? ' ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 退出换行  ·  Tab 补充  ·  Esc 取消'
+					: ' ↑↓ 选择  ·  Enter 确认  ·  Ctrl+O 换行展开  ·  Tab 补充  ·  Esc 取消';
+				add(theme.fg('dim', hint));
 			}
 
 			// ---- 底部分隔线 ----
-			add(theme.fg(borderColor, "─".repeat(width)));
+			add(theme.fg(borderColor, '─'.repeat(width)));
 
 			return lines;
 		}
@@ -259,8 +246,7 @@ export async function showSelect<T = string>(
 				// ---- 补充输入模式 ----
 				if (matchesKey(data, Key.enter)) {
 					// 提交当前选择的选项 + 补充信息
-					const selIdx =
-						state.selectedIndex < options.length ? state.selectedIndex : -1;
+					const selIdx = state.selectedIndex < options.length ? state.selectedIndex : -1;
 					if (selIdx >= 0) {
 						const opt = options[selIdx];
 						done({
@@ -270,14 +256,14 @@ export async function showSelect<T = string>(
 						});
 					} else {
 						done({
-							value: state.inputText.trim() || ("(user wrote)" as any),
-							label: state.inputText.trim() || "(user wrote)",
+							value: state.inputText.trim() || ('(user wrote)' as any),
+							label: state.inputText.trim() || '(user wrote)',
 							supplement: state.inputText.trim() || undefined,
 						});
 					}
 				} else if (matchesKey(data, Key.escape)) {
 					// 取消补充，回到选择模式
-					state = { ...state, inputMode: false, inputText: "" };
+					state = { ...state, inputMode: false, inputText: '' };
 					tui.requestRender();
 				} else if (matchesKey(data, Key.backspace)) {
 					state = { ...state, inputText: state.inputText.slice(0, -1) };
@@ -293,7 +279,7 @@ export async function showSelect<T = string>(
 
 			// Tab → 进入补充输入模式
 			if (matchesKey(data, Key.tab)) {
-				state = { ...state, inputMode: true, inputText: "" };
+				state = { ...state, inputMode: true, inputText: '' };
 				tui.requestRender();
 				return;
 			}
@@ -318,7 +304,7 @@ export async function showSelect<T = string>(
 			}
 
 			// Ctrl+O 切换换行模式：开启后所有内容自动换行替代截断
-			if (matchesKey(data, Key.ctrl("o"))) {
+			if (matchesKey(data, Key.ctrl('o'))) {
 				state = { ...state, wrapMode: !state.wrapMode };
 				tui.requestRender();
 				return;
@@ -332,7 +318,7 @@ export async function showSelect<T = string>(
 					done({ value: opt.value, label: opt.label });
 				} else if (allowOther) {
 					// "自定义输入" 选项：进入补充输入模式
-					state = { ...state, inputMode: true, inputText: "" };
+					state = { ...state, inputMode: true, inputText: '' };
 					tui.requestRender();
 				}
 				return;
@@ -387,7 +373,7 @@ export async function showConfirm(
 	ctx: ExtensionContext,
 	title: string,
 	message: string,
-	mode?: "default" | "warning" | "danger",
+	mode?: 'default' | 'warning' | 'danger',
 ): Promise<boolean> {
 	if (!ctx.hasUI) return false;
 
@@ -395,8 +381,8 @@ export async function showConfirm(
 		ctx,
 		title,
 		[
-			{ value: false, label: "否" },
-			{ value: true, label: "是" },
+			{ value: false, label: '否' },
+			{ value: true, label: '是' },
 		],
 		{ detail: message, mode },
 	);
@@ -413,13 +399,13 @@ export async function showConfirmDestructive(
 	title: string,
 	message: string,
 ): Promise<boolean> {
-	return showConfirm(ctx, title, message, "danger");
+	return showConfirm(ctx, title, message, 'danger');
 }
 
 // ============================================================
 // Pi 扩展入口 — 仅用于注册
 // ============================================================
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 
 export default function (_pi: ExtensionAPI) {
 	// 本扩展还作为 Pi 的自动发现入口，功能通过 @zenone/pi-selector 的 import 提供

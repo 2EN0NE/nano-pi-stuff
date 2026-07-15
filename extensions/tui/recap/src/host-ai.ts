@@ -1,10 +1,10 @@
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
-import { existsSync, realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { createLogger } from "@zenone/pi-logger";
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { existsSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("pi-recap:host-ai");
+const log = createLogger('pi-recap:host-ai');
 
 type CompleteFn = (
 	model: any,
@@ -18,7 +18,7 @@ type CompleteFn = (
 ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
 
 let cached: CompleteFn | null | undefined;
-let lastDiag = "";
+let lastDiag = '';
 
 export function getDiagnostics(): string {
 	return lastDiag;
@@ -30,10 +30,7 @@ function collectCandidateDirs(): string[] {
 
 	if (process.argv[1]) seeds.push(process.argv[1]);
 	for (const p of process.argv) {
-		if (
-			typeof p === "string" &&
-			(p.includes("pi-coding-agent") || p.endsWith("/pi"))
-		) {
+		if (typeof p === 'string' && (p.includes('pi-coding-agent') || p.endsWith('/pi'))) {
 			seeds.push(p);
 		}
 	}
@@ -69,10 +66,10 @@ function findCompatEntries(): string[] {
 	const found = new Set<string>();
 
 	const fromDir = (dir: string) => {
-		const base = join(dir, "node_modules", "@earendil-works", "pi-ai", "dist");
-		const compat = join(base, "compat.js");
+		const base = join(dir, 'node_modules', '@earendil-works', 'pi-ai', 'dist');
+		const compat = join(base, 'compat.js');
 		if (existsSync(compat)) found.add(compat);
-		const index = join(base, "index.js");
+		const index = join(base, 'index.js');
 		if (existsSync(index)) found.add(index);
 	};
 
@@ -80,29 +77,28 @@ function findCompatEntries(): string[] {
 
 	try {
 		const req = createRequire(import.meta.url);
-		const pkg = req.resolve("@earendil-works/pi-ai/package.json");
-		const base = join(dirname(pkg), "dist");
-		if (existsSync(join(base, "compat.js"))) found.add(join(base, "compat.js"));
-		if (existsSync(join(base, "index.js"))) found.add(join(base, "index.js"));
+		const pkg = req.resolve('@earendil-works/pi-ai/package.json');
+		const base = join(dirname(pkg), 'dist');
+		if (existsSync(join(base, 'compat.js'))) found.add(join(base, 'compat.js'));
+		if (existsSync(join(base, 'index.js'))) found.add(join(base, 'index.js'));
 	} catch {
 		// ignore
 	}
 
 	return Array.from(found).sort((a, b) => {
 		const score = (p: string) =>
-			(p.includes("pi-coding-agent") ? -100 : 0) +
-			(p.endsWith("compat.js") ? -10 : 0);
+			(p.includes('pi-coding-agent') ? -100 : 0) + (p.endsWith('compat.js') ? -10 : 0);
 		return score(a) - score(b);
 	});
 }
 
 function tag(entry: string): string {
-	const base = entry.endsWith("compat.js") ? "compat" : "index";
-	const loc = entry.includes("pi-coding-agent")
-		? "host"
-		: entry.includes(".pi/npm")
-			? "pi-npm"
-			: "local";
+	const base = entry.endsWith('compat.js') ? 'compat' : 'index';
+	const loc = entry.includes('pi-coding-agent')
+		? 'host'
+		: entry.includes('.pi/npm')
+			? 'pi-npm'
+			: 'local';
 	return `${loc}/${base}`;
 }
 
@@ -110,14 +106,11 @@ export async function getComplete(): Promise<CompleteFn | null> {
 	if (cached !== undefined) return cached;
 
 	const entries = findCompatEntries();
-	const diag: string[] = [
-		`argv1=${process.argv[1] ?? "?"}`,
-		`entries=${entries.length}`,
-	];
+	const diag: string[] = [`argv1=${process.argv[1] ?? '?'}`, `entries=${entries.length}`];
 
-	log.debug("Discovering complete() from host pi-ai", {
+	log.debug('Discovering complete() from host pi-ai', {
 		candidates: entries.length,
-		argv1: process.argv[1] ?? "?",
+		argv1: process.argv[1] ?? '?',
 	});
 
 	let withRegistry: CompleteFn | null = null;
@@ -127,32 +120,30 @@ export async function getComplete(): Promise<CompleteFn | null> {
 		try {
 			const mod = await import(pathToFileURL(entry).href);
 			const completeFn =
-				typeof mod.complete === "function"
+				typeof mod.complete === 'function'
 					? (mod.complete as CompleteFn)
-					: typeof mod.completeSimple === "function"
+					: typeof mod.completeSimple === 'function'
 						? (mod.completeSimple as CompleteFn)
 						: null;
 			if (!completeFn) {
 				diag.push(`${tag(entry)}:no-complete`);
-				log.debug("Entry found but no complete/completeSimple", {
+				log.debug('Entry found but no complete/completeSimple', {
 					entry: tag(entry),
 				});
 				continue;
 			}
 			anyComplete ??= completeFn;
-			const getProvider = mod.getApiProvider as
-				| ((api: string) => unknown)
-				| undefined;
+			const getProvider = mod.getApiProvider as ((api: string) => unknown) | undefined;
 			let hasKiro = false;
-			if (typeof getProvider === "function") {
+			if (typeof getProvider === 'function') {
 				try {
-					hasKiro = Boolean(getProvider("kiro-api"));
+					hasKiro = Boolean(getProvider('kiro-api'));
 				} catch {
 					hasKiro = false;
 				}
 			}
-			diag.push(`${tag(entry)}:kiro=${hasKiro ? "yes" : "no"}`);
-			log.debug("Evaluated entry", {
+			diag.push(`${tag(entry)}:kiro=${hasKiro ? 'yes' : 'no'}`);
+			log.debug('Evaluated entry', {
 				entry: tag(entry),
 				hasKiro,
 				hasComplete: true,
@@ -162,25 +153,20 @@ export async function getComplete(): Promise<CompleteFn | null> {
 				break;
 			}
 		} catch (err) {
-			const msg = err instanceof Error ? err.message.slice(0, 40) : "?";
+			const msg = err instanceof Error ? err.message.slice(0, 40) : '?';
 			diag.push(`${tag(entry)}:err:${msg}`);
-			log.warn("Failed to load entry", { entry: tag(entry), error: msg });
+			log.warn('Failed to load entry', { entry: tag(entry), error: msg });
 		}
 	}
 
-	const chosen = withRegistry ? "with_registry" : anyComplete ? "any" : "none";
-	log.info("complete() resolution result", {
+	const chosen = withRegistry ? 'with_registry' : anyComplete ? 'any' : 'none';
+	log.info('complete() resolution result', {
 		chosen,
 		candidates: entries.length,
-		source:
-			chosen !== "none"
-				? withRegistry
-					? "kiro-registry"
-					: "fallback"
-				: undefined,
+		source: chosen !== 'none' ? (withRegistry ? 'kiro-registry' : 'fallback') : undefined,
 	});
 
-	lastDiag = diag.join(" | ");
+	lastDiag = diag.join(' | ');
 	cached = withRegistry ?? anyComplete;
 	return cached;
 }

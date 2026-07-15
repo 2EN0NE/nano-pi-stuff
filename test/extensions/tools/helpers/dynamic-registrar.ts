@@ -10,31 +10,27 @@
  *   test/extensions/tools/smoke.test.sh loads this via --extensions "tools,dynamic-registrar"
  */
 
-import type {
-	ExtensionAPI,
-	AgentToolResult,
-} from "@earendil-works/pi-coding-agent";
-import { createLogger } from "@zenone/pi-logger";
+import type { ExtensionAPI, AgentToolResult } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 
-const log = createLogger("dynamic-registrar");
+const log = createLogger('dynamic-registrar');
 
 export default function dynamicRegistrar(pi: ExtensionAPI) {
-	log.info("mock_search tool registered");
+	log.info('mock_search tool registered');
 
 	pi.registerTool({
-		name: "mock_search",
-		label: "Mock Search",
-		description:
-			"Fake search tool simulating ast_grep_search for testing tool blocking",
+		name: 'mock_search',
+		label: 'Mock Search',
+		description: 'Fake search tool simulating ast_grep_search for testing tool blocking',
 		parameters: {
-			type: "object",
+			type: 'object',
 			properties: {
 				pattern: {
-					type: "string",
-					description: "Search pattern",
+					type: 'string',
+					description: 'Search pattern',
 				},
 			},
-			required: ["pattern"],
+			required: ['pattern'],
 		},
 		execute: async (
 			_toolCallId: string,
@@ -43,12 +39,12 @@ export default function dynamicRegistrar(pi: ExtensionAPI) {
 			_onUpdate: unknown,
 			_ctx: unknown,
 		): Promise<AgentToolResult> => {
-			const pattern = params.pattern ?? "";
-			log.info("mock_search executed", { pattern });
+			const pattern = params.pattern ?? '';
+			log.info('mock_search executed', { pattern });
 			return {
 				content: [
 					{
-						type: "text" as const,
+						type: 'text' as const,
 						text: `mock_search result for "${pattern}"`,
 					},
 				],
