@@ -236,6 +236,8 @@ rules:
       paths:
           include:
               - '**/extensions/**/*.ts'
+          exclude:
+              - '**/extensions/meta/pi-logger/**'
 
     # --- pi-logger：导入但未实例化 ---
     - id: pi.logger-imported-but-unused
