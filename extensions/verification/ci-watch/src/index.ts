@@ -29,7 +29,12 @@ function nextPollDelay(current: number, config: PollConfig): number {
 }
 
 function runGh(args: string, cwd: string): string {
-	return execSync(`gh ${args}`, { cwd, encoding: 'utf-8', timeout: 30_000 }).trim();
+	try {
+		return execSync(`gh ${args}`, { cwd, encoding: 'utf-8', timeout: 30_000 }).trim();
+	} catch (e) {
+		const msg = e instanceof Error ? e.message : String(e);
+		throw new Error(`gh ${args} failed: ${msg}`);
+	}
 }
 
 /** Validate that a branch name contains only safe characters for shell interpolation. */
@@ -57,6 +62,9 @@ function getCiStatus(prNumber: string, cwd: string): CiCheckResult {
 function getFailedLogs(prNumber: string, cwd: string): string {
 	try {
 		const branchOutput = runGh(`pr view ${prNumber} --json headRefName -q .headRefName`, cwd);
+		if (!isValidBranch(branchOutput)) {
+			throw new Error(`Invalid branch name from PR: ${branchOutput}`);
+		}
 		const runListOutput = runGh(
 			`run list --branch ${branchOutput} --limit 5 --json databaseId,status,conclusion`,
 			cwd,
@@ -98,13 +106,30 @@ export default function (pi: ExtensionAPI) {
 		ghChecked = true;
 		try {
 			execSync('command -v gh', { encoding: 'utf-8', stdio: 'pipe' });
-		} catch {
+			autoMode = true;
 			ctx.ui.notify(
-				'⚠️ ci-watch: gh CLI not found. CI monitoring requires GitHub CLI. Install with: brew install gh / apt install gh',
+				'✅ ci-watch: 检测到 gh CLI，CI 自动监控已启用（推送后自动监控）',
+				'info',
+			);
+		} catch {
+			autoMode = false;
+			ctx.ui.notify(
+				'⚠️ ci-watch: 未检测到 gh CLI。CI 监控需要 GitHub CLI。安装方法：brew install gh / apt install gh',
 				'error',
 			);
 		}
 	});
+
+	// 从推送输出中提取分支名
+	function extractBranch(text: string): string | null {
+		const trackMatch = text.match(/branch '([^']+)' set up to track/);
+		if (trackMatch) return trackMatch[1];
+		const newBranchMatch = text.match(/\*\s+\[new branch\]\s+(\S+)\s*->\s*\S+/);
+		if (newBranchMatch) return newBranchMatch[1];
+		const existingMatch = text.match(/\S+\.\.\S+\s+(\S+)\s*->\s*\S+/);
+		if (existingMatch) return existingMatch[1];
+		return null;
+	}
 
 	pi.on('tool_result', async (event, ctx) => {
 		if (!autoMode) return;
@@ -117,30 +142,14 @@ export default function (pi: ExtensionAPI) {
 			.map((c: { type: string; text?: string }) => (c.type === 'text' ? (c.text ?? '') : ''))
 			.join('');
 
-		// Detect successful push to GitHub
+		// 检测 GitHub push 成功
 		if (!/To github\.com/.test(text)) return;
-		log.debug('GitHub push detected in bash output');
+		log.debug('bash 输出中检测到 GitHub push');
 
-		// Extract branch name from push output using multiple patterns
-		let branch: string | null = null;
+		// 使用 extractBranch 提取分支名
+		let branch: string | null = extractBranch(text);
 
-		// Pattern 1: "branch 'xxx' set up to track"
-		const trackMatch = text.match(/branch '([^']+)' set up to track/);
-		if (trackMatch) branch = trackMatch[1];
-
-		// Pattern 2: "* [new branch] xxx -> yyy"
-		if (!branch) {
-			const newBranchMatch = text.match(/\*\s+\[new branch\]\s+(\S+)\s*->\s*\S+/);
-			if (newBranchMatch) branch = newBranchMatch[1];
-		}
-
-		// Pattern 3: "abc123..def456  xxx -> yyy" (push to existing branch)
-		if (!branch) {
-			const existingMatch = text.match(/\S+\.\.\S+\s+(\S+)\s*->\s*\S+/);
-			if (existingMatch) branch = existingMatch[1];
-		}
-
-		// Fallback: get current branch directly
+		// 兜底：直接获取当前分支
 		if (!branch) {
 			try {
 				branch = execSync('git branch --show-current', {
@@ -149,19 +158,19 @@ export default function (pi: ExtensionAPI) {
 					timeout: 5000,
 				}).trim();
 			} catch (gitErr) {
-				log.debug('git branch --show-current fallback failed', { error: String(gitErr) });
+				log.debug('git branch --show-current 兜底失败', { error: String(gitErr) });
 			}
 		}
 
 		if (!branch) {
-			log.debug('Could not determine branch from push output');
+			log.debug('无法从 push 输出确定分支');
 			return;
 		}
-		log.debug('Auto-watch detected branch', { branch });
+		log.debug('自动监控检测到分支', { branch });
 
-		// Validate branch name to prevent shell injection in subsequent gh calls
+		// 验证分支名防止 shell 注入
 		if (!isValidBranch(branch)) {
-			log.warn('Branch name contains unsafe characters, skipping auto-watch', { branch });
+			log.warn('分支名包含不安全字符，跳过自动监控', { branch });
 			return;
 		}
 
@@ -171,16 +180,16 @@ export default function (pi: ExtensionAPI) {
 				ctx.cwd,
 			);
 			if (prOutput) {
-				log.debug('Found PR for branch', { branch, pr: prOutput });
+				log.debug('找到分支对应的 PR', { branch, pr: prOutput });
 
-				// Check if CI checks exist before triggering auto-watch
+				// 检查是否存在 CI 检查
 				let hasChecks = false;
 				try {
 					const checksOutput = runGh(`pr checks ${prOutput} --json name`, ctx.cwd);
 					const checks = JSON.parse(checksOutput);
 					if (Array.isArray(checks) && checks.length > 0) hasChecks = true;
 				} catch (checksErr) {
-					log.warn('Failed to check CI status, skipping auto-watch', {
+					log.warn('检查 CI 状态失败，跳过自动监控', {
 						pr: prOutput,
 						error: String(checksErr),
 					});
@@ -188,38 +197,34 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				if (!hasChecks) {
-					log.debug('No CI checks on this PR, skipping auto-watch', { pr: prOutput });
+					log.debug('该 PR 没有 CI 检查，跳过自动监控', { pr: prOutput });
 					return;
 				}
 
-				log.info('Triggering CI auto-watch', { pr: prOutput, branch });
+				log.info('触发 CI 自动监控', { pr: prOutput, branch });
 				pi.sendUserMessage(
-					`CI auto-watch triggered. Monitor the CI for PR ${prOutput}. If it fails, read the error logs, fix the code, commit, push, and retry until CI passes (max 3 attempts).`,
+					`CI 自动监控已触发。正在监控 PR ${prOutput} 的 CI 状态。如果失败，读取错误日志、修复代码、提交、推送，然后重新尝试，直到 CI 通过（最多 3 次）。`,
 					{ deliverAs: 'followUp' },
 				);
 			}
 		} catch {
-			log.debug('No PR found for branch (expected if branch has no PR yet)', { branch });
+			log.debug('未找到分支对应的 PR（分支还没有 PR 时属于正常情况）', { branch });
 		}
 	});
 
 	pi.registerCommand('ci-auto', {
-		description:
-			'Toggle automatic CI watch after every push (default: ON). Usage: /ci-auto on|off',
+		description: '切换每次推送后自动监控 CI（默认：gh 可用时开启）。用法：/ci-auto on|off',
 		handler: async (args, ctx) => {
 			const arg = args?.trim().toLowerCase();
 			if (arg === 'on') {
 				autoMode = true;
-				ctx.ui.notify(
-					'🔄 CI auto-watch: ON — Pi monitorará CI automaticamente após push',
-					'info',
-				);
+				ctx.ui.notify('🔄 CI 自动监控：已开启 — 推送后将自动监控 CI', 'info');
 			} else if (arg === 'off') {
 				autoMode = false;
-				ctx.ui.notify('⏹️ CI auto-watch: OFF', 'info');
+				ctx.ui.notify('⏹️ CI 自动监控：已关闭', 'info');
 			} else {
 				ctx.ui.notify(
-					`CI auto-watch: ${autoMode ? 'ON' : 'OFF'}. Use /ci-auto on|off`,
+					`CI 自动监控：${autoMode ? '开启' : '关闭'}。使用 /ci-auto on|off 切换`,
 					'info',
 				);
 			}
@@ -227,12 +232,11 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand('ci-config', {
-		description:
-			'Configure CI watch poll intervals. Usage: /ci-config <min> <max> <step> (in seconds)',
+		description: '配置 CI 轮询间隔（秒）。用法：/ci-config <最小值> <最大值> <步长>',
 		handler: async (args, ctx) => {
 			if (!args?.trim()) {
 				ctx.ui.notify(
-					`Current: min=${pollConfig.minMs / 1000}s, max=${pollConfig.maxMs / 1000}s, step=${pollConfig.stepMs / 1000}s`,
+					`当前配置：最小=${pollConfig.minMs / 1000}s，最大=${pollConfig.maxMs / 1000}s，步长=${pollConfig.stepMs / 1000}s`,
 					'info',
 				);
 				return;
@@ -240,7 +244,7 @@ export default function (pi: ExtensionAPI) {
 			const parts = args.trim().split(/\s+/).map(Number);
 			if (parts.length < 3 || parts.some(isNaN)) {
 				ctx.ui.notify(
-					'Usage: /ci-config <min> <max> <step> (in seconds). Ex: /ci-config 20 90 10',
+					'用法：/ci-config <最小值> <最大值> <步长>（秒）。示例：/ci-config 20 90 10',
 					'error',
 				);
 				return;
@@ -250,24 +254,24 @@ export default function (pi: ExtensionAPI) {
 				maxMs: parts[1] * 1000,
 				stepMs: parts[2] * 1000,
 			};
-			ctx.ui.notify(`✅ CI poll: ${parts[0]}s → ${parts[1]}s (step ${parts[2]}s)`, 'info');
+			ctx.ui.notify(`✅ CI 轮询：${parts[0]}s → ${parts[1]}s（步长 ${parts[2]}s）`, 'info');
 		},
 	});
 	pi.registerTool({
 		name: 'ci_watch',
-		label: 'CI Watch',
+		label: 'CI 监控',
 		description:
-			'Monitor CI status for a GitHub PR. Waits for CI to complete, reports the result. If CI fails, returns the failed logs so you can fix the code and push again. Use this after opening a PR to ensure CI passes.',
-		promptSnippet: 'Monitor PR CI status, wait for completion, return failed logs if any',
+			'监控 GitHub PR 的 CI 状态，等待完成并报告结果。如果 CI 失败，返回失败日志供修复后重新推送。在打开 PR 后使用此工具确保 CI 通过。',
+		promptSnippet: '监控 PR 的 CI 状态，等待完成，如有失败则返回日志',
 		promptGuidelines: [
-			'Use ci_watch after pushing a branch or opening a PR when the user asks to monitor CI.',
-			'After ci_watch reports a failure, read the logs, fix the issue, commit, push, then call ci_watch again (max 3 attempts).',
-			'Do not call ci_watch proactively — only when the user explicitly asks to watch/monitor CI.',
+			'当用户要求监控 CI 时，在推送分支或打开 PR 后使用 ci_watch。',
+			'ci_watch 报告失败后，读取日志、修复问题、提交、推送，然后重新调用 ci_watch（最多 3 次尝试）。',
+			'不要主动调用 ci_watch —— 仅当用户明确要求监控 CI 时使用。',
 		],
 		parameters: Type.Object({
-			pr: Type.String({ description: 'PR number or branch name to monitor' }),
+			pr: Type.String({ description: '要监控的 PR 编号或分支名' }),
 			attempt: Type.Optional(
-				Type.Number({ description: 'Current fix attempt (1-3). Omit for first check.' }),
+				Type.Number({ description: '当前修复尝试次数（1-3）。首次检查省略此参数。' }),
 			),
 		}),
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -279,7 +283,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: 'text',
-							text: `❌ CI still failing after ${MAX_ATTEMPTS} fix attempts. Manual intervention needed.`,
+							text: `❌ CI 在经过 ${MAX_ATTEMPTS} 次修复后仍然失败。需要手动干预。`,
 						},
 					],
 					details: { status: 'max_attempts_reached', pr, attempts: MAX_ATTEMPTS },
@@ -290,7 +294,7 @@ export default function (pi: ExtensionAPI) {
 				content: [
 					{
 						type: 'text',
-						text: `⏳ Watching CI for PR ${pr} (attempt ${attempt}/${MAX_ATTEMPTS})...`,
+						text: `⏳ 正在监控 PR ${pr} 的 CI（第 ${attempt}/${MAX_ATTEMPTS} 次尝试）...`,
 					},
 				],
 				details: {},
@@ -305,14 +309,14 @@ export default function (pi: ExtensionAPI) {
 
 				if (result.status === 'error') {
 					return {
-						content: [{ type: 'text', text: `Error checking CI: ${result.logs}` }],
+						content: [{ type: 'text', text: `检查 CI 出错：${result.logs}` }],
 						details: { status: 'error', pr },
 					};
 				}
 
 				if (result.status === 'pass') {
 					return {
-						content: [{ type: 'text', text: `✅ CI passed for PR ${pr}!` }],
+						content: [{ type: 'text', text: `✅ PR ${pr} 的 CI 已通过！` }],
 						details: { status: 'pass', pr, attempt },
 					};
 				}
@@ -323,7 +327,7 @@ export default function (pi: ExtensionAPI) {
 						content: [
 							{
 								type: 'text',
-								text: `❌ CI failed for PR ${pr} (attempt ${attempt}/${MAX_ATTEMPTS}).\n\nFailed checks: ${result.failedRuns.join(', ')}\n\n--- Failed logs (last 100 lines) ---\n${logs}\n\n---\nFix the issues, commit, push, then call ci_watch again with attempt=${attempt + 1}.`,
+								text: `❌ PR ${pr} 的 CI 失败（第 ${attempt}/${MAX_ATTEMPTS} 次尝试）。\n\n失败的检查：${result.failedRuns.join('、')}\n\n--- 失败日志（最后 100 行） ---\n${logs}\n\n---\n修复问题后提交、推送，然后以 attempt=${attempt + 1} 重新调用 ci_watch。`,
 							},
 						],
 						details: { status: 'fail', pr, attempt, failedChecks: result.failedRuns },
@@ -335,7 +339,7 @@ export default function (pi: ExtensionAPI) {
 						content: [
 							{
 								type: 'text',
-								text: `⏰ CI still pending after 10 minutes for PR ${pr}. Check manually.`,
+								text: `⏰ PR ${pr} 的 CI 已等待 10 分钟仍未完成。请手动检查。`,
 							},
 						],
 						details: { status: 'timeout', pr },
@@ -349,7 +353,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: 'text',
-							text: `⏳ CI still running for PR ${pr}... (${Math.round(elapsed / 1000)}s elapsed, next check in ${currentDelay / 1000}s)`,
+							text: `⏳ PR ${pr} 的 CI 仍在运行...（已过 ${Math.round(elapsed / 1000)} 秒，下次检查 ${currentDelay / 1000} 秒后）`,
 						},
 					],
 					details: {},
@@ -357,7 +361,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			return {
-				content: [{ type: 'text', text: 'CI watch cancelled.' }],
+				content: [{ type: 'text', text: 'CI 监控已取消。' }],
 				details: { status: 'cancelled', pr },
 			};
 		},
@@ -365,22 +369,22 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerTool({
 		name: 'ci_notify',
-		label: 'CI Notify',
+		label: 'CI 通知',
 		description:
-			'Monitor CI status for a GitHub PR and notify when complete. Does NOT auto-fix — just watches and reports the final status. Use when you want to be notified when CI finishes.',
-		promptSnippet: 'Watch PR CI and notify when done (no auto-fix)',
+			'监控 GitHub PR 的 CI 状态并在完成时通知。不自动修复 —— 只监控并报告最终状态。当你希望在 CI 完成时得到通知时使用。',
+		promptSnippet: '监控 PR 的 CI，完成后通知（不自动修复）',
 		promptGuidelines: [
-			'Use ci_notify when the user wants to know when CI finishes but does NOT want auto-fix.',
-			'Use ci_watch instead when the user wants auto-fix on failure.',
+			'用户想知道 CI 何时完成但不希望自动修复时，使用 ci_notify。',
+			'用户希望在失败时自动修复时，使用 ci_watch 代替。',
 		],
 		parameters: Type.Object({
-			pr: Type.String({ description: 'PR number or branch name to monitor' }),
+			pr: Type.String({ description: '要监控的 PR 编号或分支名' }),
 		}),
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const { pr } = params;
 
 			onUpdate?.({
-				content: [{ type: 'text', text: `👀 Watching CI for PR ${pr}...` }],
+				content: [{ type: 'text', text: `👀 正在监控 PR ${pr} 的 CI...` }],
 				details: {},
 			});
 
@@ -393,27 +397,27 @@ export default function (pi: ExtensionAPI) {
 
 				if (result.status === 'error') {
 					return {
-						content: [{ type: 'text', text: `Error checking CI: ${result.logs}` }],
+						content: [{ type: 'text', text: `检查 CI 出错：${result.logs}` }],
 						details: { status: 'error', pr },
 					};
 				}
 
 				if (result.status === 'pass') {
-					ctx.ui.notify(`✅ CI passed for PR ${pr}!`, 'info');
+					ctx.ui.notify(`✅ PR ${pr} 的 CI 已通过！`, 'info');
 					return {
-						content: [{ type: 'text', text: `✅ CI passed for PR ${pr}!` }],
+						content: [{ type: 'text', text: `✅ PR ${pr} 的 CI 已通过！` }],
 						details: { status: 'pass', pr },
 					};
 				}
 
 				if (result.status === 'fail') {
 					const logs = getFailedLogs(pr, ctx.cwd);
-					ctx.ui.notify(`❌ CI failed for PR ${pr}`, 'error');
+					ctx.ui.notify(`❌ PR ${pr} 的 CI 失败`, 'error');
 					return {
 						content: [
 							{
 								type: 'text',
-								text: `❌ CI failed for PR ${pr}.\n\nFailed checks: ${result.failedRuns.join(', ')}\n\n--- Failed logs (last 100 lines) ---\n${logs}`,
+								text: `❌ PR ${pr} 的 CI 失败。\n\n失败的检查：${result.failedRuns.join('、')}\n\n--- 失败日志（最后 100 行） ---\n${logs}`,
 							},
 						],
 						details: { status: 'fail', pr, failedChecks: result.failedRuns },
@@ -425,7 +429,7 @@ export default function (pi: ExtensionAPI) {
 						content: [
 							{
 								type: 'text',
-								text: `⏰ CI still pending after 15 minutes for PR ${pr}. Check manually.`,
+								text: `⏰ PR ${pr} 的 CI 已等待 15 分钟仍未完成。请手动检查。`,
 							},
 						],
 						details: { status: 'timeout', pr },
@@ -439,7 +443,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: 'text',
-							text: `👀 CI still running for PR ${pr}... (${Math.round(elapsed / 1000)}s elapsed, next check in ${currentDelay / 1000}s)`,
+							text: `👀 PR ${pr} 的 CI 仍在运行...（已过 ${Math.round(elapsed / 1000)} 秒，下次检查 ${currentDelay / 1000} 秒后）`,
 						},
 					],
 					details: {},
@@ -447,36 +451,35 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			return {
-				content: [{ type: 'text', text: 'CI watch cancelled.' }],
+				content: [{ type: 'text', text: 'CI 监控已取消。' }],
 				details: { status: 'cancelled', pr },
 			};
 		},
 	});
 
 	pi.registerCommand('ci-watch', {
-		description: 'Monitor CI for a PR and auto-fix failures. Usage: /ci-watch <pr-number>',
+		description: '监控 PR 的 CI 并自动修复失败。用法：/ci-watch <pr编号>',
 		handler: async (args, ctx) => {
 			if (!args?.trim()) {
-				ctx.ui.notify('Usage: /ci-watch <pr-number>', 'error');
+				ctx.ui.notify('用法：/ci-watch <pr编号>', 'error');
 				return;
 			}
 			pi.sendUserMessage(
-				`Monitor the CI for PR ${args.trim()}. If it fails, read the error logs, fix the code, commit, push, and retry until CI passes (max 3 attempts).`,
+				`正在监控 PR ${args.trim()} 的 CI 状态。如果失败，读取错误日志、修复代码、提交、推送，然后重新尝试，直到 CI 通过（最多 3 次）。`,
 				{ deliverAs: 'followUp' },
 			);
 		},
 	});
 
 	pi.registerCommand('ci-notify', {
-		description:
-			'Watch CI for a PR and notify when done (no auto-fix). Usage: /ci-notify <pr-number>',
+		description: '监控 PR 的 CI，完成后通知（不自动修复）。用法：/ci-notify <pr编号>',
 		handler: async (args, ctx) => {
 			if (!args?.trim()) {
-				ctx.ui.notify('Usage: /ci-notify <pr-number>', 'error');
+				ctx.ui.notify('用法：/ci-notify <pr编号>', 'error');
 				return;
 			}
 			pi.sendUserMessage(
-				`Watch the CI for PR ${args.trim()} and notify me when it completes. Do not auto-fix anything.`,
+				`请监控 PR ${args.trim()} 的 CI，完成后通知我。不要自动修复任何东西。`,
 				{ deliverAs: 'followUp' },
 			);
 		},
