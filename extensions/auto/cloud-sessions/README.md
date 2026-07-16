@@ -64,6 +64,27 @@ pi 将会话存储为 `<agent-dir>/sessions/--<project-path>--/<timestamp>_<uuid
 
 **注意——会话必须共享相同的 `cwd`。** 会话按工作目录存储（`--<project-path>--`）。要让会话出现在机器 B 的 `/resume` 中，B 必须与 A 处于相同的绝对项目路径。如果不同机器上的用户名/主目录路径不同，则路径不会匹配。
 
+**跨目录匹配（新）** 如果两台机器的绝对路径无法一致，可以通过 `projectMatch` 配置来自动匹配。配置文件独立存放在：
+
+```
+~/.pi/agent/extensions-data/cloud-sessions/project-match.json
+```
+
+该功能支持两种匹配策略（可同时启用）：
+
+- **后缀匹配**（`suffixSegments`）：通过对比目录名的最后 N 个路径段来判断是否属于同一项目。例如路径分别为 `/Users/alice/Projects/my-app` 和 `/home/bob/Projects/my-app`，设置 `suffixSegments: 2` 时，最后两段 `Projects/my-app` 匹配，会话会自动合并。
+- **Git Remote 匹配**（`gitRemote`）：通过项目的 git remote 地址自动识别同一项目。在云端仓库中自动维护 `.project-map.json` 映射表，将 git 远程 URL 与不同机器上的目录名关联。配置为 `true` 即可启用。
+
+```jsonc
+// ~/.pi/agent/extensions-data/cloud-sessions/project-match.json
+{
+	"suffixSegments": 2, // 最后 2 个路径段一致即视为同一项目
+	"gitRemote": true, // 同时启用 git remote 匹配
+}
+```
+
+**注意：** 后缀匹配因 Pi 的目录编码方式（`/` 替换为 `-`），如果路径中含连字符（如 `my-project`），可能导致超额匹配。建议配合 `gitRemote` 使用或仅设置较小的段数。
+
 **注意——不支持实时双向编辑。** 同步是串行的：在一台机器上完成，在另一台机器上继续。已加载到内存中的会话在拉取到新版本时不会热重载。
 
 ## 命令
@@ -87,6 +108,8 @@ pi 将会话存储为 `<agent-dir>/sessions/--<project-path>--/<timestamp>_<uuid
 | Git 仓库      | `git.repo`       | `PI_CLOUD_SESSIONS_GIT_REPO`      | —                        |
 | Git 分支      | `git.branch`     | `PI_CLOUD_SESSIONS_GIT_BRANCH`    | `main`                   |
 | iCloud 文件夹 | `icloud.dir`     | `PI_CLOUD_SESSIONS_ICLOUD_DIR`    | iCloud Drive/pi-sessions |
+
+> 📁 `projectMatch` 配置独立存放在 `~/.pi/agent/extensions-data/cloud-sessions/project-match.json` 中，不在主配置文件中。
 
 ## 隐私
 

@@ -5,6 +5,8 @@ import {
 	configFilePath,
 	isProviderConfigured,
 	loadConfig,
+	loadProjectMatchConfig,
+	projectMatchConfigPath,
 	readRawConfigFile,
 	type CloudSessionsConfig,
 } from './config.js';
@@ -80,7 +82,8 @@ async function runSync(setStatus: Notify, notifyUser?: NotifyUser): Promise<Sync
 			}
 			setStatus(STATUS_KEY, `sessions: syncing (${config.provider})`);
 			const sync = new Sync(config);
-			const result = await sync.run();
+			const pm = await loadProjectMatchConfig();
+			const result = await sync.run(pm);
 			setStatus(STATUS_KEY, `sessions: ${config.provider} ${summarize(result)}`);
 			lastSyncFailed = false;
 			return result;
@@ -228,6 +231,7 @@ export default function cloudSessions(pi: ExtensionAPI): void {
 		description: 'Show cloud-sessions configuration and status',
 		handler: async (_args, ctx) => {
 			const config = await loadConfig();
+			const pm = await loadProjectMatchConfig();
 			const lines = [
 				`provider: ${config.provider}`,
 				`configured: ${isProviderConfigured(config) ? 'yes' : 'no'}`,
@@ -239,6 +243,9 @@ export default function cloudSessions(pi: ExtensionAPI): void {
 					? `git repo: ${config.git.repo || '(unset)'} [${config.git.branch}]`
 					: `icloud dir: ${config.icloud.dir}`,
 				`config file: ${configFilePath()}`,
+				`projectMatch.suffixSegments: ${pm.suffixSegments ?? 0}`,
+				`projectMatch.gitRemote: ${pm.gitRemote ?? false}`,
+				`projectMatch config: ${projectMatchConfigPath()}`,
 			];
 			ctx.ui.notify(lines.join('\n'), 'info');
 		},

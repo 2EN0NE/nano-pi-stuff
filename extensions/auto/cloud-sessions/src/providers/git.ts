@@ -157,6 +157,10 @@ esac
 		return join(this.clonePath, relativePath);
 	}
 
+	rootDir(): string {
+		return this.clonePath;
+	}
+
 	async stageFromLocal(relativePath: string, localAbsolutePath: string): Promise<void> {
 		await copyInto(this.clonePath, relativePath, localAbsolutePath);
 	}

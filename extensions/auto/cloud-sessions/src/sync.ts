@@ -1,9 +1,13 @@
-import { copyFile, mkdir, stat, utimes } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, stat, utimes } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { CloudSessionsConfig } from './config.js';
+import { loadProjectMatchConfig, type ProjectMatchConfig } from './config.js';
 import { createProvider, type SyncProvider } from './providers/index.js';
 import { listLocalSessions, sessionsRoot } from './sessions.js';
+import { mergeMatchingSessions, getEncodedCwd } from './project-match.js';
+import { createLogger } from '@zenone/pi-logger';
 
+const log = createLogger('pi-cloud-sessions:sync');
 const MTIME_TOLERANCE_MS = 1500;
 
 export interface SyncResult {
@@ -41,7 +45,7 @@ export class Sync {
 		return this.provider.kind;
 	}
 
-	async run(): Promise<SyncResult> {
+	async run(pm?: ProjectMatchConfig): Promise<SyncResult> {
 		await this.provider.ensureReady();
 		await this.provider.pull();
 
@@ -99,6 +103,42 @@ export class Sync {
 					await copyRemoteToLocal(this.provider.mirrorPath(path), path);
 					result.pulled.push(path);
 				}
+			}
+		}
+
+		// ── Project matching ──────────────────────────────────────────────
+		// Merge sessions from other cwd directories that match the current
+		// project (by suffix or git remote) into the current cwd's directory.
+		if (pm && (pm.suffixSegments || pm.gitRemote)) {
+			const matchResult = await mergeMatchingSessions(
+				pm,
+				this.machineId,
+				sessionsRoot(),
+				this.provider.rootDir(),
+			);
+			if (matchResult.copied > 0) {
+				// Stage newly copied sessions into the mirror so they get pushed.
+				// Only scan the current cwd's directory instead of the full tree.
+				const currentEncoded = getEncodedCwd();
+				const currentDir = join(sessionsRoot(), currentEncoded);
+				let currentFiles: string[];
+				try {
+					currentFiles = await readdir(currentDir);
+				} catch {
+					currentFiles = [];
+				}
+				for (const file of currentFiles) {
+					if (!file.endsWith('.jsonl')) continue;
+					const relativePath = `${currentEncoded}/${file}`;
+					if (!remoteByPath.has(relativePath)) {
+						await this.provider.stageFromLocal(relativePath, join(currentDir, file));
+						result.pushed.push(relativePath);
+					}
+				}
+				log.info('project-match staged %d new session(s) for push', matchResult.copied);
+			}
+			if (matchResult.mapUpdated) {
+				log.debug('project-map updated with current machine info');
 			}
 		}
 

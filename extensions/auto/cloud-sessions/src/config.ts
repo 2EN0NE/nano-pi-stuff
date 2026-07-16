@@ -1,8 +1,11 @@
 import { execSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { createLogger } from '@zenone/pi-logger';
+
+const log = createLogger('pi-cloud-sessions');
 
 export type ProviderKind = 'git' | 'icloud';
 
@@ -14,6 +17,13 @@ export interface GitProviderConfig {
 
 export interface IcloudProviderConfig {
 	dir: string;
+}
+
+export interface ProjectMatchConfig {
+	/** Match session directories by the last N dash-delimited path segments. */
+	suffixSegments?: number;
+	/** Match by git remote "origin" URL (requires git, stores a `.project-map.json` in the cloud mirror). */
+	gitRemote?: boolean;
 }
 
 export interface CloudSessionsConfig {
@@ -35,6 +45,36 @@ function expandTilde(value: string): string {
 
 const CONFIG_DIR = join(homedir(), '.config', 'pi');
 const CONFIG_FILE = join(CONFIG_DIR, 'cloud-sessions.json');
+
+/** Directory for per-extension persistent data (`~/.pi/agent/extensions-data/cloud-sessions/`). */
+function extensionsDataDir(): string {
+	const home = homedir();
+	return join(home, '.pi', 'agent', 'extensions-data', 'cloud-sessions');
+}
+
+/** Path to the project-match config file. */
+export function projectMatchConfigPath(): string {
+	return join(extensionsDataDir(), 'project-match.json');
+}
+
+/** Load project-match configuration from `extensions-data/cloud-sessions/project-match.json`. */
+export async function loadProjectMatchConfig(): Promise<ProjectMatchConfig> {
+	const path = projectMatchConfigPath();
+	try {
+		const content = await readFile(path, 'utf-8');
+		const parsed = JSON.parse(content) as ProjectMatchConfig;
+		return {
+			suffixSegments: typeof parsed.suffixSegments === 'number' ? parsed.suffixSegments : 0,
+			gitRemote: parsed.gitRemote === true,
+		};
+	} catch (err) {
+		const nodeCode = (err as NodeJS.ErrnoException).code;
+		if (nodeCode !== 'ENOENT') {
+			log.warn('failed to parse %s, using defaults: %s', path, (err as Error).message ?? err);
+		}
+		return { suffixSegments: 0, gitRemote: false };
+	}
+}
 
 function defaultIcloudDir(): string {
 	return join(homedir(), 'Library', 'Mobile Documents', 'com~apple~CloudDocs', 'pi-sessions');
@@ -75,10 +115,9 @@ async function readRawConfig(): Promise<RawConfig> {
 	try {
 		return JSON.parse(await readFile(CONFIG_FILE, 'utf-8')) as RawConfig;
 	} catch (err) {
-		console.warn(
-			'cloud-sessions: failed to parse config file at',
+		log.warn(
+			'failed to parse config file at %s, using defaults: %s',
 			CONFIG_FILE,
-			'using defaults:',
 			(err as Error).message ?? err,
 		);
 		return {};

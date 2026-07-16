@@ -28,6 +28,10 @@ export class IcloudProvider implements SyncProvider {
 		return join(this.dir, relativePath);
 	}
 
+	rootDir(): string {
+		return this.dir;
+	}
+
 	async stageFromLocal(relativePath: string, localAbsolutePath: string): Promise<void> {
 		await copyInto(this.dir, relativePath, localAbsolutePath);
 	}
