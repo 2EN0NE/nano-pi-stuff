@@ -385,138 +385,138 @@ type ReviewTarget =
 
 // Prompts (adapted from Codex)
 const STAGED_PROMPT =
-	'Review the currently staged code changes (what would be committed with `git commit`). Only use `git diff --staged` and `git diff --staged --stat` to inspect the changes. Do not include unstaged or untracked files. Provide prioritized, actionable findings.';
+	'审查当前已暂存的代码变更（即执行 `git commit` 后会提交的内容）。仅使用 `git diff --staged` 和 `git diff --staged --stat` 来检查变更。不要包含未暂存或未跟踪的文件。提供按优先级排序、可操作的发现。';
 
 const UNCOMMITTED_PROMPT =
-	'Review the current code changes (staged, unstaged, and untracked files) and provide prioritized findings.';
+	'审查当前所有代码变更（已暂存、未暂存及未跟踪的文件），并提供按优先级排序的发现。';
 
 const LOCAL_CHANGES_REVIEW_INSTRUCTIONS =
-	'Also include local working-tree changes (staged, unstaged, and untracked files) from this branch. Use `git status --porcelain`, `git diff`, `git diff --staged`, and `git ls-files --others --exclude-standard` so local fixes are part of this review cycle.';
+	'同时包括本分支中的本地工作区变更（已暂存、未暂存及未跟踪的文件）。使用 `git status --porcelain`、`git diff`、`git diff --staged` 和 `git ls-files --others --exclude-standard` 命令，以便本地修复也纳入本次审查循环。';
 
 const BASE_BRANCH_PROMPT_WITH_MERGE_BASE =
-	"Review the code changes against the base branch '{baseBranch}'. The merge base commit for this comparison is {mergeBaseSha}. Run `git diff {mergeBaseSha}` to inspect the changes relative to {baseBranch}. Provide prioritized, actionable findings.";
+	"审查基分支 '{baseBranch}' 的代码变更。本次比较的合并基提交是 {mergeBaseSha}。运行 `git diff {mergeBaseSha}` 以检查相对于 {baseBranch} 的变更。提供按优先级排序、可操作的发现。";
 
 const BASE_BRANCH_PROMPT_FALLBACK =
-	'Review the code changes against the base branch \'{branch}\'. Start by finding the merge diff between the current branch and {branch}\'s upstream e.g. (`git merge-base HEAD "$(git rev-parse --abbrev-ref "{branch}@{upstream}")"`), then run `git diff` against that SHA to see what changes we would merge into the {branch} branch. Provide prioritized, actionable findings.';
+	'审查基分支 \'{branch}\' 的代码变更。先找到当前分支与 {branch} 上游分支的合并差异（例如 `git merge-base HEAD "$(git rev-parse --abbrev-ref "{branch}@{upstream}")"`），然后针对该 SHA 运行 `git diff` 查看将合并到 {branch} 分支的变更。提供按优先级排序、可操作的发现。';
 
 const COMMIT_PROMPT_WITH_TITLE =
-	'Review the code changes introduced by commit {sha} ("{title}"). Provide prioritized, actionable findings.';
+	'审查提交 {sha}（"{title}"）引入的代码变更。提供按优先级排序、可操作的发现。';
 
 const COMMIT_PROMPT =
-	'Review the code changes introduced by commit {sha}. Provide prioritized, actionable findings.';
+	'审查提交 {sha} 引入的代码变更。提供按优先级排序、可操作的发现。';
 
 const PULL_REQUEST_PROMPT =
-	'Review pull request #{prNumber} ("{title}") against the base branch \'{baseBranch}\'. The merge base commit for this comparison is {mergeBaseSha}. Run `git diff {mergeBaseSha}` to inspect the changes that would be merged. Provide prioritized, actionable findings.';
+	'审查针对基分支 \'{baseBranch}\' 的拉取请求 #{prNumber}（"{title}"）。本次比较的合并基提交是 {mergeBaseSha}。运行 `git diff {mergeBaseSha}` 以检查将合并的变更。提供按优先级排序、可操作的发现。';
 
 const PULL_REQUEST_PROMPT_FALLBACK =
-	'Review pull request #{prNumber} ("{title}") against the base branch \'{baseBranch}\'. Start by finding the merge base between the current branch and {baseBranch} (e.g., `git merge-base HEAD {baseBranch}`), then run `git diff` against that SHA to see the changes that would be merged. Provide prioritized, actionable findings.';
+	'审查针对基分支 \'{baseBranch}\' 的拉取请求 #{prNumber}（"{title}"）。先找到当前分支与 {baseBranch} 之间的合并基（例如 `git merge-base HEAD {baseBranch}`），然后针对该 SHA 运行 `git diff` 查看将合并的变更。提供按优先级排序、可操作的发现。';
 
 const FOLDER_REVIEW_PROMPT =
-	'Review the code in the following paths: {paths}. This is a snapshot review (not a diff). Read the files directly in these paths and provide prioritized, actionable findings.';
+	'审查以下路径中的代码：{paths}。这是一个快照审查（而非差异对比），直接读取这些路径中的文件并提供按优先级排序、可操作的发现。';
 
 // The detailed review rubric (adapted from Codex's review_prompt.md)
-const REVIEW_RUBRIC = `# Review Guidelines
+const REVIEW_RUBRIC = `# 审查指南
 
-You are acting as a code reviewer for a proposed code change made by another engineer.
+你是一名代码审查者，正在审查另一位工程师提交的代码变更。
 
-Below are default guidelines for determining what to flag. These are not the final word — if you encounter more specific guidelines elsewhere (in a developer message, user message, file, or project review guidelines appended below), those override these general instructions.
+以下是判断需要标记哪些问题的默认指南。这些并非最终定论——如果你在其他地方（开发者消息、用户消息、文件或下面附加的项目审查指南中）遇到更具体的指南，则以那些指南为准，覆盖这些通用说明。
 
-## Determining what to flag
+## 判断需要标记的问题
 
-Flag issues that:
-1. Meaningfully impact the accuracy, performance, security, or maintainability of the code.
-2. Are discrete and actionable (not general issues or multiple combined issues).
-3. Don't demand rigor inconsistent with the rest of the codebase.
-4. Were introduced in the changes being reviewed (not pre-existing bugs).
-5. The author would likely fix if aware of them.
-6. Don't rely on unstated assumptions about the codebase or author's intent.
-7. Have provable impact on other parts of the code — it is not enough to speculate that a change may disrupt another part, you must identify the parts that are provably affected.
-8. Are clearly not intentional changes by the author.
-9. Be particularly careful with untrusted user input and follow the specific guidelines to review.
-10. Treat silent local error recovery (especially parsing/IO/network fallbacks) as high-signal review candidates unless there is explicit boundary-level justification.
+标记满足以下条件的问题：
+1. 对代码的准确性、性能、安全性或可维护性有实质影响。
+2. 是具体的、可操作的问题（而非笼统的问题或多个问题的混合）。
+3. 所要求的严谨程度与代码库其余部分一致。
+4. 是在本次审查的变更中引入的（而非预先存在的缺陷）。
+5. 作者如果知晓很可能愿意修复。
+6. 不依赖于对代码库或作者意图的未声明的假设。
+7. 对代码的其他部分有可证明的影响——不能仅凭推测某个变更可能破坏另一部分，你必须识别出可证明受影响的部分。
+8. 明显不是作者的蓄意变更。
+9. 对不受信任的用户输入要特别小心，遵循具体指南进行审查。
+10. 将静默的局部错误恢复（尤其是解析/IO/网络回退）视为高信号审查候选，除非有明确的边界级理由。
 
-## Untrusted User Input
+## 不受信任的用户输入
 
-1. Be careful with open redirects, they must always be checked to only go to trusted domains (?next_page=...)
-2. Always flag SQL that is not parametrized
-3. In systems with user supplied URL input, http fetches always need to be protected against access to local resources (intercept DNS resolver!)
-4. Escape, don't sanitize if you have the option (eg: HTML escaping)
+1. 注意开放重定向，必须始终检查只跳转到受信任的域名（?next_page=...）
+2. 始终标记未参数化的 SQL
+3. 在用户提供 URL 输入的系统中，HTTP 请求始终需要防止访问本地资源（拦截 DNS 解析器！）
+4. 如果有选择，使用转义而非清理（例如：HTML 转义）
 
-## Comment guidelines
+## 评论指南
 
-1. Be clear about why the issue is a problem.
-2. Communicate severity appropriately - don't exaggerate.
-3. Be brief - at most 1 paragraph.
-4. Keep code snippets under 3 lines, wrapped in inline code or code blocks.
-5. Use \`\`\`suggestion blocks ONLY for concrete replacement code (minimal lines; no commentary inside the block). Preserve the exact leading whitespace of the replaced lines.
-6. Explicitly state scenarios/environments where the issue arises.
-7. Use a matter-of-fact tone - helpful AI assistant, not accusatory.
-8. Write for quick comprehension without close reading.
-9. Avoid excessive flattery or unhelpful phrases like "Great job...".
+1. 明确说明为什么该问题是一个问题。
+2. 恰当地传达严重程度——不要夸大。
+3. 保持简洁——最多一段。
+4. 代码片段控制在 3 行以内，使用行内代码或代码块包裹。
+5. 仅在提供具体替换代码时使用 \`\`\`suggestion 块（最少行数；块内不含注释）。保持被替换行的前导空格不变。
+6. 明确指出问题出现的场景/环境。
+7. 使用实事求是、客观的语气——有帮助的 AI 助手，而非指责性的。
+8. 文字让审查者无需仔细阅读即可快速理解。
+9. 避免过度奉承或无帮助的措辞，如"做得好…"。
 
-## Review priorities
+## 审查优先级
 
-1. Surface critical non-blocking human callouts (migrations, dependency churn, auth/permissions, compatibility, destructive operations) at the end.
-2. Prefer simple, direct solutions over wrappers or abstractions without clear value.
-3. Treat back pressure handling as critical to system stability.
-4. Apply system-level thinking; flag changes that increase operational risk or on-call wakeups.
-5. Ensure that errors are always checked against codes or stable identifiers, never error messages.
+1. 在末尾呈现关键但不阻塞的人工标注项（迁移、依赖变更、认证/权限、兼容性、破坏性操作）。
+2. 偏好简单直接的方案，而非没有明确价值的封装或抽象。
+3. 将背压处理视为系统稳定性的关键。
+4. 应用系统级思维；标记增加运维风险或值班唤醒的变更。
+5. 确保错误始终依据错误码或稳定标识符进行检查，绝不依据错误消息。
 
-## Fail-fast error handling (strict)
+## 快速失败的错误处理（严格）
 
-When reviewing added or modified error handling, default to fail-fast behavior.
+审查新增或修改的错误处理时，默认采用快速失败行为。
 
-1. Evaluate every new or changed \`try/catch\`: identify what can fail and why local handling is correct at that exact layer.
-2. Prefer propagation over local recovery. If the current scope cannot fully recover while preserving correctness, rethrow (optionally with context) instead of returning fallbacks.
-3. Flag catch blocks that hide failure signals (e.g. returning \`null\`/\`[]\`/\`false\`, swallowing JSON parse failures, logging-and-continue, or “best effort” silent recovery).
-4. JSON parsing/decoding should fail loudly by default. Quiet fallback parsing is only acceptable with an explicit compatibility requirement and clear tested behavior.
-5. Boundary handlers (HTTP routes, CLI entrypoints, supervisors) may translate errors, but must not pretend success or silently degrade.
-6. If a catch exists only to satisfy lint/style without real handling, treat it as a bug.
-7. When uncertain, prefer crashing fast over silent degradation.
+1. 评估每个新增或修改的 \`try/catch\`：识别什么可能失败，以及为什么在该层进行局部处理是正确的。
+2. 优先传播而非局部恢复。如果当前作用域无法在保持正确性的前提下完全恢复，应重新抛出（可选择附加上下文），而不是返回回退值。
+3. 标记隐藏失败信号的 catch 块（例如返回 \`null\`/\`[]\`/\`false\`、吞掉 JSON 解析失败、记录日志后继续执行，或"尽力而为"的静默恢复）。
+4. JSON 解析/解码默认应大声失败。静默回退解析仅在存在明确的兼容性需求和清晰测试过的行为时才可接受。
+5. 边界处理器（HTTP 路由、CLI 入口点、监督者）可以转换错误，但绝不能假装成功或静默降级。
+6. 如果 catch 块仅为了满足 lint/风格要求而没有实际处理，将其视为缺陷。
+7. 不确定时，宁可快速崩溃也不要静默降级。
 
-## Required human callouts (non-blocking, at the very end)
+## 必需的人工标注项（非阻塞，放在最末尾）
 
-After findings/verdict, you MUST append this final section:
+在发现/结论之后，你必须附加以下最终章节：
 
-## Human Reviewer Callouts (Non-Blocking)
+## 人工审查者标注项（非阻塞）
 
-Include only applicable callouts (no yes/no lines):
+仅包含适用的标注项（不要用是/否行）：
 
-- **This change adds a database migration:** <files/details>
-- **This change introduces a new dependency:** <package(s)/details>
-- **This change changes a dependency (or the lockfile):** <files/package(s)/details>
-- **This change modifies auth/permission behavior:** <what changed and where>
-- **This change introduces backwards-incompatible public schema/API/contract changes:** <what changed and where>
-- **This change includes irreversible or destructive operations:** <operation and scope>
+- **此变更添加了数据库迁移：** <文件/详情>
+- **此变更引入了新的依赖：** <包/详情>
+- **此变更更改了依赖（或锁定文件）：** <文件/包/详情>
+- **此变更修改了认证/权限行为：** <变更内容及位置>
+- **此变更引入了不向后兼容的公共 schema/API/契约变更：** <变更内容及位置>
+- **此变更包含不可逆或破坏性操作：** <操作及范围>
 
-Rules for this section:
-1. These are informational callouts for the human reviewer, not fix items.
-2. Do not include them in Findings unless there is an independent defect.
-3. These callouts alone must not change the verdict.
-4. Only include callouts that apply to the reviewed change.
-5. Keep each emitted callout bold exactly as written.
-6. If none apply, write "- (none)".
+本节的规则：
+1. 这些是供人工审查者参考的信息性标注，不是修复项。
+2. 除非存在独立的缺陷，否则不要将它们包含在发现中。
+3. 仅凭这些标注不得改变结论。
+4. 只包含适用于本次审查变更的标注项。
+5. 保持每个标注项按原样加粗。
+6. 如果都不适用，则写"- (无)"。
 
-## Priority levels
+## 优先级级别
 
-Tag each finding with a priority level in the title:
-- [P0] - Drop everything to fix. Blocking release/operations. Only for universal issues that do not depend on assumptions about inputs.
-- [P1] - Urgent. Should be addressed in the next cycle.
-- [P2] - Normal. To be fixed eventually.
-- [P3] - Low. Nice to have.
+在标题中用优先级标签标记每个发现：
+- [P0] - 放下一切立即修复。阻塞发布/运维。仅针对不依赖于输入假设的通用问题。
+- [P1] - 紧急。应在下一个周期处理。
+- [P2] - 普通。应最终修复。
+- [P3] - 低优先级。锦上添花。
 
-## Output format
+## 输出格式
 
-Provide your findings in a clear, structured format:
-1. List each finding with its priority tag, file location, and explanation.
-2. Findings must reference locations that overlap with the actual diff — don't flag pre-existing code.
-3. Keep line references as short as possible (avoid ranges over 5-10 lines; pick the most suitable subrange).
-4. Provide an overall verdict: "correct" (no blocking issues) or "needs attention" (has blocking issues).
-5. Ignore trivial style issues unless they obscure meaning or violate documented standards.
-6. Do not generate a full PR fix — only flag issues and optionally provide short suggestion blocks.
-7. End with the required "Human Reviewer Callouts (Non-Blocking)" section and all applicable bold callouts (no yes/no).
+以清晰、结构化的格式提供你的发现：
+1. 列出每个发现及其优先级标签、文件位置和说明。
+2. 发现必须引用与实际差异重叠的位置——不要标记预先存在的代码。
+3. 保持行引用尽可能短（避免超过 5-10 行的范围；选择最合适的子范围）。
+4. 提供总体结论："correct"（无阻塞问题）或"needs attention"（存在阻塞问题）。
+5. 忽略琐碎的样式问题，除非它们模糊了含义或违反了文档化的标准。
+6. 不要生成完整的 PR 修复——仅标记问题，可选地提供简短的 suggestion 块。
+7. 以必需的"Human Reviewer Callouts (Non-Blocking)"章节和所有适用的加粗标注项结束（不用是/否）。
 
-Output all findings the author would fix if they knew about them. If there are no qualifying findings, explicitly state the code looks good. Don't stop at the first finding - list every qualifying issue. Then append the required non-blocking callouts section.`;
+输出作者如果知晓会修复的所有发现。如果没有符合条件的发现，明确说明代码看起来没问题。不要只找到第一个发现就停止——列出每一个符合条件的问题。然后附加必需的 non-blocking callouts 章节。`;
 
 async function loadProjectReviewGuidelines(cwd: string): Promise<string | null> {
 	log.debug('Searching for REVIEW_GUIDELINES.md from cwd=%s', cwd);
@@ -2095,61 +2095,61 @@ export default function reviewExtension(pi: ExtensionAPI) {
 	});
 
 	// Custom prompt for review summaries - focuses on preserving actionable findings
-	const REVIEW_SUMMARY_PROMPT = `We are leaving a code-review branch and returning to the main coding branch.
-Create a structured handoff that can be used immediately to implement fixes.
+	const REVIEW_SUMMARY_PROMPT = `我们即将离开代码审查分支，返回主编码分支。
+创建一个结构化的交接信息，用于立即实施修复。
 
-You MUST summarize the review that happened in this branch so findings can be acted on.
-Do not omit findings: include every actionable issue that was identified.
+你必须总结在此分支中进行的所有审查内容，以便能够针对发现项采取行动。
+不要遗漏任何发现：包括每一个已识别的可操作问题。
 
-Required sections (in order):
+必需的章节（按顺序）：
 
-## Review Scope
-- What was reviewed (files/paths, changes, and scope)
+## 审查范围
+- 审查了哪些内容（文件/路径、变更和范围）
 
-## Verdict
-- "correct" or "needs attention"
+## 结论
+- "correct"（正确）或"needs attention"（需要注意）
 
-## Findings
-For EACH finding, include:
-- Priority tag ([P0]..[P3]) and short title
-- File location (\`path/to/file.ext:line\`)
-- Why it matters (brief)
-- What should change (brief, actionable)
+## 发现项
+对每个发现项，包括：
+- 优先级标签 ([P0]..[P3]) 和简短标题
+- 文件位置（\`path/to/file.ext:line\`）
+- 为什么重要（简要）
+- 应该怎样修改（简要、可操作）
 
-## Fix Queue
-1. Ordered implementation checklist (highest priority first)
+## 修复队列
+1. 有序的实施检查清单（最高优先级优先）
 
-## Constraints & Preferences
-- Any constraints or preferences mentioned during review
-- Or "(none)"
+## 约束与偏好
+- 审查中提到的任何约束或偏好
+- 或"(无)"
 
-## Human Reviewer Callouts (Non-Blocking)
-Include only applicable callouts (no yes/no lines):
-- **This change adds a database migration:** <files/details>
-- **This change introduces a new dependency:** <package(s)/details>
-- **This change changes a dependency (or the lockfile):** <files/package(s)/details>
-- **This change modifies auth/permission behavior:** <what changed and where>
-- **This change introduces backwards-incompatible public schema/API/contract changes:** <what changed and where>
-- **This change includes irreversible or destructive operations:** <operation and scope>
+## 人工审查者标注项（非阻塞）
+仅包含适用的标注项（不要用是/否行）：
+- **此变更添加了数据库迁移：** <文件/详情>
+- **此变更引入了新的依赖：** <包/详情>
+- **此变更更改了依赖（或锁定文件）：** <文件/包/详情>
+- **此变更修改了认证/权限行为：** <变更内容及位置>
+- **此变更引入了不向后兼容的公共 schema/API/契约变更：** <变更内容及位置>
+- **此变更包含不可逆或破坏性操作：** <操作及范围>
 
-If none apply, write "- (none)".
+如果不适用，则写"- (无)"。
 
-These are informational callouts for humans and are not fix items by themselves.
+这些是供人工参考的信息性标注，它们本身不是修复项。
 
-Preserve exact file paths, function names, and error messages where available.`;
+尽可能保留精确的文件路径、函数名和错误消息。`;
 
-	const REVIEW_FIX_FINDINGS_PROMPT = `Use the latest review summary in this session and implement the review findings now.
+	const REVIEW_FIX_FINDINGS_PROMPT = `使用本次会话中最新的审查总结，立即实施审查发现项。
 
-Instructions:
-1. Treat the summary's Findings/Fix Queue as a checklist.
-2. Fix in priority order: P0, P1, then P2 (include P3 if quick and safe).
-3. If a finding is invalid/already fixed/not possible right now, briefly explain why and continue.
-4. Treat "Human Reviewer Callouts (Non-Blocking)" as informational only; do not convert them into fix tasks unless there is a separate explicit finding.
-5. Follow fail-fast error handling: do not add local catch/fallback recovery unless this scope is an explicit boundary that can safely translate the failure.
-6. If you add or keep a \`try/catch\`, explain the expected failure mode and either rethrow with context or return a boundary-safe error response.
-7. JSON parsing/decoding should fail loudly by default; avoid silent fallback parsing.
-8. Run relevant tests/checks for touched code where practical.
-9. End with: fixed items, deferred/skipped items (with reasons), and verification results.`;
+说明：
+1. 将总结中的发现项/修复队列视为检查清单。
+2. 按优先级顺序修复：P0、P1，然后 P2（如果快速且安全则包括 P3）。
+3. 如果某个发现项无效/已修复/当前无法处理，简要说明原因后继续。
+4. 将"Human Reviewer Callouts (Non-Blocking)"仅视为信息性内容；不要将其转换为修复任务，除非存在独立的明确发现项。
+5. 遵循快速失败的错误处理：不要添加局部 catch/回退恢复，除非当前作用域是能够安全转换错误的明确边界。
+6. 如果你添加或保留 \`try/catch\`，说明预期的失败模式，并要么带上上下文重新抛出，要么返回一个边界安全的错误响应。
+7. JSON 解析/解码默认应大声失败；避免静默回退解析。
+8. 对受影响的代码运行相关测试/检查（在可行的情况下）。
+9. 以以下内容结尾：已修复项、已推迟/跳过的项（附原因）以及验证结果。`;
 
 	type EndReviewAction = 'returnOnly' | 'returnAndFix' | 'returnAndSummarize';
 	type EndReviewActionResult = 'ok' | 'cancelled' | 'error';
