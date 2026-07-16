@@ -42,10 +42,7 @@ async function getTikTokenModule(): Promise<typeof tikTokenMod> {
  * Count tokens for a single text string using model-aware tokenizer.
  * Returns null if the tokenizer is unavailable or the model isn't supported.
  */
-export async function accurateTokenCount(
-	text: string,
-	modelId?: string,
-): Promise<number | null> {
+export async function accurateTokenCount(text: string, modelId?: string): Promise<number | null> {
 	const mod = await getTikTokenModule();
 	if (!mod || !text) return null;
 

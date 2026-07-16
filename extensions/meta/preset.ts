@@ -44,10 +44,9 @@ import type { Api, Model } from '@earendil-works/pi-ai';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { DynamicBorder, getAgentDir } from '@earendil-works/pi-coding-agent';
 import { createLogger } from '@zenone/pi-logger';
+import { Container, Key, type SelectItem, SelectList, Text } from '@earendil-works/pi-tui';
 
 const log = createLogger('preset');
-
-import { Container, Key, type SelectItem, SelectList, Text } from '@earendil-works/pi-tui';
 
 // Preset configuration
 interface Preset {
@@ -84,7 +83,7 @@ function loadPresets(cwd: string): PresetsConfig {
 			const content = readFileSync(globalPath, 'utf-8');
 			globalPresets = JSON.parse(content);
 		} catch (err) {
-			console.error(`Failed to load global presets from ${globalPath}: ${err}`);
+			log.error(`Failed to load global presets from ${globalPath}: %s`, err);
 		}
 	}
 
@@ -94,7 +93,7 @@ function loadPresets(cwd: string): PresetsConfig {
 			const content = readFileSync(projectPath, 'utf-8');
 			projectPresets = JSON.parse(content);
 		} catch (err) {
-			console.error(`Failed to load project presets from ${projectPath}: ${err}`);
+			log.error(`Failed to load project presets from ${projectPath}: %s`, err);
 		}
 	}
 

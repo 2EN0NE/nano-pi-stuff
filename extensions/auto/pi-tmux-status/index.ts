@@ -27,9 +27,12 @@
  */
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+
+const log = createLogger('pi-tmux-status');
 
 const STATE_DIR = '/tmp/pi-tmux-state';
 
@@ -91,7 +94,7 @@ function updateWindowTab(state: string): void {
 
 export default function (pi: ExtensionAPI) {
 	if (!isInTmux()) {
-		console.warn('[pi-tmux-status] 不在 tmux 中，已跳过');
+		log.warn('不在 tmux 中，已跳过');
 		return;
 	}
 

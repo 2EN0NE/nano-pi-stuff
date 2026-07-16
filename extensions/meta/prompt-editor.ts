@@ -318,7 +318,9 @@ async function showPromptPanel(
 			// Scroll indicator: more above
 			if (start > 0) {
 				const hidden = start;
-				lines.push(dim('  ↑ ' + hidden + ' more component' + (hidden > 1 ? 's' : '') + ' above'));
+				lines.push(
+					dim('  ↑ ' + hidden + ' more component' + (hidden > 1 ? 's' : '') + ' above'),
+				);
 			}
 
 			// Render visible components
@@ -336,14 +338,25 @@ async function showPromptPanel(
 				const cursor = isSelected ? '▶' : ' ';
 				const indexLabel = dim((i + 1).toString().padStart(2) + ' ');
 
-				const line = indexLabel + cursor + ' ' + icon + ' ' + statusIcon + ' ' + comp.label + editMark;
+				const line =
+					indexLabel +
+					cursor +
+					' ' +
+					icon +
+					' ' +
+					statusIcon +
+					' ' +
+					comp.label +
+					editMark;
 				lines.push(isSelected ? accent(theme.bold(line)) : line);
 			}
 
 			// Scroll indicator: more below
 			if (end < totalItems) {
 				const hidden = totalItems - end;
-				lines.push(dim('  ↓ ' + hidden + ' more component' + (hidden > 1 ? 's' : '') + ' below'));
+				lines.push(
+					dim('  ↓ ' + hidden + ' more component' + (hidden > 1 ? 's' : '') + ' below'),
+				);
 			}
 
 			lines.push('');
@@ -365,7 +378,9 @@ async function showPromptPanel(
 					const ov = overrides.components.get(k);
 					return ov ? ov.enabled : true;
 				}).length;
-				lines.push(dim('  ' + totalItems + ' components total, ' + enabledCount + ' enabled'));
+				lines.push(
+					dim('  ' + totalItems + ' components total, ' + enabledCount + ' enabled'),
+				);
 			} else {
 				lines.push(dim('─────────────────────────────────────────────'));
 				lines.push(dim(' ↑↓ move  Space toggle  e edit  p preview  q quit'));
@@ -374,7 +389,19 @@ async function showPromptPanel(
 					const ov = overrides.components.get(k);
 					return ov ? ov.enabled : true;
 				}).length;
-				lines.push(dim(' ' + enabledCount + '/' + totalItems + ' enabled (scroll ' + (start + 1) + '-' + end + ')'));
+				lines.push(
+					dim(
+						' ' +
+							enabledCount +
+							'/' +
+							totalItems +
+							' enabled (scroll ' +
+							(start + 1) +
+							'-' +
+							end +
+							')',
+					),
+				);
 			}
 
 			return lines;
@@ -400,7 +427,11 @@ async function showPromptPanel(
 
 			if (existing) {
 				existing.enabled = !existing.enabled;
-				log.info('Toggled component', { type: comp.type, source: comp.source, enabled: existing.enabled });
+				log.info('Toggled component', {
+					type: comp.type,
+					source: comp.source,
+					enabled: existing.enabled,
+				});
 			} else {
 				overrides.components.set(key, { enabled: false });
 				log.info('Disabled component', { type: comp.type, source: comp.source });
@@ -416,7 +447,11 @@ async function showPromptPanel(
 			const existing = overrides.components.get(key);
 			const currentContent = existing?.content ?? comp.content;
 
-			log.debug('Opening editor for component', { type: comp.type, source: comp.source, contentLength: currentContent.length });
+			log.debug('Opening editor for component', {
+				type: comp.type,
+				source: comp.source,
+				contentLength: currentContent.length,
+			});
 			const newContent = await ctx.ui.editor(`Edit: ${comp.label}`, currentContent);
 			if (newContent === undefined) {
 				log.debug('Component edit cancelled', { type: comp.type, source: comp.source });
@@ -428,7 +463,11 @@ async function showPromptPanel(
 			} else {
 				overrides.components.set(key, { enabled: true, content: newContent });
 			}
-			log.info('Component edited', { type: comp.type, source: comp.source, newLength: newContent.length });
+			log.info('Component edited', {
+				type: comp.type,
+				source: comp.source,
+				newLength: newContent.length,
+			});
 			updatePromptEffect();
 			tui.requestRender();
 		}
@@ -436,7 +475,7 @@ async function showPromptPanel(
 		const component = {
 			name: 'prompt-editor-panel',
 			render(width: number): string[] {
-				return getComponentLines().map(line => truncateToWidth(line, width));
+				return getComponentLines().map((line) => truncateToWidth(line, width));
 			},
 			invalidate() {
 				state.needsRedraw = true;

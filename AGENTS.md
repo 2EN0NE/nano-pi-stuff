@@ -48,12 +48,12 @@ pi -a --no-session -e ./extensions/foo.ts -p "test prompt"
 
 **和普通测试的区别：**
 
-| 维度 | 普通测试 (smoke.test.sh) | TUI 测试 (tui.smoke.test.sh) |
-|------|-------------------------|------------------------------|
-| Pi 模式 | `pi -a --no-session` (print) | `pi -a` (TUI 交互) |
-| 测试手段 | 发送 prompt，检查 stdout | 通过 PTY 发送按键，捕获屏幕输出 |
-| 验证方式 | exit code + 日志 grep | ANSI 输出剥离后文本匹配 |
-| 适用场景 | 加载、工具调用、日志 | 覆盖层渲染、键盘交互、快捷键 |
+| 维度     | 普通测试 (smoke.test.sh)     | TUI 测试 (tui.smoke.test.sh)    |
+| -------- | ---------------------------- | ------------------------------- |
+| Pi 模式  | `pi -a --no-session` (print) | `pi -a` (TUI 交互)              |
+| 测试手段 | 发送 prompt，检查 stdout     | 通过 PTY 发送按键，捕获屏幕输出 |
+| 验证方式 | exit code + 日志 grep        | ANSI 输出剥离后文本匹配         |
+| 适用场景 | 加载、工具调用、日志         | 覆盖层渲染、键盘交互、快捷键    |
 
 **快速参考：**
 
@@ -69,14 +69,15 @@ bash test/scripts/run-e2e.sh --ext quit    # 同时跑 smoke + tui
 
 **核心 API（定义在 `test/helpers/tui-functions.sh`）：**
 
-| 函数 | 用途 |
-|------|------|
+| 函数                                       | 用途                                 |
+| ------------------------------------------ | ------------------------------------ |
 | `tui_run_pi_test <exts> <input> <timeout>` | 在 PTY 中启动 TUI 模式 pi 并发送输入 |
-| `tui_assert_contains <text>` | 断言 TUI 输出包含文本 |
-| `tui_assert_matches <regex>` | 断言 TUI 输出匹配正则 |
-| `tui_cleanup` | 清理临时文件 |
+| `tui_assert_contains <text>`               | 断言 TUI 输出包含文本                |
+| `tui_assert_matches <regex>`               | 断言 TUI 输出匹配正则                |
+| `tui_cleanup`                              | 清理临时文件                         |
 
 **注意事项：**
+
 - TUI 测试在隔离沙箱中运行，会自动创建 `node_modules/@zenone/pi-logger` 链接
 - **避免触发 LLM 调用**（不要发 `hi`/`hello`），直接发 `/command` 即可
 - `session_shutdown` 中的输出可能因 PTY 关闭而丢失

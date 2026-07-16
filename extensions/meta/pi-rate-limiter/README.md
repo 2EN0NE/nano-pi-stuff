@@ -38,25 +38,25 @@ pi 启动时会自动发现 `~/.pi/agent/extensions/rate-limiter/` 目录下的 
 
 ### 配置项
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `maxRequestsPerMinute` | number | 10 | 每分钟最大请求数（0 表示不限） |
-| `maxTokensPerMinute` | number | 256000 | 每分钟最大输入 Token 数（0 表示不限） |
-| `autoResumeOn432` | boolean | true | 遇到 432 是否自动继续 |
-| `tokenEstimateRatio` | number | 4 | Token 估算分母（字符数 ÷ 该值） |
-| `throttleThresholdPercent` | number | 80 | 达到上限百分之多少时开始主动限流 |
-| `adaptiveRateLimit` | string | `'both'` | 自适应限流算法：`off` / `bayesian` / `ucb` / `both` |
+| 配置项                     | 类型    | 默认值   | 说明                                                |
+| -------------------------- | ------- | -------- | --------------------------------------------------- |
+| `maxRequestsPerMinute`     | number  | 10       | 每分钟最大请求数（0 表示不限）                      |
+| `maxTokensPerMinute`       | number  | 256000   | 每分钟最大输入 Token 数（0 表示不限）               |
+| `autoResumeOn432`          | boolean | true     | 遇到 432 是否自动继续                               |
+| `tokenEstimateRatio`       | number  | 4        | Token 估算分母（字符数 ÷ 该值）                     |
+| `throttleThresholdPercent` | number  | 80       | 达到上限百分之多少时开始主动限流                    |
+| `adaptiveRateLimit`        | string  | `'both'` | 自适应限流算法：`off` / `bayesian` / `ucb` / `both` |
 
 ### 自适应限流算法对比
 
 `adaptiveRateLimit` 支持四种模式：
 
-| 模式 | 说明 | 方向 | 上限 | 成本 |
-|------|------|------|------|------|
-| `off` | 关闭自适应，仅使用固定阈值 | — | 用户配置值 | 无 |
-| `bayesian` | Gamma-Poisson 贝叶斯模型 | **向下调整**——找到安全下限 | 硬封顶 2× 配置值 | 无额外成本（被动观察） |
-| `ucb` | UCB + AIMD 上限探索 | **向上探索**——发现真实上限 | **无封顶**，API 说多少就是多少 | 偶发 432（探索的代价） |
-| `both` | 两者同时启用（**推荐**） | 贝叶斯保下限 + UCB 探上限 | 协同工作 | 综合 |
+| 模式       | 说明                       | 方向                       | 上限                           | 成本                   |
+| ---------- | -------------------------- | -------------------------- | ------------------------------ | ---------------------- |
+| `off`      | 关闭自适应，仅使用固定阈值 | —                          | 用户配置值                     | 无                     |
+| `bayesian` | Gamma-Poisson 贝叶斯模型   | **向下调整**——找到安全下限 | 硬封顶 2× 配置值               | 无额外成本（被动观察） |
+| `ucb`      | UCB + AIMD 上限探索        | **向上探索**——发现真实上限 | **无封顶**，API 说多少就是多少 | 偶发 432（探索的代价） |
+| `both`     | 两者同时启用（**推荐**）   | 贝叶斯保下限 + UCB 探上限  | 协同工作                       | 综合                   |
 
 **贝叶斯（防御型）：** 当出现 432 时自动降低有效限流值，避免频繁踩线。适合配置值偏高、需要保守控制的场景。
 

@@ -191,8 +191,10 @@ export function loadYamlConfig(cwd: string, extensionDir: string): Partial<RateL
 					picked.staleProcessTimeoutMs = Number(parsed.staleProcessTimeoutMs);
 				if ('adaptiveRateLimit' in parsed) {
 					const raw = parsed.adaptiveRateLimit;
-					if (raw === true || raw === 'true' || raw === 'both') picked.adaptiveRateLimit = 'both';
-					else if (raw === false || raw === 'off' || raw === 'false') picked.adaptiveRateLimit = 'off';
+					if (raw === true || raw === 'true' || raw === 'both')
+						picked.adaptiveRateLimit = 'both';
+					else if (raw === false || raw === 'off' || raw === 'false')
+						picked.adaptiveRateLimit = 'off';
 					else if (raw === 'bayesian') picked.adaptiveRateLimit = 'bayesian';
 					else if (raw === 'ucb') picked.adaptiveRateLimit = 'ucb';
 				}

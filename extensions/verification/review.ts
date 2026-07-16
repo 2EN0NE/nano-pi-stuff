@@ -402,8 +402,7 @@ const BASE_BRANCH_PROMPT_FALLBACK =
 const COMMIT_PROMPT_WITH_TITLE =
 	'审查提交 {sha}（"{title}"）引入的代码变更。提供按优先级排序、可操作的发现。';
 
-const COMMIT_PROMPT =
-	'审查提交 {sha} 引入的代码变更。提供按优先级排序、可操作的发现。';
+const COMMIT_PROMPT = '审查提交 {sha} 引入的代码变更。提供按优先级排序、可操作的发现。';
 
 const PULL_REQUEST_PROMPT =
 	'审查针对基分支 \'{baseBranch}\' 的拉取请求 #{prNumber}（"{title}"）。本次比较的合并基提交是 {mergeBaseSha}。运行 `git diff {mergeBaseSha}` 以检查将合并的变更。提供按优先级排序、可操作的发现。';

@@ -97,9 +97,11 @@ export default function rateLimiterExtension(pi: ExtensionAPI) {
 	const extensionDir = getExtensionDir();
 
 	// Helper: is UCB mode active? (ucb or both)
-	const isUcbMode = () => config.adaptiveRateLimit === 'ucb' || config.adaptiveRateLimit === 'both';
+	const isUcbMode = () =>
+		config.adaptiveRateLimit === 'ucb' || config.adaptiveRateLimit === 'both';
 	// Helper: is Bayesian mode active? (bayesian or both)
-	const isBayesianMode = () => config.adaptiveRateLimit === 'bayesian' || config.adaptiveRateLimit === 'both';
+	const isBayesianMode = () =>
+		config.adaptiveRateLimit === 'bayesian' || config.adaptiveRateLimit === 'both';
 	// Helper: is adaptive mode on at all?
 	const isAdaptiveOn = () => config.adaptiveRateLimit !== 'off';
 
@@ -520,10 +522,10 @@ export default function rateLimiterExtension(pi: ExtensionAPI) {
 						both: '两者',
 					};
 					const MODE_MAP: Record<string, AdaptiveMode> = {
-						'关闭': 'off',
-						'贝叶斯': 'bayesian',
-						'UCB': 'ucb',
-						'两者': 'both',
+						关闭: 'off',
+						贝叶斯: 'bayesian',
+						UCB: 'ucb',
+						两者: 'both',
 					};
 
 					function buildItems(): SettingItem[] {
@@ -655,7 +657,10 @@ export default function rateLimiterExtension(pi: ExtensionAPI) {
 										.then((pattern) => {
 											if (!pattern) return;
 											ctx.ui
-												.input('每分钟最大请求数', String(config.maxRequestsPerMinute))
+												.input(
+													'每分钟最大请求数',
+													String(config.maxRequestsPerMinute),
+												)
 												.then((rpmStr) => {
 													if (!rpmStr) return;
 													const rpm = Number(rpmStr);
@@ -664,7 +669,10 @@ export default function rateLimiterExtension(pi: ExtensionAPI) {
 														return;
 													}
 													ctx.ui
-														.input('每分钟最大输入 Token', String(config.maxTokensPerMinute))
+														.input(
+															'每分钟最大输入 Token',
+															String(config.maxTokensPerMinute),
+														)
 														.then((tpmStr) => {
 															if (!tpmStr) return;
 															const tpm = Number(tpmStr);

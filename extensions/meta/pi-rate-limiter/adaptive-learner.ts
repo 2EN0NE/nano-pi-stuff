@@ -166,7 +166,12 @@ export class AdaptiveLearner {
 		return Math.random() < belief.epsilon;
 	}
 
-	getEffectiveLimit(modelId: string, configuredLimit: number, currentWindowUsage = 0, maxTok = 0): number {
+	getEffectiveLimit(
+		modelId: string,
+		configuredLimit: number,
+		currentWindowUsage = 0,
+		maxTok = 0,
+	): number {
 		const belief = this.getOrCreateBelief(modelId, configuredLimit);
 		// Posterior mean = shape / rate
 		const posteriorMean = belief.shape / Math.max(1e-9, belief.rate);

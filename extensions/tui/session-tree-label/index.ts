@@ -105,7 +105,10 @@ function safeAppendLabelChange(ctx: ExtensionContext, targetId: string, label: s
 				'this pi version may not support label entries',
 		);
 	}
-	(sm.appendLabelChange as (targetId: string, label: string | undefined) => string)(targetId, label);
+	(sm.appendLabelChange as (targetId: string, label: string | undefined) => string)(
+		targetId,
+		label,
+	);
 }
 
 // ── 应用标签 ──────────────────────────────────────────────────────────────

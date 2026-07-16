@@ -1,6 +1,3 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
 npm run lint:staged
 npm run semgrep:ci
 npm run format:check

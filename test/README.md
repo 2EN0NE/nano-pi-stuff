@@ -131,13 +131,13 @@ Agent 需要逐条查看 case log 并衡量是否符合预期。
 
 ### 适用场景
 
-| 场景 | 说明 | 示例 |
-|------|------|------|
-| 扩展在 TUI 模式下加载 | 验证扩展在 TUI 中无报错加载 | quit, btw, answer |
-| 命令面板交互 | 通过 `/command` 在 TUI 中发命令 | `/quit` 退出 |
-| 覆盖层渲染 | 验证 `ctx.ui.custom()` 生成的内容 | 选择器、输入框 |
-| 键盘输入响应 | Tab 导航、方向键、快捷键 | `ctrl+.` 快捷键 |
-| 日志输出验证 | 验证 pi-logger 在 TUI 模式下的工作 | |
+| 场景                  | 说明                               | 示例              |
+| --------------------- | ---------------------------------- | ----------------- |
+| 扩展在 TUI 模式下加载 | 验证扩展在 TUI 中无报错加载        | quit, btw, answer |
+| 命令面板交互          | 通过 `/command` 在 TUI 中发命令    | `/quit` 退出      |
+| 覆盖层渲染            | 验证 `ctx.ui.custom()` 生成的内容  | 选择器、输入框    |
+| 键盘输入响应          | Tab 导航、方向键、快捷键           | `ctrl+.` 快捷键   |
+| 日志输出验证          | 验证 pi-logger 在 TUI 模式下的工作 |                   |
 
 ### 测试文件命名
 
@@ -155,13 +155,13 @@ test/extensions/<name>/
 
 #### 核心函数
 
-| 函数 | 用途 |
-|------|------|
+| 函数                                       | 用途                                          |
+| ------------------------------------------ | --------------------------------------------- |
 | `tui_run_pi_test <exts> <input> <timeout>` | 在 PTY 中启动 TUI 模式 pi，发送输入并捕获输出 |
-| `tui_assert_contains <text>` | 断言 TUI 输出（ANSI 已剥离）包含指定文本 |
-| `tui_assert_matches <regex>` | 断言 TUI 输出匹配正则表达式 |
-| `extract_visible_text <file>` | 从原始 ANSI 日志提取纯文本 |
-| `tui_cleanup` | 清理本次 TUI 测试的临时文件 |
+| `tui_assert_contains <text>`               | 断言 TUI 输出（ANSI 已剥离）包含指定文本      |
+| `tui_assert_matches <regex>`               | 断言 TUI 输出匹配正则表达式                   |
+| `extract_visible_text <file>`              | 从原始 ANSI 日志提取纯文本                    |
+| `tui_cleanup`                              | 清理本次 TUI 测试的临时文件                   |
 
 #### 参数说明
 
@@ -173,11 +173,11 @@ test/extensions/<name>/
 
 调用 `tui_run_pi_test` 后设置以下变量供断言使用：
 
-| 变量 | 类型 | 说明 |
-|------|------|------|
+| 变量              | 类型 | 说明                                |
+| ----------------- | ---- | ----------------------------------- |
 | `TUI_OUTPUT_FILE` | path | script 命令捕获的原始 ANSI 输出文件 |
-| `TUI_EXIT_CODE` | int | Pi 进程的退出码（124 = timeout） |
-| `TUI_TEST_HOME` | path | 沙箱根目录（`tui_cleanup` 会删除） |
+| `TUI_EXIT_CODE`   | int  | Pi 进程的退出码（124 = timeout）    |
+| `TUI_TEST_HOME`   | path | 沙箱根目录（`tui_cleanup` 会删除）  |
 
 ### 编写 TUI 测试
 

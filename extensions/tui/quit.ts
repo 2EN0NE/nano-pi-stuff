@@ -119,8 +119,7 @@ function computeSessionCardData(ctx: ExtensionContext, tracker: QuitTracker): Se
 		// 工具调用计数
 		if (entry.type === 'message') {
 			const msg = (entry as unknown as Record<string, unknown>).message as
-				| Record<string, unknown>
-				| undefined;
+				Record<string, unknown> | undefined;
 			if (msg?.role === 'toolResult') {
 				toolTotal++;
 				const isErr = (msg as Record<string, unknown>).isError;
