@@ -34,6 +34,7 @@ MODULE_RESULTS=() # "type|name|pass|fail|review|total"
 # ── 参数解析 ──
 TARGET_EXT=""
 TARGET_SKILL=""
+TUI_ONLY=false
 
 usage() {
 	cat <<'EOF'
@@ -42,9 +43,11 @@ Usage: test/scripts/run-e2e.sh [options]
 Options:
   --ext <name>        Run tests for a specific extension (e.g., pi-logger)
   --skill <name>      Run tests for a specific skill (e.g., e2e-test)
+  --tui               Run TUI tests (tui.smoke.test.sh) for the target
   -h, --help          Show this help
 
-Without options, runs all test modules.
+Without options, runs all test modules (smoke.test.sh only).
+Use --tui to run TUI-mode tests instead.
 EOF
 	exit 0
 }
@@ -58,6 +61,10 @@ while [[ $# -gt 0 ]]; do
 	--skill)
 		TARGET_SKILL="$2"
 		shift 2
+		;;
+	--tui)
+		TUI_ONLY=true
+		shift
 		;;
 	-h | --help) usage ;;
 	*)
@@ -207,6 +214,13 @@ mark_for_review() {
 	padded=$(printf '%03d' "$CASE_INDEX")
 	echo "${padded}|${reason}|$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$CASE_DIR/${padded}-review-marker"
 }
+
+# ── TUI 测试辅助函数（加载 TUI 模式的 PTY 测试工具） ──
+TUI_HELPERS="$ROOT_DIR/test/helpers/tui-functions.sh"
+if [[ -f "$TUI_HELPERS" ]]; then
+	# shellcheck disable=SC1091
+	source "$TUI_HELPERS"
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 测试执行引擎
@@ -424,12 +438,27 @@ run_target() {
 	local target_name="$2"
 
 	if [[ -n "$target_name" ]]; then
-		local tf="$TEST_DIR/$type_dir/$target_name/smoke.test.sh"
-		[[ -f "$tf" ]] && {
-			run_test_file "$tf" "$type_dir" "$target_name"
-			FOUND_ANY=true
-		} ||
-			echo "Not found: $tf"
+		# 根据 --tui flag 选择主测试文件
+		if $TUI_ONLY; then
+			local tf="$TEST_DIR/$type_dir/$target_name/tui.smoke.test.sh"
+			[[ -f "$tf" ]] && {
+				run_test_file "$tf" "$type_dir" "$target_name"
+				FOUND_ANY=true
+			} || echo "Not found: $tf"
+		else
+			# 默认：先跑 smoke.test.sh，再跑 tui.smoke.test.sh（如果有）
+			local tf_smoke="$TEST_DIR/$type_dir/$target_name/smoke.test.sh"
+			[[ -f "$tf_smoke" ]] && {
+				run_test_file "$tf_smoke" "$type_dir" "$target_name"
+				FOUND_ANY=true
+			} || echo "Not found: $tf_smoke"
+
+			local tf_tui="$TEST_DIR/$type_dir/$target_name/tui.smoke.test.sh"
+			[[ -f "$tf_tui" ]] && {
+				run_test_file "$tf_tui" "$type_dir" "$target_name"
+				FOUND_ANY=true
+			}
+		fi
 	else
 		for d in "$TEST_DIR/$type_dir"/*/; do
 			local bn
@@ -440,6 +469,20 @@ run_target() {
 				FOUND_ANY=true
 			}
 		done
+
+		# In non-TUI mode, also run tui.smoke.test.sh files if found
+		# (TUI tests supplement smoke tests)
+		if ! $TUI_ONLY; then
+			for d in "$TEST_DIR/$type_dir"/*/; do
+				local bn
+				bn=$(basename "$d")
+				local tf="$d/tui.smoke.test.sh"
+				[[ -f "$tf" ]] && {
+					run_test_file "$tf" "$type_dir" "$bn"
+					FOUND_ANY=true
+				}
+			done
+		fi
 	fi
 }
 
