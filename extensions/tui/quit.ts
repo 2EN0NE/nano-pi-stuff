@@ -1,17 +1,15 @@
 /**
- * quit — /quit 命令 + Ctrl+C 拦截
+ * quit — 退出时显示会话总结卡片
  *
- * 提供 /quit 命令，在退出时显示会话总结卡片（含交互摘要、性能、模型用量），
- * 并输出中文提示 "要继续此会话，请运行 ..."。
+ * 在退出时（原生 /quit 命令或 Ctrl+C）显示会话总结卡片
+ * （含交互摘要、性能、模型用量）。
+ *
+ * 不再注册 /quit 命令——Pi 原生已提供，避免冲突。
  *
  * 分类：tui（交互界面）
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionCommandContext,
-	ExtensionContext,
-} from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { createLogger } from '@zenone/pi-logger';
 
 const log = createLogger('quit');
@@ -120,8 +118,9 @@ function computeSessionCardData(ctx: ExtensionContext, tracker: QuitTracker): Se
 	for (const entry of branch) {
 		// 工具调用计数
 		if (entry.type === 'message') {
-			const msg = (entry as Record<string, unknown>).message as
-				Record<string, unknown> | undefined;
+			const msg = (entry as unknown as Record<string, unknown>).message as
+				| Record<string, unknown>
+				| undefined;
 			if (msg?.role === 'toolResult') {
 				toolTotal++;
 				const isErr = (msg as Record<string, unknown>).isError;
@@ -156,7 +155,9 @@ function computeSessionCardData(ctx: ExtensionContext, tracker: QuitTracker): Se
 	}
 
 	// 分支 / Label 信息
-	const branchLabels = computeBranchLabelInfo(entries);
+	const branchLabels = computeBranchLabelInfo(
+		entries as unknown as Array<Record<string, unknown>>,
+	);
 
 	const sessionId = ctx.sessionManager.getSessionId() ?? 'unknown';
 	const sessionFile = ctx.sessionManager.getSessionFile() ?? '';
@@ -541,26 +542,7 @@ export default function (pi: ExtensionAPI): void {
 		tracker.onToolEnd(event.toolCallId);
 	});
 
-	// ── /quit 命令 ──
-	pi.registerCommand('quit', {
-		description: '退出当前会话，并显示性能总结卡片',
-		handler: async (_args: string, ctx: ExtensionCommandContext) => {
-			log.info('/quit 命令执行');
-
-			// 确保 agent_time 计算完毕
-			if (tracker.agentStartMs > 0) {
-				tracker.onAgentEnd();
-			}
-
-			const data = computeSessionCardData(ctx, tracker);
-			printCard(data, ctx.ui?.theme);
-
-			log.info('Quit card printed, shutting down');
-			ctx.shutdown();
-		},
-	});
-
-	// ── Ctrl+C / 退出拦截 ──
+	// ── Ctrl+C / 原生 /quit 退出拦截 ──
 	pi.on('session_shutdown', async (event: { reason: string }, ctx: ExtensionContext) => {
 		if (event.reason === 'quit') {
 			log.info('Session shutting down (quit), printing card');

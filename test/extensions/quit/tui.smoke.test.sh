@@ -41,15 +41,6 @@ test_it "shows TUI welcome and extension list [REVIEW]" <<'TEST'
   mark_for_review "检查 TUI 欢迎界面渲染：pi 版本号、扩展加载列表、资源加载列表"
 TEST
 
-test_it "detects built-in /quit conflict warning" <<'TEST'
-  tui_run_pi_test "quit" "/quit" 15
-
-  # 验证扩展冲突提示
-  tui_assert_contains "conflicts with built-in" "Extension conflict warning should appear"
-
-  tui_cleanup
-TEST
-
 test_it "extension logs captured in TUI mode" <<'TEST'
   tui_run_pi_test "pi-logger,quit" "/quit" 15
 
