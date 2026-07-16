@@ -12,8 +12,18 @@ const DEFAULT_POLL_STEP_MS = 15_000;
 
 interface CiCheckResult {
 	status: 'pass' | 'fail' | 'pending' | 'error';
+	/**
+	 * 失败的检查/run 名称列表。
+	 * - PR 模式：check 的 name（来自 `gh pr checks`）
+	 * - 分支模式：workflow run 的 name（来自 `gh run list`）
+	 */
 	failedRuns: string[];
 	logs: string;
+	/**
+	 * 分支模式专用：标记 pending 是因为分支还没有 run（可能是 CI 尚未触发），
+	 * 区别于 run 正在执行中的 pending。轮询循环利用此字段对空 run 场景快速超时。
+	 */
+	noRunsFound?: boolean;
 }
 
 interface PollConfig {
@@ -42,7 +52,20 @@ function isValidBranch(branch: string): boolean {
 	return /^[a-zA-Z0-9_\-./]+$/.test(branch);
 }
 
-function getCiStatus(prNumber: string, cwd: string): CiCheckResult {
+/** Check if input is a PR number (digits only) */
+function isPrRef(input: string): boolean {
+	return /^\d+$/.test(input);
+}
+
+/** Resolve input to a branch name — PR numbers resolved via gh, branch names returned as-is */
+function resolveBranch(prOrBranch: string, cwd: string): string {
+	if (isPrRef(prOrBranch)) {
+		return runGh(`pr view ${prOrBranch} --json headRefName -q .headRefName`, cwd);
+	}
+	return prOrBranch;
+}
+
+function getCiStatusFromPr(prNumber: string, cwd: string): CiCheckResult {
 	try {
 		const output = runGh(`pr checks ${prNumber} --json name,state,bucket`, cwd);
 		const checks = JSON.parse(output) as Array<{ name: string; state: string; bucket: string }>;
@@ -59,14 +82,74 @@ function getCiStatus(prNumber: string, cwd: string): CiCheckResult {
 	}
 }
 
-function getFailedLogs(prNumber: string, cwd: string): string {
+function getCiStatusFromBranch(branch: string, cwd: string): CiCheckResult {
 	try {
-		const branchOutput = runGh(`pr view ${prNumber} --json headRefName -q .headRefName`, cwd);
-		if (!isValidBranch(branchOutput)) {
-			throw new Error(`Invalid branch name from PR: ${branchOutput}`);
+		if (!isValidBranch(branch)) {
+			return { status: 'error', failedRuns: [], logs: `Invalid branch name: ${branch}` };
+		}
+		const output = runGh(
+			`run list --branch ${branch} --limit 1 --json name,status,conclusion,databaseId`,
+			cwd,
+		);
+		const runs = JSON.parse(output) as Array<{
+			name: string;
+			status: string;
+			conclusion: string;
+			databaseId: number;
+		}>;
+		const latest = runs[0];
+		if (!latest) {
+			// 分支没有 run — 做一次仓库级检查区分"CI 未配置"和"CI 还没开始"
+			try {
+				const repoOutput = runGh('run list --limit 1 --json databaseId', cwd);
+				const repoRuns = JSON.parse(repoOutput) as Array<{ databaseId: number }>;
+				if (!repoRuns.length) {
+					return {
+						status: 'error',
+						failedRuns: [],
+						logs: '该仓库没有发现任何 GitHub Actions 运行。请确认 Actions 已启用（Settings > Actions > General）。',
+					};
+				}
+			} catch {
+				// repo 级检查失败时降级到 pending，防止因 gh API 波动误报
+			}
+			return {
+				status: 'pending',
+				failedRuns: [],
+				logs: '',
+				noRunsFound: true,
+			};
+		}
+		if (latest.status !== 'completed') return { status: 'pending', failedRuns: [], logs: '' };
+		if (latest.conclusion === 'success' || latest.conclusion === 'neutral') {
+			return { status: 'pass', failedRuns: [], logs: '' };
+		}
+		return {
+			status: 'fail',
+			failedRuns: [latest.name ?? `run#${latest.databaseId}`],
+			logs: '',
+		};
+	} catch (e) {
+		return { status: 'error', failedRuns: [], logs: String(e) };
+	}
+}
+
+/** 根据输入自动选择 PR 模式或分支模式 */
+function getCiStatus(prOrBranch: string, cwd: string): CiCheckResult {
+	if (isPrRef(prOrBranch)) {
+		return getCiStatusFromPr(prOrBranch, cwd);
+	}
+	return getCiStatusFromBranch(prOrBranch, cwd);
+}
+
+function getFailedLogs(prOrBranch: string, cwd: string): string {
+	try {
+		const branch = resolveBranch(prOrBranch, cwd);
+		if (!isValidBranch(branch)) {
+			throw new Error(`Invalid branch name: ${branch}`);
 		}
 		const runListOutput = runGh(
-			`run list --branch ${branchOutput} --limit 5 --json databaseId,status,conclusion`,
+			`run list --branch ${branch} --limit 5 --json databaseId,status,conclusion`,
 			cwd,
 		);
 		const runs = JSON.parse(runListOutput) as Array<{
@@ -180,6 +263,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.cwd,
 			);
 			if (prOutput) {
+				// PR 模式
 				log.debug('找到分支对应的 PR', { branch, pr: prOutput });
 
 				// 检查是否存在 CI 检查
@@ -201,14 +285,49 @@ export default function (pi: ExtensionAPI) {
 					return;
 				}
 
-				log.info('触发 CI 自动监控', { pr: prOutput, branch });
+				log.info('触发 CI 自动监控（PR 模式）', { pr: prOutput, branch });
 				pi.sendUserMessage(
 					`CI 自动监控已触发。正在监控 PR ${prOutput} 的 CI 状态。如果失败，读取错误日志、修复代码、提交、推送，然后重新尝试，直到 CI 通过（最多 3 次）。`,
 					{ deliverAs: 'followUp' },
 				);
+				return;
 			}
-		} catch {
-			log.debug('未找到分支对应的 PR（分支还没有 PR 时属于正常情况）', { branch });
+
+			// 没有 PR → 分支模式：直接检查该分支是否有 CI run
+			log.debug('未找到 PR，尝试分支模式自动监控', { branch });
+
+			let hasRuns = false;
+			try {
+				const runsOutput = runGh(
+					`run list --branch ${branch} --limit 1 --json databaseId`,
+					ctx.cwd,
+				);
+				const runs = JSON.parse(runsOutput);
+				if (Array.isArray(runs) && runs.length > 0) hasRuns = true;
+			} catch (runsErr) {
+				log.warn('检查分支 CI 状态失败，跳过自动监控', {
+					branch,
+					error: String(runsErr),
+				});
+				return;
+			}
+
+			if (!hasRuns) {
+				log.debug('该分支没有 CI run，跳过自动监控', { branch });
+				return;
+			}
+
+			log.info('触发 CI 自动监控（分支模式）', { branch });
+			pi.sendUserMessage(
+				`CI 自动监控已触发（分支模式）。正在监控分支 ${branch} 的 CI 状态。如果失败，读取错误日志、修复代码、提交、推送，然后重新尝试，直到 CI 通过（最多 3 次）。`,
+				{ deliverAs: 'followUp' },
+			);
+		} catch (autoErr) {
+			log.warn('自动监控异常', { branch, error: String(autoErr) });
+			ctx.ui.notify(
+				`⚠️ ci-watch: 自动监控分支 ${branch} 时出错（${typeof autoErr === 'string' ? autoErr.slice(0, 80) : 'API 调用失败'}）。请手动使用 /ci-watch 或 /ci-notify。`,
+				'error',
+			);
 		}
 	});
 
@@ -261,10 +380,10 @@ export default function (pi: ExtensionAPI) {
 		name: 'ci_watch',
 		label: 'CI 监控',
 		description:
-			'监控 GitHub PR 的 CI 状态，等待完成并报告结果。如果 CI 失败，返回失败日志供修复后重新推送。在打开 PR 后使用此工具确保 CI 通过。',
-		promptSnippet: '监控 PR 的 CI 状态，等待完成，如有失败则返回日志',
+			'监控 GitHub PR 或分支的 CI 状态，等待完成并报告结果。如果 CI 失败，返回失败日志供修复后重新推送。支持 PR 编号（如 12）或分支名（如 main）。',
+		promptSnippet: '监控 PR 或分支的 CI 状态，等待完成，如有失败则返回日志',
 		promptGuidelines: [
-			'当用户要求监控 CI 时，在推送分支或打开 PR 后使用 ci_watch。',
+			'当用户要求监控 CI 时，在推送分支或打开 PR 后使用 ci_watch。支持 PR 编号或分支名。',
 			'ci_watch 报告失败后，读取日志、修复问题、提交、推送，然后重新调用 ci_watch（最多 3 次尝试）。',
 			'不要主动调用 ci_watch —— 仅当用户明确要求监控 CI 时使用。',
 		],
@@ -277,6 +396,8 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const { pr } = params;
 			const attempt = params.attempt ?? 1;
+			const refLabel = isPrRef(pr) ? `PR ${pr}` : `分支 ${pr}`;
+			const refShort = isPrRef(pr) ? `PR ${pr}` : pr;
 
 			if (attempt > MAX_ATTEMPTS) {
 				return {
@@ -294,7 +415,7 @@ export default function (pi: ExtensionAPI) {
 				content: [
 					{
 						type: 'text',
-						text: `⏳ 正在监控 PR ${pr} 的 CI（第 ${attempt}/${MAX_ATTEMPTS} 次尝试）...`,
+						text: `⏳ 正在监控 ${refLabel} 的 CI（第 ${attempt}/${MAX_ATTEMPTS} 次尝试）...`,
 					},
 				],
 				details: {},
@@ -303,6 +424,8 @@ export default function (pi: ExtensionAPI) {
 			let elapsed = 0;
 			let currentDelay = pollConfig.minMs;
 			const maxWait = 10 * 60 * 1000;
+			let consecutiveEmptyPolls = 0;
+			const maxEmptyPolls = 3; // ~60-90s 连续未发现 run → 快速失败
 
 			while (!signal?.aborted) {
 				const result = getCiStatus(pr, ctx.cwd);
@@ -316,7 +439,7 @@ export default function (pi: ExtensionAPI) {
 
 				if (result.status === 'pass') {
 					return {
-						content: [{ type: 'text', text: `✅ PR ${pr} 的 CI 已通过！` }],
+						content: [{ type: 'text', text: `✅ ${refLabel} 的 CI 已通过！` }],
 						details: { status: 'pass', pr, attempt },
 					};
 				}
@@ -327,11 +450,29 @@ export default function (pi: ExtensionAPI) {
 						content: [
 							{
 								type: 'text',
-								text: `❌ PR ${pr} 的 CI 失败（第 ${attempt}/${MAX_ATTEMPTS} 次尝试）。\n\n失败的检查：${result.failedRuns.join('、')}\n\n--- 失败日志（最后 100 行） ---\n${logs}\n\n---\n修复问题后提交、推送，然后以 attempt=${attempt + 1} 重新调用 ci_watch。`,
+								text: `❌ ${refLabel} 的 CI 失败（第 ${attempt}/${MAX_ATTEMPTS} 次尝试）。\n\n失败的检查：${result.failedRuns.join('、')}\n\n--- 失败日志（最后 100 行） ---\n${logs}\n\n---\n修复问题后提交、推送，然后以 attempt=${attempt + 1} 重新调用 ci_watch。`,
 							},
 						],
 						details: { status: 'fail', pr, attempt, failedChecks: result.failedRuns },
 					};
+				}
+
+				// 分支模式：连续多次无 run → fast-fail（避免笔误或未触发 CI 空等 10 分钟）
+				if (result.noRunsFound) {
+					consecutiveEmptyPolls++;
+					if (consecutiveEmptyPolls >= maxEmptyPolls) {
+						return {
+							content: [
+								{
+									type: 'text',
+									text: `⏹️ ${refLabel} 连续 ${maxEmptyPolls} 次检查未发现 CI run。确认分支名是否正确、CI 是否已触发。`,
+								},
+							],
+							details: { status: 'error', pr, reason: 'no_ci_runs_found' },
+						};
+					}
+				} else {
+					consecutiveEmptyPolls = 0;
 				}
 
 				if (elapsed >= maxWait) {
@@ -339,7 +480,7 @@ export default function (pi: ExtensionAPI) {
 						content: [
 							{
 								type: 'text',
-								text: `⏰ PR ${pr} 的 CI 已等待 10 分钟仍未完成。请手动检查。`,
+								text: `⏰ ${refLabel} 的 CI 已等待 10 分钟仍未完成。请手动检查。`,
 							},
 						],
 						details: { status: 'timeout', pr },
@@ -353,7 +494,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: 'text',
-							text: `⏳ PR ${pr} 的 CI 仍在运行...（已过 ${Math.round(elapsed / 1000)} 秒，下次检查 ${currentDelay / 1000} 秒后）`,
+							text: `⏳ ${refShort} 的 CI 仍在运行...（已过 ${Math.round(elapsed / 1000)} 秒，下次检查 ${currentDelay / 1000} 秒后）`,
 						},
 					],
 					details: {},
@@ -371,8 +512,8 @@ export default function (pi: ExtensionAPI) {
 		name: 'ci_notify',
 		label: 'CI 通知',
 		description:
-			'监控 GitHub PR 的 CI 状态并在完成时通知。不自动修复 —— 只监控并报告最终状态。当你希望在 CI 完成时得到通知时使用。',
-		promptSnippet: '监控 PR 的 CI，完成后通知（不自动修复）',
+			'监控 GitHub PR 或分支的 CI 状态并在完成时通知。不自动修复 —— 只监控并报告最终状态。支持 PR 编号（如 12）或分支名（如 main）。',
+		promptSnippet: '监控 PR 或分支的 CI，完成后通知（不自动修复）',
 		promptGuidelines: [
 			'用户想知道 CI 何时完成但不希望自动修复时，使用 ci_notify。',
 			'用户希望在失败时自动修复时，使用 ci_watch 代替。',
@@ -382,15 +523,19 @@ export default function (pi: ExtensionAPI) {
 		}),
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const { pr } = params;
+			const refLabel = isPrRef(pr) ? `PR ${pr}` : `分支 ${pr}`;
+			const refShort = isPrRef(pr) ? `PR ${pr}` : pr;
 
 			onUpdate?.({
-				content: [{ type: 'text', text: `👀 正在监控 PR ${pr} 的 CI...` }],
+				content: [{ type: 'text', text: `👀 正在监控 ${refLabel} 的 CI...` }],
 				details: {},
 			});
 
 			let elapsed = 0;
 			let currentDelay = pollConfig.minMs;
 			const maxWait = 15 * 60 * 1000;
+			let consecutiveEmptyPolls = 0;
+			const maxEmptyPolls = 3; // ~60-90s 连续未发现 run → 快速失败
 
 			while (!signal?.aborted) {
 				const result = getCiStatus(pr, ctx.cwd);
@@ -403,25 +548,43 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				if (result.status === 'pass') {
-					ctx.ui.notify(`✅ PR ${pr} 的 CI 已通过！`, 'info');
+					ctx.ui.notify(`✅ ${refLabel} 的 CI 已通过！`, 'info');
 					return {
-						content: [{ type: 'text', text: `✅ PR ${pr} 的 CI 已通过！` }],
+						content: [{ type: 'text', text: `✅ ${refLabel} 的 CI 已通过！` }],
 						details: { status: 'pass', pr },
 					};
 				}
 
 				if (result.status === 'fail') {
 					const logs = getFailedLogs(pr, ctx.cwd);
-					ctx.ui.notify(`❌ PR ${pr} 的 CI 失败`, 'error');
+					ctx.ui.notify(`❌ ${refLabel} 的 CI 失败`, 'error');
 					return {
 						content: [
 							{
 								type: 'text',
-								text: `❌ PR ${pr} 的 CI 失败。\n\n失败的检查：${result.failedRuns.join('、')}\n\n--- 失败日志（最后 100 行） ---\n${logs}`,
+								text: `❌ ${refLabel} 的 CI 失败。\n\n失败的检查：${result.failedRuns.join('、')}\n\n--- 失败日志（最后 100 行） ---\n${logs}`,
 							},
 						],
 						details: { status: 'fail', pr, failedChecks: result.failedRuns },
 					};
+				}
+
+				// 分支模式：连续多次无 run → fast-fail（避免笔误或未触发 CI 空等 15 分钟）
+				if (result.noRunsFound) {
+					consecutiveEmptyPolls++;
+					if (consecutiveEmptyPolls >= maxEmptyPolls) {
+						return {
+							content: [
+								{
+									type: 'text',
+									text: `⏹️ ${refLabel} 连续 ${maxEmptyPolls} 次检查未发现 CI run。确认分支名是否正确、CI 是否已触发。`,
+								},
+							],
+							details: { status: 'error', pr, reason: 'no_ci_runs_found' },
+						};
+					}
+				} else {
+					consecutiveEmptyPolls = 0;
 				}
 
 				if (elapsed >= maxWait) {
@@ -429,7 +592,7 @@ export default function (pi: ExtensionAPI) {
 						content: [
 							{
 								type: 'text',
-								text: `⏰ PR ${pr} 的 CI 已等待 15 分钟仍未完成。请手动检查。`,
+								text: `⏰ ${refLabel} 的 CI 已等待 15 分钟仍未完成。请手动检查。`,
 							},
 						],
 						details: { status: 'timeout', pr },
@@ -443,7 +606,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: 'text',
-							text: `👀 PR ${pr} 的 CI 仍在运行...（已过 ${Math.round(elapsed / 1000)} 秒，下次检查 ${currentDelay / 1000} 秒后）`,
+							text: `👀 ${refShort} 的 CI 仍在运行...（已过 ${Math.round(elapsed / 1000)} 秒，下次检查 ${currentDelay / 1000} 秒后）`,
 						},
 					],
 					details: {},
@@ -458,30 +621,34 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand('ci-watch', {
-		description: '监控 PR 的 CI 并自动修复失败。用法：/ci-watch <pr编号>',
+		description: '监控 PR 或分支的 CI 并自动修复失败。用法：/ci-watch <pr编号|分支名>',
 		handler: async (args, ctx) => {
 			if (!args?.trim()) {
-				ctx.ui.notify('用法：/ci-watch <pr编号>', 'error');
+				ctx.ui.notify('用法：/ci-watch <pr编号|分支名>', 'error');
 				return;
 			}
+			const ref = args.trim();
+			const refLabel = isPrRef(ref) ? `PR ${ref}` : `分支 ${ref}`;
 			pi.sendUserMessage(
-				`正在监控 PR ${args.trim()} 的 CI 状态。如果失败，读取错误日志、修复代码、提交、推送，然后重新尝试，直到 CI 通过（最多 3 次）。`,
+				`正在监控 ${refLabel} 的 CI 状态。如果失败，读取错误日志、修复代码、提交、推送，然后重新尝试，直到 CI 通过（最多 3 次）。`,
 				{ deliverAs: 'followUp' },
 			);
 		},
 	});
 
 	pi.registerCommand('ci-notify', {
-		description: '监控 PR 的 CI，完成后通知（不自动修复）。用法：/ci-notify <pr编号>',
+		description:
+			'监控 PR 或分支的 CI，完成后通知（不自动修复）。用法：/ci-notify <pr编号|分支名>',
 		handler: async (args, ctx) => {
 			if (!args?.trim()) {
-				ctx.ui.notify('用法：/ci-notify <pr编号>', 'error');
+				ctx.ui.notify('用法：/ci-notify <pr编号|分支名>', 'error');
 				return;
 			}
-			pi.sendUserMessage(
-				`请监控 PR ${args.trim()} 的 CI，完成后通知我。不要自动修复任何东西。`,
-				{ deliverAs: 'followUp' },
-			);
+			const ref = args.trim();
+			const refLabel = isPrRef(ref) ? `PR ${ref}` : `分支 ${ref}`;
+			pi.sendUserMessage(`请监控 ${refLabel} 的 CI，完成后通知我。不要自动修复任何东西。`, {
+				deliverAs: 'followUp',
+			});
 		},
 	});
 }
