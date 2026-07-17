@@ -8,7 +8,7 @@ test_it "loads without errors" <<'TEST'
 TEST
 
 test_it "session starts without lifecycle errors" <<'TEST'
-  run_pi_and_check     --extensions "prompt-editor"     --prompt "hi"     --save-output
+  run_pi_and_check     --extensions "pi-logger,prompt-editor"     --prompt "hi"     --save-output
 
   # Check lifecycle log for session start/end - confirms session events fire
   local log_dir="$PI_LOG_DIR"
@@ -42,9 +42,9 @@ test_it "session starts without lifecycle errors" <<'TEST'
   fi
 
   # No ERROR level entries
-  if grep -q "^\[.*\] \[ERROR\]" "$lc_log"; then
+  if grep -q "ERROR" "$lc_log"; then
     echo "FAIL: ERROR entries found in lifecycle log"
-    grep "^\[.*\] \[ERROR\]" "$lc_log"
+    grep "ERROR" "$lc_log"
     exit 1
   fi
 

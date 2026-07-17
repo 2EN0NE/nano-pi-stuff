@@ -42,51 +42,6 @@ pi -a --no-session -e ./extensions/foo.ts -p "test prompt"
 
 详情和完整流程见 [`skills/e2e-test/SKILL.md`](skills/e2e-test/SKILL.md)。
 
-### TUI 模式测试
-
-从 2026-07 起，工程支持 **TUI 交互模式测试**。对使用 `ctx.ui.custom()`、覆盖层、选择器等 TUI 功能的扩展，应编写 TUI 测试。
-
-**和普通测试的区别：**
-
-| 维度     | 普通测试 (smoke.test.sh)     | TUI 测试 (tui.smoke.test.sh)    |
-| -------- | ---------------------------- | ------------------------------- |
-| Pi 模式  | `pi -a --no-session` (print) | `pi -a` (TUI 交互)              |
-| 测试手段 | 发送 prompt，检查 stdout     | 通过 PTY 发送按键，捕获屏幕输出 |
-| 验证方式 | exit code + 日志 grep        | ANSI 输出剥离后文本匹配         |
-| 适用场景 | 加载、工具调用、日志         | 覆盖层渲染、键盘交互、快捷键    |
-
-**快速参考：**
-
-```bash
-# 运行 TUI 测试
-bash test/scripts/run-e2e.sh --ext quit --tui
-
-# 不指定 --tui 时会自动补充运行 tui.smoke.test.sh
-bash test/scripts/run-e2e.sh --ext quit    # 同时跑 smoke + tui
-```
-
-**TUI 测试文件命名：** `test/extensions/<name>/tui.smoke.test.sh`
-
-**核心 API（定义在 `test/helpers/tui-functions.sh`）：**
-
-| 函数                                       | 用途                                 |
-| ------------------------------------------ | ------------------------------------ |
-| `tui_run_pi_test <exts> <input> <timeout>` | 在 PTY 中启动 TUI 模式 pi 并发送输入 |
-| `tui_assert_contains <text>`               | 断言 TUI 输出包含文本                |
-| `tui_assert_matches <regex>`               | 断言 TUI 输出匹配正则                |
-| `tui_cleanup`                              | 清理临时文件                         |
-
-**注意事项：**
-
-- TUI 测试在隔离沙箱中运行，会自动创建 `node_modules/@zenone/pi-logger` 链接
-- **避免触发 LLM 调用**（不要发 `hi`/`hello`），直接发 `/command` 即可
-- `session_shutdown` 中的输出可能因 PTY 关闭而丢失
-- 退出码 124（timeout）在 LLM 未返回时是预期的
-
-**已有样例：** `test/extensions/quit/tui.smoke.test.sh`
-
-完整文档见 [`test/README.md`](test/README.md) 和 [`skills/e2e-test/SKILL.md`](skills/e2e-test/SKILL.md)。
-
 ## 扩展开发
 
 Pi 扩展放在 [extensions](extensions) 目录中；修改时请在这里更新。若需要参考内部实现，可查看 `pi-mono`，但不要改动其源码。
@@ -170,7 +125,102 @@ log.error('错误');
 
 **约定：** 测试辅助扩展放在 `test/extensions/<target>/helpers/` 目录下。
 
-**示例：** `test/extensions/tools/helpers/dynamic-registrar.ts`
+#### Mock LLM 测试辅助扩展
+
+一种特殊的测试辅助扩展是 **mock-llm**，用于在 e2e 测试中替代真实 LLM API 调用。实现原理：
+
+1. 使用 `@earendil-works/pi-ai` 内置的 `createFauxCore()` 创建虚假 provider
+2. 通过 `pi.registerProvider(name, { streamSimple })` 注册到 Pi
+3. 在 `session_start` 中用 `pi.setModel()` 切换到 mock 模型
+
+**关键实现要点：**
+
+```typescript
+import { createFauxCore, fauxAssistantMessage } from '@earendil-works/pi-ai';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+
+export default function (pi: ExtensionAPI) {
+  const faux = createFauxCore({
+    provider: 'mock-llm',
+    models: [{ id: 'mock-model-1', name: 'Mock Model' }],
+  });
+  // streamSimple 不发起真实 HTTP 请求
+  pi.registerProvider('mock-llm', {
+    name: 'Mock LLM Provider',
+    api: faux.api,
+    baseUrl: 'http://localhost:0',
+    apiKey: 'mock-key-noop',
+    streamSimple: faux.streamSimple,
+    models: faux.models.map(m => ({ /* model defs */ })),
+  });
+  faux.setResponses([fauxAssistantMessage('Mock LLM is ready.')]);
+  pi.on('session_start', async (_event, ctx) => {
+    const model = ctx.modelRegistry.find('mock-llm', 'mock-model-1');
+    if (model) await pi.setModel(model);
+  });
+}
+```
+
+**在 smoke 测试中使用：** 因 mock-llm 在 `test/` 下，需手动搭建沙箱 + HOME 隔离：
+
+```bash
+mkdir -p "$test_home/.pi/extensions/mock-llm"
+cp "$ROOT_DIR/test/extensions/<target>/helpers/mock-llm.ts" \
+  "$test_home/.pi/extensions/mock-llm/index.ts"
+HOME="$test_home/home" pi -a --no-session -p "hi"
+```
+
+**完整示例：** `test/extensions/pi-rate-limiter/smoke.test.sh`
+
+详见 [e2e-test 技能的 Mock LLM 测试章节](.pi/skills/e2e-test/SKILL.md#mock-llm-测试)。
+
+#### TUI 模式测试
+
+工程支持 **TUI 交互模式测试**。对使用 `ctx.ui.custom()`、覆盖层、选择器等 TUI 功能的扩展，应编写 TUI 测试。
+
+**和普通测试的区别：**
+
+| 维度 | 普通测试 (smoke.test.sh) | TUI 测试 (tui.smoke.test.sh) |
+|------|-------------------------|------------------------------|
+| Pi 模式 | `pi -a --no-session` (print) | `pi -a` (TUI 交互) |
+| 测试手段 | 发送 prompt，检查 stdout | 通过 PTY 发送按键，捕获屏幕输出 |
+| 验证方式 | exit code + 日志 grep | ANSI 输出剥离后文本匹配 |
+| 适用场景 | 加载、工具调用、日志 | 覆盖层渲染、键盘交互、快捷键 |
+
+**快速参考：**
+
+```bash
+# 运行 TUI 测试
+bash test/scripts/run-e2e.sh --ext quit --tui
+
+# 不指定 --tui 时会自动补充运行 tui.smoke.test.sh
+bash test/scripts/run-e2e.sh --ext quit    # 同时跑 smoke + tui
+```
+
+**TUI 测试文件命名：** `test/extensions/<name>/tui.smoke.test.sh`
+
+**核心 API（定义在 `test/helpers/tui-functions.sh`）：**
+
+| 函数 | 用途 |
+|------|------|
+| `tui_run_pi_test <exts> <input> <timeout>` | 在 PTY 中启动 TUI 模式 pi 并发送输入 |
+| `tui_assert_contains <text>` | 断言 TUI 输出包含文本 |
+| `tui_assert_matches <regex>` | 断言 TUI 输出匹配正则 |
+| `tui_cleanup` | 清理临时文件 |
+
+**注意事项：**
+- TUI 测试在隔离沙箱中运行，会自动创建 `node_modules/@zenone/pi-logger` 链接
+- **避免触发 LLM 调用**（不要发 `hi`/`hello`），直接发 `/command` 即可
+- `session_shutdown` 中的输出可能因 PTY 关闭而丢失
+- 退出码 124（timeout）在 LLM 未返回时是预期的
+
+**已有样例：** `test/extensions/quit/tui.smoke.test.sh`
+
+完整文档见 [`test/README.md`](test/README.md) 和 [`skills/e2e-test/SKILL.md`](skills/e2e-test/SKILL.md)。
+
+#### 普通测试辅助扩展示例
+
+**`test/extensions/tools/helpers/dynamic-registrar.ts`**
 
 - 通过 `pi.registerTool()` 模拟 MCP 工具的注册行为
 - 测试用例中通过手动拷贝 + `pi -a --no-session` 运行，不使用 `run_pi_and_check`（因其只搜索 `extensions/` 目录）

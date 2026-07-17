@@ -170,6 +170,20 @@ run_pi_and_check() {
 		cp "$ROOT_DIR/extensions/meta/pi-logger/pi-logger.json" "$test_home/.pi/pi-logger.json" 2>/dev/null || true
 	fi
 
+	# ── HOME 隔离：避免全局扩展（~/.pi/agent/extensions/）与沙箱扩展冲突 ──
+	local isolated_home="$test_home/home"
+	mkdir -p "$isolated_home/.pi/agent"
+	# 复制 pi-logger 配置到隔离 HOME（某些扩展需要）
+	if [[ -f "$test_home/.pi/pi-logger.json" ]]; then
+		cp "$test_home/.pi/pi-logger.json" "$isolated_home/.pi/agent/"
+	fi
+	# 复制 models.json（防止模型配置丢失）
+	local real_home
+	real_home=$(eval echo ~)
+	if [[ -f "$real_home/.pi/agent/models.json" ]]; then
+		cp "$real_home/.pi/agent/models.json" "$isolated_home/.pi/agent/" 2>/dev/null || true
+	fi
+
 	local padded
 	padded=$(printf '%03d' "$CASE_INDEX")
 	local pi_stdout_file="$CASE_DIR/${padded}-pi-stdout.log"
@@ -177,7 +191,7 @@ run_pi_and_check() {
 
 	cd "$test_home"
 	set +e
-	pi -a --no-session -p "$prompt" 2>&1 >"$pi_stdout_file"
+	HOME="$isolated_home" pi -a --no-session -p "$prompt" 2>&1 >"$pi_stdout_file"
 	local pi_exit=$?
 	set -e
 	cd "$ROOT_DIR"
