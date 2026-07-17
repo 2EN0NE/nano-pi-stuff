@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import catchTheFoxExtension from '../dist/index.js';
 
-const ANSI_SEQUENCE = /\x1b\[[0-9;]*m/g;
+const ESC = String.fromCharCode(27);
+const ANSI_SEQUENCE = new RegExp(`${ESC}\\[[0-9;]*m`, 'g');
 
 function visibleWidth(line) {
 	return line.replace(ANSI_SEQUENCE, '').length;

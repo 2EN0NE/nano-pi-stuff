@@ -66,6 +66,7 @@ export async function connect(timeout = 5000) {
 		if (e.name === 'AbortError') {
 			throw new Error(
 				`Connection timeout - is Chrome running with --remote-debugging-port=${DEBUG_PORT}?`,
+				{ cause: e },
 			);
 		}
 		throw e;
@@ -81,7 +82,12 @@ class CDP {
 		this.eventHandlers = new Map();
 
 		ws.on('message', (data) => {
-			const msg = JSON.parse(data.toString());
+			let msg;
+			try {
+				msg = JSON.parse(data.toString());
+			} catch {
+				return;
+			}
 			if (msg.id && this.callbacks.has(msg.id)) {
 				const { resolve, reject } = this.callbacks.get(msg.id);
 				this.callbacks.delete(msg.id);
