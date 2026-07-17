@@ -75,6 +75,130 @@ cat test/results/$LATEST/skills/e2e-test/summary.md
 cat test/results/$LATEST/extensions/pi-logger/cases/*.log
 ```
 
+---
+
+## Vitest 结构化测试（新增）
+
+从 2026-07 起，工程引入 [Vitest](https://vitest.dev) 作为第二测试框架，提供 TypeScript 类型的结构化测试能力。
+
+### 目录结构
+
+```
+test/vitest/
+├── helpers/
+│   └── sandbox.ts            # 沙箱管理 + pi 执行 + 断言辅助
+├── extensions/
+│   └── pi-logger.test.ts     # pi-logger 扩展的 Vitest e2e 测试
+└── skills/
+    └── e2e-test.test.ts      # e2e-test 技能的自举测试（无需 pi）
+```
+
+### 运行
+
+```bash
+# 运行全部 Vitest 测试
+npm test
+
+# 监听模式（开发使用）
+npm run test:watch
+
+# CI 模式（输出 JUnit XML）
+npm run test:ci
+```
+
+### 编写 Vitest 测试
+
+```typescript
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import {
+	createSandbox,
+	destroySandbox,
+	runPi,
+	readLogs,
+	hasErrorInLogs,
+} from '../helpers/sandbox.js';
+
+describe('my-extension', () => {
+	let sandbox: string;
+
+	beforeAll(() => {
+		sandbox = createSandbox({
+			extensions: ['pi-logger', 'my-ext'],
+			useMockLLM: true, // 自动注入 mock-llm
+		});
+	});
+
+	afterAll(() => {
+		destroySandbox(sandbox);
+	});
+
+	it('loads without crashes', async () => {
+		const result = await runPi(sandbox, 'hi');
+		expect([0, 124]).toContain(result.exitCode);
+	}, 60_000);
+
+	it('produces log files', async () => {
+		const result = await runPi(sandbox, 'hi');
+		const logs = readLogs(result.logDir);
+		expect(Object.keys(logs).length).toBeGreaterThan(0);
+	}, 60_000);
+});
+```
+
+### 对比：bash 测试 vs Vitest 测试
+
+| 维度     | bash 测试 (smoke.test.sh) | Vitest 测试 (test.vitest.ts)            |
+| -------- | ------------------------- | --------------------------------------- |
+| 语言     | Shell (heredoc)           | TypeScript                              |
+| 断言     | exit code + grep          | `expect()` API                          |
+| 并行     | 串行顺序执行              | 支持 file-level 并行                    |
+| 执行速度 | 慢（全量 40+ 模块 ~5min） | 快（非 LLM 测试毫秒级，含 pi 调用秒级） |
+| 类型安全 | 无                        | 完整 TypeScript                         |
+| CI 集成  | 通过 run-e2e.sh bash      | 通过 vitest（JUnit XML）                |
+| 覆盖率   | 无                        | Vitest 内置（c8/istanbul）              |
+
+> **迁移建议**：新扩展优先写 Vitest 测试。bash 测试保持向后兼容。
+
+---
+
+## CI 模式（Mock LLM 自动注入）
+
+在 CI 环境（`CI=true`）或本地显式设置 `CI=true` 时，测试框架自动注入 `mock-llm` 扩展，无需真实 API Key。
+
+### 在 bash 测试中使用
+
+```bash
+# 显式指定（手动模式）
+run_pi_and_check --extensions "mock-llm,pi-logger" --prompt "hi"
+
+# CI 模式下自动注入（无需手动写 mock-llm）
+CI=true bash test/scripts/run-e2e.sh --ext pi-logger
+```
+
+### 在 Vitest 测试中使用
+
+```typescript
+// 显式开启
+createSandbox({ extensions: ['pi-logger'], useMockLLM: true });
+
+// 或依赖 CI 环境变量自动注入
+process.env.CI = 'true';
+createSandbox({ extensions: ['pi-logger'] }); // mock-llm 自动注入
+```
+
+### mock-llm 扩展
+
+共享的 mock-llm 扩展位于 `test/helpers/mock-llm.ts`，通过 `registerFauxProvider()` + `pi.registerProvider()` 双重注册，模拟 LLM 回复。
+
+**工作原理**：
+
+1. mock-llm 注册一个虚假 provider（`mock-llm/mock-model-1`）
+2. Pi 启动时使用 `models-store.json` 中的初始模型
+3. `session_start` 时自动切换到 mock 模型
+4. 默认回复 `"Mock LLM is ready."`
+
+---
+
 ### 编写测试案例
 
 每个模块一个 `smoke.test.sh` 文件，格式如下：

@@ -24,6 +24,11 @@ RESULTS_DIR="$TEST_DIR/results"
 TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
 RUN_DIR="$RESULTS_DIR/$TIMESTAMP"
 
+# ── CI 模式检测 ──
+# 当 CI=true 时，自动注入 mock-llm 扩展使测试无需真实 API Key
+# 开发环境也可通过 CI=true 手动启用
+PI_CI_MODE=${CI:-false}
+
 # 全局聚合
 TOTAL_PASS=0
 TOTAL_FAIL=0
@@ -122,6 +127,11 @@ run_pi_and_check() {
 		esac
 	done
 
+	# CI 模式：自动注入 mock-llm 扩展，无需真实 API Key
+	if [[ "$PI_CI_MODE" == true ]] && [[ "$extensions" != *"mock-llm"* ]]; then
+		extensions="mock-llm,$extensions"
+	fi
+
 	[[ -z "$prompt" ]] && {
 		echo "ERROR: --prompt required" >&2
 		return 1
@@ -131,7 +141,7 @@ run_pi_and_check() {
 	local test_home="$ROOT_DIR/.pi/tmp/$slug"
 	mkdir -p "$test_home/.pi/extensions" "$test_home/.pi/logs"
 
-	# 拷贝依赖（支持递归搜索 extensions/ 子目录）
+	# 拷贝依赖（支持递归搜索 extensions/ 子目录 + test/helpers/）
 	if [[ -n "$extensions" ]]; then
 		local -a DEPS
 		IFS=',' read -ra DEPS <<<"$extensions"
@@ -145,6 +155,10 @@ run_pi_and_check() {
 				cp -r "$ROOT_DIR/extensions/$dn" "$test_home/.pi/extensions/$dn"
 			elif [[ -f "$ROOT_DIR/extensions/$dn.ts" ]]; then
 				cp "$ROOT_DIR/extensions/$dn.ts" "$test_home/.pi/extensions/$dn.ts"
+			elif [[ -f "$ROOT_DIR/test/helpers/$dn.ts" ]]; then
+				# test/helpers/ 扩展：如 mock-llm，拷贝为目录扩展
+				mkdir -p "$test_home/.pi/extensions/$dn"
+				cp "$ROOT_DIR/test/helpers/$dn.ts" "$test_home/.pi/extensions/$dn/index.ts"
 			else
 				# Search recursively in category subdirectories
 				local found=""
@@ -159,7 +173,7 @@ run_pi_and_check() {
 						cp "$found" "$test_home/.pi/extensions/$dn.ts"
 					fi
 				else
-					echo "WARNING: dependency '$dn' not found in extensions/ (including subdirectories)"
+					echo "WARNING: dependency '$dn' not found in extensions/ (including subdirectories) or test/helpers/"
 				fi
 			fi
 		done
@@ -177,11 +191,36 @@ run_pi_and_check() {
 	if [[ -f "$test_home/.pi/pi-logger.json" ]]; then
 		cp "$test_home/.pi/pi-logger.json" "$isolated_home/.pi/agent/"
 	fi
-	# 复制 models.json（防止模型配置丢失）
-	local real_home
-	real_home=$(eval echo ~)
-	if [[ -f "$real_home/.pi/agent/models.json" ]]; then
-		cp "$real_home/.pi/agent/models.json" "$isolated_home/.pi/agent/" 2>/dev/null || true
+
+	# 模型配置：CI 模式下创建最小配置，否则复制用户配置
+	# 初始模型使用 mock-llm 相同 provider，避免启动时未注册 provider 警告
+	# mock-llm 扩展加载后会在 session_start 通过 pi.setModel() 切换到 faux core
+	if [[ "$PI_CI_MODE" == true ]]; then
+		cat >"$isolated_home/.pi/agent/models-store.json" <<-CIEOF
+			{
+			  "mock-llm": {
+			    "models": [
+			      {
+			        "id": "mock-model-1",
+			        "name": "Mock Model (CI)",
+			        "api": "openai-completions",
+			        "provider": "mock-llm",
+			        "apiKey": "ci-noop-key",
+			        "baseUrl": "http://localhost:0"
+			      }
+			    ],
+			    "default": "mock-model-1"
+			  }
+			}
+		CIEOF
+	else
+		local real_home
+		real_home=$(eval echo ~)
+		if [[ -f "$real_home/.pi/agent/models-store.json" ]]; then
+			cp "$real_home/.pi/agent/models-store.json" "$isolated_home/.pi/agent/" 2>/dev/null || true
+		elif [[ -f "$real_home/.pi/agent/models.json" ]]; then
+			cp "$real_home/.pi/agent/models.json" "$isolated_home/.pi/agent/" 2>/dev/null || true
+		fi
 	fi
 
 	local padded

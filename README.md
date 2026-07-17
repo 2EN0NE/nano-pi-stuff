@@ -1,5 +1,7 @@
 # Agent Stuff
 
+[![CI](https://github.com/2EN0NE/nano-pi-stuff/actions/workflows/ci.yml/badge.svg)](https://github.com/2EN0NE/nano-pi-stuff/actions/workflows/ci.yml)
+
 > 这个仓库是我在不同项目里复用的 Pi 代理资源集合。
 
 ## 🚀 快速开始
@@ -55,6 +57,53 @@ npx tsx scripts/sync-to-local-pi.ts --profile user-install
 ```bash
 pi
 ```
+
+## 🧪 测试
+
+工程提供两层测试框架：
+
+### bash e2e 测试（全量覆盖）
+
+```bash
+# 运行指定扩展的 e2e 测试
+bash test/scripts/run-e2e.sh --ext pi-logger
+
+# 运行指定技能的 e2e 测试
+bash test/scripts/run-e2e.sh --skill e2e-test
+
+# CI 模式（自动注入 mock-llm，无需 API Key）
+CI=true bash test/scripts/run-e2e.sh --ext btw
+```
+
+### Vitest 结构化测试（推荐新扩展）
+
+```bash
+npm test           # 运行一次
+npm run test:watch # 监听模式
+npm run test:ci    # CI 模式（输出 JUnit XML）
+```
+
+测试结果统一存放于 `test/results/`，CI 中自动上传为 artifact。
+
+## 🔄 CI 与 Git Hooks
+
+### CI Pipeline
+
+在 GitHub Actions（`.github/workflows/ci.yml`）中自动运行：
+
+| Job        | 检查项         | 是否阻塞   |
+| ---------- | -------------- | ---------- |
+| Prettier   | 格式检查       | ✅ 必过    |
+| TypeScript | 类型检查       | ❌ 参考    |
+| ESLint     | 代码风格       | ❌ 参考    |
+| Semgrep    | SAST 安全扫描  | ERROR 阻塞 |
+| E2E Tests  | 端到端集成测试 | ❌ 参考    |
+
+所有 e2e 测试在 CI 中使用 mock-llm 自动注入，无需 API Key。
+
+### Pre-push Hook
+
+推送时自动检测变更的扩展/技能并运行对应 e2e 测试（`.husky/pre-push`）。advisory 模式，不阻塞推送。
 
 ## 📦 同步脚本
 

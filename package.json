@@ -52,9 +52,11 @@
 		"js-yaml": "^5.2.1",
 		"lint-staged": "^17.0.7",
 		"prettier": "^3.9.5",
-		"tsx": "^4.23.1"
+		"tsx": "^4.23.1",
+		"vitest": "^4.1.10"
 	},
 	"scripts": {
+		"prepare": "husky",
 		"lint": "eslint .",
 		"lint:staged": "lint-staged",
 		"lint:fix": "eslint . --fix",
@@ -63,6 +65,10 @@
 		"typecheck": "tsc --noEmit",
 		"semgrep": "semgrep --config .semgrep.yml --exclude 'node_modules/**' --exclude '.pi/**' --exclude '.git/**' --metrics=off --no-git-ignore",
 		"semgrep:ci": "npm run semgrep -- --severity ERROR --severity WARNING",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:ci": "CI=true vitest run --reporter default --reporter junit",
+		"e2e": "bash test/scripts/run-e2e.sh",
 		"check": "npm run format:check && npm run typecheck && npm run semgrep:ci && npm run lint"
 	},
 	"lint-staged": {

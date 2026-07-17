@@ -1,10 +1,19 @@
 /**
- * Mock LLM Provider — ci-watch 测试辅助扩展（已弃用）
+ * Mock LLM Provider — 共享测试辅助扩展
  *
- * ⚠️ 此文件不再被 ci-watch smoke.test.sh 引用。
- * 共享版本位于 test/helpers/mock-llm.ts，所有新测试应使用共享版本。
+ * 注册虚假 LLM provider，使 pi 无需真实 API Key 即可启动，
+ * 让扩展的 session_start / 命令注册等流程可以完整执行。
  *
- * 保留此文件仅作历史参考。
+ * 默认回复："Mock LLM is ready."
+ *
+ * 使用方式（在 smoke.test.sh 中）：
+ *   run_pi_and_check --extensions "mock-llm,目标扩展" --prompt "hi"
+ *
+ * 通过在依赖列表中列出 "mock-llm" 即可自动纳入沙箱。
+ * （run_pi_and_check 会从 test/helpers/ 搜索扩展文件）。
+ *
+ * 注意：同时通过 pi.registerProvider() 和 registerFauxProvider() 双重注册，
+ * 确保 ctx.modelRegistry 能找到 mock 模型。
  */
 
 import { registerFauxProvider, fauxAssistantMessage } from '@earendil-works/pi-ai';
@@ -19,9 +28,10 @@ export default function (pi: ExtensionAPI) {
 		models: [{ id: MOCK_MODEL_ID, name: 'Mock Model' }],
 	});
 
+	// 默认回复
 	faux.setResponses([fauxAssistantMessage('Mock LLM is ready.')]);
 
-	// 通过 Extension API 双重注册，确保 ctx.modelRegistry 可找到 mock 模型
+	// 通过 Extension API 再次注册，确保 ctx.modelRegistry 可找到 mock 模型
 	// faux.api 包含动态生成的 UUID（如 faux:1234567890:xxxx），必须用于 api 字段
 	// 类型标注用 any 绕过 pi-ai 与 pi-coding-agent 的类型版本差异
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any

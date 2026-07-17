@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # ci-watch 扩展 e2e 测试（使用 mock LLM）
 #
-# 使用 mock-llm（test/extensions/ci-watch/helpers/mock-llm.ts）模拟 LLM 回复，
+# 使用 mock-llm（共享版本 test/helpers/mock-llm.ts）模拟 LLM 回复，
 # 无需真实 API Key，让 pi 完整启动、加载扩展、处理会话。
 #
 # 运行：bash test/scripts/run-e2e.sh --ext ci-watch
@@ -30,9 +30,9 @@ setup_sandbox() {
 	cp -r "$ROOT_DIR/extensions/meta/pi-logger" \
 		"$test_home/.pi/extensions/pi-logger"
 
-	# mock-llm：在 test/ 下，需手动拷贝到 .pi/extensions/ 下
+	# mock-llm：引用共享版本（test/helpers/mock-llm.ts）
 	mkdir -p "$test_home/.pi/extensions/mock-llm"
-	cp "$ROOT_DIR/test/extensions/ci-watch/helpers/mock-llm.ts" \
+	cp "$ROOT_DIR/test/helpers/mock-llm.ts" \
 		"$test_home/.pi/extensions/mock-llm/index.ts"
 
 	# pi-logger 配置

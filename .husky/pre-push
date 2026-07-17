@@ -1,0 +1,86 @@
+#!/bin/sh
+# ──────────────────────────────────────────────────────────────────────────────
+# pre-push hook: 推送前对已变更的扩展/技能运行 e2e 测试
+# ──────────────────────────────────────────────────────────────────────────────
+# 通过 git diff --name-only 检测本次推送变更的模块，仅运行受影响模块的测试。
+# 如果变更覆盖多个模块，最坏情况跑全量测试（耗时可能较长）。
+
+# 切换到 git 根目录，确保相对路径在任何工作目录下都正确
+cd "$(git rev-parse --show-toplevel)" || exit 0
+
+# 只在有变更文件时运行（跳过空推送、标签推送等）
+# 使用 @{push}..HEAD 对比远程跟踪分支，支持多次提交后推送的场景
+# 首次推送或无远程跟踪分支时静默跳过
+CHANGED_FILES=$(git diff --name-only "@{push}..HEAD" 2>/dev/null || echo "")
+
+if [ -z "$CHANGED_FILES" ]; then
+  exit 0
+fi
+
+# 提取变更的扩展名和技能名
+EXTS=""
+SKILLS=""
+for file in $CHANGED_FILES; do
+  case "$file" in
+    extensions/*.ts)
+      # 直接扩展文件：extensions/category/name.ts → name
+      name=$(basename "$file" .ts)
+      EXTS="$EXTS $name"
+      ;;
+    extensions/*/index.ts)
+      # 目录扩展：extensions/category/name/index.ts → name
+      name=$(basename "$(dirname "$file")")
+      EXTS="$EXTS $name"
+      ;;
+    skills/*/SKILL.md)
+      name=$(basename "$(dirname "$file")")
+      SKILLS="$SKILLS $name"
+      ;;
+  esac
+done
+
+# 去重
+EXTS=$(echo "$EXTS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+SKILLS=$(echo "$SKILLS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+
+if [ -z "$EXTS" ] && [ -z "$SKILLS" ]; then
+  # 没有变更涉及的扩展/技能，跳过
+  exit 0
+fi
+
+echo "🔍 pre-push: e2e tests for changed modules..."
+echo "   Extensions:${EXTS:- (none)}"
+echo "   Skills:${SKILLS:- (none)}"
+
+# 逐模块运行测试（不阻塞推送，失败只 warning）
+ALL_PASS=true
+
+for ext in $EXTS; do
+  echo "   → Testing extension: $ext"
+  bash test/scripts/run-e2e.sh --ext "$ext" >/dev/null 2>&1
+  if [ $? -eq 0 ] || [ $? -eq 124 ]; then
+    echo "      ✅ $ext passed"
+  else
+    echo "      ⚠️  $ext has review-required or failed cases"
+    ALL_PASS=false
+  fi
+done
+
+for skill in $SKILLS; do
+  echo "   → Testing skill: $skill"
+  bash test/scripts/run-e2e.sh --skill "$skill" >/dev/null 2>&1
+  if [ $? -eq 0 ] || [ $? -eq 124 ]; then
+    echo "      ✅ $skill passed"
+  else
+    echo "      ⚠️  $skill has review-required or failed cases"
+    ALL_PASS=false
+  fi
+done
+
+if [ "$ALL_PASS" = false ]; then
+  echo "⚠️  Some e2e tests flagged review-required or had failures."
+  echo "   Check test/results/$(ls -1t test/results/ | head -1)/ for details."
+  echo "   (This is advisory — push continues.)"
+fi
+
+exit 0

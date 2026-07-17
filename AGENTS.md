@@ -11,14 +11,11 @@
 
 详见技能 [`e2e-test`](skills/e2e-test/SKILL.md)，测试基础设施在 [`test/`](test/)。
 
-简要流程：
+测试框架有两个途径：
 
-1. 用 `bash test/scripts/run-e2e.sh --ext <name>` 或 `--skill <name>` 执行对应模块测试
-2. 查看 `test/results/<latest>/summary.md` 了解测试结果
-3. 对标记为 `[REVIEW]` 的用例，逐条读取日志进行 AI 衡量（≤20 条全部判断，>20 条需用户手动比对）
-4. 确认所有用例通过或已了解非标结果后，再将插件根据sync-to-local-pi脚本同步到该去的地方，以便用户能够测试，最后才告知用户"已完成"
+#### 路径 A：bash e2e 测试（run-e2e.sh）
 
-常用命令：
+传统 bash 测试，涵盖所有扩展和技能。
 
 ```bash
 # 运行测试
@@ -26,21 +23,57 @@ bash test/scripts/run-e2e.sh --ext pi-logger
 bash test/scripts/run-e2e.sh --skill e2e-test
 bash test/scripts/run-e2e.sh              # 全部模块
 
+# CI 模式（自动注入 mock-llm，无需 API Key）
+CI=true bash test/scripts/run-e2e.sh --ext pi-logger
+
 # 查看最新结果
 LATEST=$(ls -1t test/results/ | head -1)
 cat test/results/$LATEST/summary.md
-
-# 查看单条用例详情
 cat test/results/$LATEST/cases/*.log
 
 # 快速手动验证
 pi -a --no-session -e ./extensions/foo.ts -p "test prompt"
 ```
 
+#### 路径 B：Vitest 结构化测试（推荐用于新扩展）
+
+基于 TypeScript 的结构化测试，速度更快，可并行。
+
+```bash
+# 运行全部 Vitest 测试
+npm test
+
+# 监听模式（开发使用）
+npm run test:watch
+
+# CI 模式下输出 JUnit XML
+npm run test:ci
+```
+
+Vitest 测试文件在 `test/vitest/extensions/<name>.test.ts` 中。编写示例见 [`test/vitest/extensions/pi-logger.test.ts`](test/vitest/extensions/pi-logger.test.ts)。
+
+#### 验证流程
+
+1. 确定变更影响范围（扩展/技能/基础设施）
+2. 运行对应测试（`run-e2e.sh` 或 `npm test`）
+3. 查看结果汇总，对 `[REVIEW]` 用例逐条 AI 衡量（≤20 条全量，>20 条建议手动）
+4. 确认所有用例通过后，同步到用户目录，再告知完成
+
 正例：运行 run-e2e.sh → 查看 summary → 衡量 REVIEW 用例 → 确认通过后告知完成。
 反例：修改完代码直接告知完成，无真实测试验证。
 
 详情和完整流程见 [`skills/e2e-test/SKILL.md`](skills/e2e-test/SKILL.md)。
+
+#### Pre-push Hook
+
+推送时自动运行变更模块的 e2e 测试（`.husky/pre-push`）：
+
+```bash
+# 修改 extensions/auto/loop.ts → 推送前自动运行:
+bash test/scripts/run-e2e.sh --ext loop
+```
+
+Hook 是 advisory 模式，不会阻塞推送。
 
 ## 扩展开发
 
