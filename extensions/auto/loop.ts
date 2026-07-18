@@ -1,9 +1,9 @@
 /**
- * Loop Extension
+ * Loop 扩展
  *
- * Provides a /loop command that starts a follow-up loop with a breakout condition.
- * The loop keeps sending a prompt on turn end until the agent calls the
- * signal_loop_success tool.
+ * 提供 /loop 命令，启动一个带有跳出条件的持续跟进循环。
+ * 该循环在每个 turn 结束时持续发送提示词，直到 agent 调用
+ * signal_loop_success 工具。
  */
 
 import { Type } from 'typebox';
@@ -39,30 +39,30 @@ const LOOP_STATE_ENTRY = 'loop-state';
 
 const HAIKU_MODEL_ID = 'claude-haiku-4-5';
 
-const SUMMARY_SYSTEM_PROMPT = `You summarize loop breakout conditions for a status widget.
-Return a concise phrase (max 6 words) that says when the loop should stop.
-Use plain text only, no quotes, no punctuation, no prefix.
+const SUMMARY_SYSTEM_PROMPT = `你为状态小部件总结循环的跳出条件。
+返回一个简短的短语（最多 6 个字），说明循环应该在何时停止。
+仅使用纯文本，不要引号、标点或前缀。
 
-Form should be "breaks when ...", "loops until ...", "stops on ...", "runs until ...", or similar.
-Use the best form that makes sense for the loop condition.
+形式可以是"条件满足时跳出"、"当……时停止"、"直到……时结束"等类似表达。
+选择最适合循环条件的表达方式。
 `;
 
 function buildPrompt(mode: LoopMode, condition?: string): string {
 	switch (mode) {
 		case 'tests':
 			return (
-				'Run all tests. If they are passing, call the signal_loop_success tool. ' +
-				'Otherwise continue until the tests pass.'
+				'运行所有测试。如果全部通过，则调用 signal_loop_success 工具。' +
+				'否则继续直到测试全部通过。'
 			);
 		case 'custom': {
-			const customCondition = condition?.trim() || 'the custom condition is satisfied';
+			const customCondition = condition?.trim() || '自定义条件已满足';
 			return (
-				`Continue until the following condition is satisfied: ${customCondition}. ` +
-				'When it is satisfied, call the signal_loop_success tool.'
+				`继续直到以下条件满足：${customCondition}。` +
+				'条件满足时，调用 signal_loop_success 工具。'
 			);
 		}
 		case 'self':
-			return 'Continue until you are done. When finished, call the signal_loop_success tool.';
+			return '继续直到你完成工作。完成后，调用 signal_loop_success 工具。';
 	}
 }
 
@@ -149,7 +149,7 @@ async function summarizeBreakoutCondition(
 
 function getCompactionInstructions(mode: LoopMode, condition?: string): string {
 	const conditionText = getConditionText(mode, condition);
-	return `Loop active. Breakout condition: ${conditionText}. Preserve this loop state and breakout condition in the summary.`;
+	return `循环处于激活状态。跳出条件：${conditionText}。请在摘要中保留此循环状态和跳出条件。`;
 }
 
 function updateStatus(ctx: ExtensionContext, state: LoopStateData): void {
