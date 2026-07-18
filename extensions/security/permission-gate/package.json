@@ -1,0 +1,17 @@
+{
+	"name": "@zenone/pi-permission-gate",
+	"version": "2.0.0",
+	"description": "Permission Gate — 危险命令拦截与动态策略自动放行控制面板",
+	"type": "module",
+	"pi": {
+		"extensions": [
+			"./index.ts"
+		]
+	},
+	"keywords": [
+		"pi-extension",
+		"permission",
+		"security",
+		"gate"
+	]
+}
