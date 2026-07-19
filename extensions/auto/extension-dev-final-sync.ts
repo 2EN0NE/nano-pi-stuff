@@ -2,7 +2,11 @@
  * Extension Dev Final Sync
  *
  * 自动同步扩展：在每轮 agent 对话结束后（agent_end），检测 extensions/ 目录下的文件变更。
- * 如果变更涉及扩展插件的修改，且通过 TypeScript 编译检查，则自动同步到 ./.pi/extensions/。
+ * 如果变更涉及扩展插件的修改，且通过 TypeScript 编译检查，则自动同步到目标目录。
+ * 目标决策：检查用户级 ~/.pi/agent/extensions/ 和项目级 ./.pi/extensions/ 中扩展的存在情况。
+ * - 两者都有 → 都更新
+ * - 只有一个有 → 更新对应的
+ * - 都没有 → 放到项目级
  *
  * 原理：
  * 1. agent_end 事件 → 对话结束
@@ -31,13 +35,14 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
 const log = createLogger('extension-dev-final-sync');
 
 /** 同步进行中的保护锁，防止 agent_end → 同步 → 触发其他事件 → 再进 agent_end 的重入 */
 let syncingInProgress = false;
 
-/** 累计是否有 @zenone/* 包注册到 .pi/package.json，需要在同步完成后运行一次根 npm install */
-let pendingPiRootInstall = false;
+/** 累计哪些 pi 根目录注册了 @zenone/* 本地包，需要在同步完成后对每个目录运行根 npm install */
+const pendingPiRootDirs = new Set<string>();
 
 /**
  * 查找扩展文件在项目中的路径
@@ -64,6 +69,65 @@ function findExtensionPath(ctx: ExtensionContext, extName: string): string | nul
 	}
 
 	return null;
+}
+
+/**
+ * 检查扩展是否存在于指定的扩展根目录中
+ * 支持单文件 (.ts/.tsx) 和目录 (index.ts/.tsx) 两种形式
+ */
+function extensionExistsInDir(extDir: string, extName: string): boolean {
+	return (
+		existsSync(join(extDir, `${extName}.ts`)) ||
+		existsSync(join(extDir, `${extName}.tsx`)) ||
+		existsSync(join(extDir, extName, 'index.ts')) ||
+		existsSync(join(extDir, extName, 'index.tsx'))
+	);
+}
+
+/**
+ * 解析同步目标根目录路径列表及其人类可读标签
+ *
+ * 返回结构：
+ * - roots：同步目标根目录列表（用户级和/或项目级）
+ * - label：人类可读的标签（用于通知消息，如 "用户级 + 项目级"）
+ *
+ * 策略：
+ * 1. 检查用户级 ~/.pi/agent/extensions/ 和项目级 ./.pi/extensions/ 中扩展的存在情况
+ * 2. 如果两者都有该扩展 → 返回两者（都更新）
+ * 3. 如果只有其中一个有 → 只更新对应的目录
+ * 4. 如果都没有 → 返回项目级目录（默认放置位置）
+ */
+function resolveSyncTargets(
+	extName: string,
+	ctx: ExtensionContext,
+): { roots: string[]; label: string } {
+	const userExtDir = join(homedir(), '.pi', 'agent', 'extensions');
+	const projectExtDir = join(ctx.cwd, '.pi', 'extensions');
+
+	const hasUser = extensionExistsInDir(userExtDir, extName);
+	const hasProject = extensionExistsInDir(projectExtDir, extName);
+
+	if (hasUser && hasProject) {
+		log.info(
+			`Extension "${extName}" found in both user (~/.pi/agent/extensions/) and project (.pi/extensions/) — updating both`,
+		);
+		return { roots: [userExtDir, projectExtDir], label: '用户级 + 项目级' };
+	}
+	if (hasUser) {
+		log.info(
+			`Extension "${extName}" found in user (~/.pi/agent/extensions/) only — updating user`,
+		);
+		return { roots: [userExtDir], label: '用户级 (~/.pi/agent/extensions/)' };
+	}
+	if (hasProject) {
+		log.info(
+			`Extension "${extName}" found in project (.pi/extensions/) only — updating project`,
+		);
+		return { roots: [projectExtDir], label: '项目级 (.pi/extensions/)' };
+	}
+
+	log.info(`Extension "${extName}" not found in either — placing in project (.pi/extensions/)`);
+	return { roots: [projectExtDir], label: '项目级 (.pi/extensions/)' };
 }
 
 /**
@@ -231,23 +295,20 @@ function checkExtensionForErrors(
 const IGNORE_DIRS = new Set(['node_modules', '.git', '.svn', '.hg']);
 
 /**
- * 解析扩展源信息：确定扩展类型（单文件/目录/npm包）和源/目标路径
+ * 解析扩展源信息：确定扩展类型（单文件/目录/npm包）和源路径
  *
- * 返回联合类型区分两种场景：
- * - type === 'file'      → targetFile 是 .ts 文件路径
- * - type === 'directory' → targetDir  是目标目录路径
+ * 目标路径不再在此计算，由 syncExtension 根据 resolveSyncTargets 返回的根目录列表动态构造。
+ *
+ * 返回类型：
+ * - type === 'file'      → sourcePath 指向 .ts(x) 文件
+ * - type === 'directory' → sourcePath 指向扩展目录（含 index.ts 的目录）
  */
 function resolveExtensionSource(
 	extName: string,
 	ctx: ExtensionContext,
-):
-	| { type: 'file'; sourcePath: string; targetFile: string }
-	| { type: 'directory'; sourcePath: string; targetDir: string }
-	| null {
+): { type: 'file'; sourcePath: string } | { type: 'directory'; sourcePath: string } | null {
 	const extPath = findExtensionPath(ctx, extName);
 	if (!extPath) return null;
-
-	const targetRoot = join(ctx.cwd, '.pi', 'extensions');
 
 	// 判断是否为目录扩展：extPath 指向分类子目录下的 {extName}/index.ts(x)
 	// 例如 extensions/meta/worktree/index.ts → 源目录为 extensions/meta/worktree/
@@ -262,7 +323,6 @@ function resolveExtensionSource(
 		return {
 			type: 'directory',
 			sourcePath: expectedDir,
-			targetDir: join(targetRoot, extName),
 		};
 	}
 
@@ -270,7 +330,6 @@ function resolveExtensionSource(
 	return {
 		type: 'file',
 		sourcePath: extPath,
-		targetFile: join(targetRoot, `${extName}.ts`),
 	};
 }
 
@@ -334,73 +393,71 @@ async function runNpmInstall(
 }
 
 /**
- * 将 @zenone/* 本地包注册到 .pi/package.json 的 dependencies 中
+ * 将 @zenone/* 本地包注册到指定 pi 根目录的 package.json 中
+ *
+ * @param extName - 扩展名（用作相对路径目录名）
+ * @param pkgName - @zenone/* 包名
+ * @param piDir   - pi 根目录（~/.pi/agent/ 或 ./.pi/）
  */
-function registerLocalPackage(extName: string, pkgName: string, ctx: ExtensionContext): void {
-	const rootPkgPath = join(ctx.cwd, '.pi', 'package.json');
-	if (!existsSync(rootPkgPath)) {
-		log.debug('No .pi/package.json found, skipping local package registration');
+function registerLocalPackageAtRoot(extName: string, pkgName: string, piDir: string): void {
+	const pkgFilePath = join(piDir, 'package.json');
+	if (!existsSync(pkgFilePath)) {
+		log.debug(`No package.json found at ${piDir}, skipping local package registration`);
 		return;
 	}
 
 	try {
-		const raw = readFileSync(rootPkgPath, 'utf8');
+		const raw = readFileSync(pkgFilePath, 'utf8');
 		const pkg = JSON.parse(raw);
 		if (!pkg.dependencies) pkg.dependencies = {};
 
 		if (!pkg.dependencies[pkgName]) {
 			pkg.dependencies[pkgName] = `./extensions/${extName}`;
-			writeFileSync(rootPkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
-			log.info(`Registered ${pkgName} → ./extensions/${extName} in .pi/package.json`);
+			writeFileSync(pkgFilePath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+			log.info(`Registered ${pkgName} → ./extensions/${extName} in ${pkgFilePath}`);
 		}
 	} catch (err) {
-		log.error('Failed to update .pi/package.json', { error: String(err) });
+		log.error('Failed to update package.json at ' + pkgFilePath, { error: String(err) });
 	}
 }
 
 /**
- * 同步扩展到目标目录（.pi/extensions/）
+ * 将扩展同步到单个目标根目录
  *
- * 自包含实现，不依赖 sync-to-local-pi.ts 脚本：
- * 1. 解析扩展类型（单文件/目录）和源路径
- * 2. 拷贝源文件到 .pi/extensions/{name}
- * 3. 对于目录扩展：读取 package.json，注册 @zenone/* 本地依赖，运行 npm install
- * 4. 注册 @zenone/* 时标记 pendingPiRootInstall，待同步完成后再在 .pi/ 根目录运行 npm install
- *
- * ⚠ 不会删除 .pi/extensions/ 中其他已有扩展（无 stale deletion）
+ * @param sourceInfo - 扩展源信息（类型 + 源路径）
+ * @param targetRoot - 目标根目录（~/.pi/agent/extensions/ 或 ./.pi/extensions/）
+ * @param extName    - 扩展名
+ * @param pi         - ExtensionAPI 引用
+ * @param ctx        - ExtensionContext 引用
+ * @returns 同步是否成功
  */
-async function syncExtension(
+async function syncToTargetRoot(
+	sourceInfo: { type: 'file'; sourcePath: string } | { type: 'directory'; sourcePath: string },
+	targetRoot: string,
 	extName: string,
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
 ): Promise<boolean> {
-	// 1. 解析扩展源信息
-	const info = resolveExtensionSource(extName, ctx);
-	if (!info) {
-		log.error(`Cannot find extension source for "${extName}"`);
-		return false;
-	}
-
 	try {
-		// 2. 拷贝文件
-		if (info.type === 'file') {
-			mkdirSync(dirname(info.targetFile), { recursive: true });
-			cpSync(info.sourcePath, info.targetFile, { force: true });
-			log.info(`Synced file extension "${extName}" → ${info.targetFile}`);
+		if (sourceInfo.type === 'file') {
+			const targetFile = join(targetRoot, `${extName}.ts`);
+			mkdirSync(dirname(targetFile), { recursive: true });
+			cpSync(sourceInfo.sourcePath, targetFile, { force: true });
+			log.info(`Synced file extension "${extName}" → ${targetFile}`);
 			return true;
 		}
 
 		// 以下为 directory 类型
-		const targetDir = info.targetDir;
+		const targetDir = join(targetRoot, extName);
 		log.info(`Syncing directory extension "${extName}" → ${targetDir}`);
 
 		// 先清空目标再拷贝（避免残留旧文件）
 		if (existsSync(targetDir)) {
 			rmSync(targetDir, { recursive: true, force: true });
 		}
-		copyDirRecursive(info.sourcePath, targetDir);
+		copyDirRecursive(sourceInfo.sourcePath, targetDir);
 
-		// 3. 读取 package.json（如果有），处理 @zenone/* 本地包注册
+		// 读取 package.json（如果有），处理 @zenone/* 本地包注册
 		const pkgPath = join(targetDir, 'package.json');
 		if (existsSync(pkgPath)) {
 			let pkg: Record<string, unknown> = {};
@@ -412,20 +469,23 @@ async function syncExtension(
 
 			const pkgName = pkg.name as string | undefined;
 
-			// 任何 name 以 @zenone/ 开头的目录扩展，都注册到 .pi/package.json
-			// （不依赖 pi 字段，pi-logger 等基础设施包也需要注册）
+			// 任何 name 以 @zenone/ 开头的目录扩展，都在对应 pi 根目录的 package.json 中注册
+			// 用户级 → ~/.pi/agent/package.json，项目级 → ./.pi/package.json
 			if (pkgName && typeof pkgName === 'string' && pkgName.startsWith('@zenone/')) {
-				registerLocalPackage(extName, pkgName, ctx);
-				pendingPiRootInstall = true;
+				const piDir = dirname(targetRoot);
+				registerLocalPackageAtRoot(extName, pkgName, piDir);
+				pendingPiRootDirs.add(piDir);
 			}
 
-			// 4. 有依赖就运行 npm install（安装扩展自身的 npm 依赖）
+			// 有依赖就运行 npm install（安装扩展自身的 npm 依赖）
 			if (hasDependencies(targetDir)) {
 				const ok = await runNpmInstall(targetDir, pi, ctx);
 				if (!ok) {
-					log.error(
-						`npm install failed for "${extName}" — sync aborted, deps not available`,
-					);
+					log.error(`npm install failed for "${extName}" — cleaning up and aborting`);
+					// 清除已落地的拷贝文件，避免留下破损扩展
+					if (existsSync(targetDir)) {
+						rmSync(targetDir, { recursive: true, force: true });
+					}
 					return false;
 				}
 			}
@@ -437,6 +497,48 @@ async function syncExtension(
 		log.error(`Sync failed for "${extName}"`, { error: String(err) });
 		return false;
 	}
+}
+
+/**
+ * 同步扩展到目标目录
+ *
+ * 自包含实现，不依赖 sync-to-local-pi.ts 脚本：
+ * 1. 解析扩展类型（单文件/目录）和源路径
+ * 2. 调用 resolveSyncTargets 确定目标根目录列表
+ * 3. 遍历每个目标根目录，执行拷贝、npm install、依赖注册
+ *
+ * 目标决策：
+ * - 用户级 (~/.pi/agent/extensions/) 和项目级 (.pi/extensions/) 都有的 → 两者都更新
+ * - 只有其中一个有 → 只更新存在的
+ * - 都没有 → 放到项目级
+ *
+ * ⚠ 不会删除目标中其他已有扩展（无 stale deletion）
+ *
+ * @returns 是否所有目标都同步成功
+ */
+async function syncExtension(
+	extName: string,
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+): Promise<boolean> {
+	// 1. 解析扩展源信息
+	const sourceInfo = resolveExtensionSource(extName, ctx);
+	if (!sourceInfo) {
+		log.error(`Cannot find extension source for "${extName}"`);
+		return false;
+	}
+
+	// 2. 解析目标根目录列表
+	const { roots: targetRoots } = resolveSyncTargets(extName, ctx);
+
+	// 3. 遍历同步每个目标
+	let allOk = true;
+	for (const targetRoot of targetRoots) {
+		const ok = await syncToTargetRoot(sourceInfo, targetRoot, extName, pi, ctx);
+		if (!ok) allOk = false;
+	}
+
+	return allOk;
 }
 
 /**
@@ -532,15 +634,18 @@ export default function (api: ExtensionAPI): void {
 							}
 						}
 
-						// 5. 如果注册了 @zenone/* 本地包，在 .pi/ 根目录运行 npm install 创建 symlink
-						if (pendingPiRootInstall && synced.length > 0) {
-							const piDir = join(ctx.cwd, '.pi');
-							log.info('Running npm install in .pi/ root for @zenone/* symlinks');
-							const ok = await runNpmInstall(piDir, pi, ctx);
-							if (!ok) {
-								log.error('Root npm install failed — @zenone/* deps not linked');
+						// 5. 如果注册了 @zenone/* 本地包，在每个涉及到的 pi 根目录运行 npm install 创建 symlink
+						if (pendingPiRootDirs.size > 0 && synced.length > 0) {
+							for (const piDir of pendingPiRootDirs) {
+								log.info(`Running npm install in ${piDir} for @zenone/* symlinks`);
+								const ok = await runNpmInstall(piDir, pi, ctx);
+								if (!ok) {
+									log.error(
+										`Root npm install failed at ${piDir} — @zenone/* deps not linked`,
+									);
+								}
 							}
-							pendingPiRootInstall = false;
+							pendingPiRootDirs.clear();
 						}
 
 						// 6. 日志记录
@@ -551,10 +656,16 @@ export default function (api: ExtensionAPI): void {
 							log.warn(`同步失败: ${failed.join(', ')}`);
 						}
 
-						// 7. 构建通知消息
+						// 7. 构建通知消息（含目标位置描述）
 						const parts: string[] = [];
 						if (synced.length > 0) {
-							parts.push(`已同步 ${synced.join(', ')} 到 ./.pi/extensions/`);
+							const targetLabels = synced
+								.map((name) => {
+									const { label } = resolveSyncTargets(name, ctx);
+									return `${name} → ${label}`;
+								})
+								.join('，');
+							parts.push(`已同步 ${targetLabels}`);
 						}
 						if (failed.length > 0) {
 							parts.push(`${failed.join(', ')} 同步失败（见日志）`);
