@@ -128,14 +128,6 @@ describe('getDefaultConfig', () => {
 		expect(config.dynamicPolicy.thresholds.sameTool).toBe(3);
 		expect(config.dynamicPolicy.thresholds.sameFolder).toBe(4);
 		expect(config.dynamicPolicy.scope).toBe('.');
-		expect(config.approvalCounts).toEqual({});
-	});
-
-	it('returns a deep clone (mutations do not affect defaults)', () => {
-		const c1 = getDefaultConfig();
-		const c2 = getDefaultConfig();
-		c1.approvalCounts['test'] = 42;
-		expect(c2.approvalCounts).toEqual({});
 	});
 
 	it('has dangerous patterns that match expected commands', () => {

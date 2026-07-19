@@ -31,6 +31,7 @@ import {
 	makeToolKey,
 	saveConfig,
 } from './config.js';
+import { loadRecords, appendRecord, resetRecords } from './records.js';
 
 // ============================================================================
 // Module-level state
@@ -38,6 +39,7 @@ import {
 
 const log = createLogger('permission-gate');
 let _config: PermissionGateConfig = getDefaultConfig();
+let _counts: Record<string, number> = {};
 
 // ============================================================================
 // Helpers
@@ -196,9 +198,9 @@ function checkThreshold(
 	toolName: string,
 	targetDir: string,
 	config: PermissionGateConfig,
+	counts: Record<string, number>,
 ): { pass: boolean; dimension: string | null } {
 	const thresholds = config.dynamicPolicy.thresholds;
-	const counts = config.approvalCounts;
 
 	// 1. sameCommand 检查
 	const cmdKey = makeCommandKey(command);
@@ -236,15 +238,6 @@ function checkThreshold(
 		thresholds.sameFolder,
 	);
 	return { pass: false, dimension: null };
-}
-
-/**
- * 更新计数并持久化。
- */
-function incrementCountAndSave(key: string, cwd: string): void {
-	_config.approvalCounts[key] = (_config.approvalCounts[key] ?? 0) + 1;
-	// 保存到项目级
-	saveConfig(cwd, _config, 'project');
 }
 
 // ============================================================================
@@ -293,7 +286,7 @@ async function handleToolCall(
 
 		// 范围检查：cwd + 目标路径都在 scope 内
 		if (isInScope(command, ctx.cwd, scope)) {
-			const thresholdResult = checkThreshold(command, toolName, targetDir, _config);
+			const thresholdResult = checkThreshold(command, toolName, targetDir, _config, _counts);
 
 			if (thresholdResult.pass) {
 				// 自动放行：更新该维度的计数
@@ -311,7 +304,19 @@ async function handleToolCall(
 					default:
 						key = makeCommandKey(command);
 				}
-				incrementCountAndSave(key, ctx.cwd);
+				// Append approval record & update counts
+				appendRecord(
+					ctx.cwd,
+					{
+						ts: new Date().toISOString(),
+						cmd: command,
+						tool: toolName,
+						dir: targetDir,
+						dim: thresholdResult.dimension as 'sameCommand' | 'sameTool' | 'sameFolder',
+						action: 'auto',
+					},
+					_counts,
+				);
 
 				log.info('Auto-approved (%s): %s', thresholdResult.dimension, command.slice(0, 80));
 				// 添加提示到 command
@@ -343,14 +348,19 @@ async function handleToolCall(
 	if (allowed) {
 		log.info('User allowed: %s', command.slice(0, 80));
 
-		// 批量更新三维度计数 + 一次写入（避免三次全量 I/O）
-		const cmdKey = makeCommandKey(command);
-		const toolKey = makeToolKey(toolName);
-		const folderKey = makeFolderKey(targetDir);
-		_config.approvalCounts[cmdKey] = (_config.approvalCounts[cmdKey] ?? 0) + 1;
-		_config.approvalCounts[toolKey] = (_config.approvalCounts[toolKey] ?? 0) + 1;
-		_config.approvalCounts[folderKey] = (_config.approvalCounts[folderKey] ?? 0) + 1;
-		saveConfig(ctx.cwd, _config, 'project');
+		// Append approval record & update counts
+		appendRecord(
+			ctx.cwd,
+			{
+				ts: new Date().toISOString(),
+				cmd: command,
+				tool: toolName,
+				dir: targetDir,
+				dim: 'sameCommand',
+				action: 'confirmed',
+			},
+			_counts,
+		);
 
 		event.input.command = `echo "✓ User approved: ${summary.replace(/"/g, '\\"')}"\n${command}`;
 		return undefined;
@@ -394,14 +404,14 @@ async function handlePermissionGateCommand(
 }
 
 /**
- * 按动态策略维度汇总 approvalCounts，返回可读字符串。
+ * 按动态策略维度汇总 _counts，返回可读字符串。
  * 如 "Cmd:5 · Tool:3 · Dir:7 — 15 entries"
  */
 function summarizeApprovalCounts(): string {
 	let cmd = 0;
 	let tool = 0;
 	let dir = 0;
-	for (const key of Object.keys(_config.approvalCounts)) {
+	for (const key of Object.keys(_counts)) {
 		if (key.startsWith('cmd:')) cmd++;
 		else if (key.startsWith('tool:')) tool++;
 		else if (key.startsWith('dir:')) dir++;
@@ -411,17 +421,16 @@ function summarizeApprovalCounts(): string {
 	return `Cmd:${cmd} · Tool:${tool} · Dir:${dir} — ${total} entries`;
 }
 
-
 /**
  * 计算各维度尚未达阈值的最高计数，并拼接为进度字符串。
  * 如 "[cmd:2/2,tool:1/3,folder:2/4]"
  * 各维度遍历计数中未超过阈值的最高值展示；
- * 若无任何记录则显示 0/threshold。
+ * 计数为 0 的维度不展示，如 "cmd:2/2,folder:2/4"（tool 无记录）。
  */
 function calcDynamicProgress(): string {
 	if (!_config.dynamicPolicyEnabled) return '';
 
-	const counts = _config.approvalCounts;
+	const counts = _counts;
 	const th = _config.dynamicPolicy.thresholds;
 
 	// 命令维度：找未达阈值的最高 cmd 计数
@@ -451,7 +460,13 @@ function calcDynamicProgress(): string {
 		}
 	}
 
-	return `[cmd:${bestCmd}/${th.sameCommand},tool:${bestTool}/${th.sameTool},folder:${bestFolder}/${th.sameFolder}]`;
+	// 仅拼接有记录的维度
+	const parts: string[] = [];
+	if (bestCmd > 0) parts.push(`cmd:${bestCmd}/${th.sameCommand}`);
+	if (bestTool > 0) parts.push(`tool:${bestTool}/${th.sameTool}`);
+	if (bestFolder > 0) parts.push(`folder:${bestFolder}/${th.sameFolder}`);
+
+	return parts.length > 0 ? `[${parts.join(',')}]` : '';
 }
 
 async function showMainMenu(ctx: ExtensionCommandContext): Promise<void> {
@@ -588,8 +603,8 @@ async function showMainMenu(ctx: ExtensionCommandContext): Promise<void> {
 					`This will clear ${summarizeApprovalCounts().toLowerCase()}.`,
 				);
 				if (confirmed) {
-					_config.approvalCounts = {};
-					saveConfig(ctx.cwd, _config, 'project');
+					_counts = {};
+					resetRecords(ctx.cwd);
 					ctx.ui.notify('Approval counts reset', 'info');
 				}
 				break;
@@ -796,6 +811,10 @@ export default function permissionGateExtension(pi: ExtensionAPI) {
 			_config.enabled,
 			_config.dynamicPolicyEnabled,
 		);
+
+		// Load approval records & migrate legacy counts (if any)
+		const result = loadRecords(ctx.cwd);
+		_counts = result.counts;
 
 		// Set status widget
 		if (ctx.hasUI) {

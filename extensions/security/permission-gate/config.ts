@@ -44,8 +44,6 @@ export interface PermissionGateConfig {
 	patterns: string[];
 	/** 动态策略配置 */
 	dynamicPolicy: DynamicPolicyConfig;
-	/** 持久化的放行计数 */
-	approvalCounts: Record<string, number>;
 }
 
 // ============================================================================
@@ -78,7 +76,6 @@ const DEFAULT_CONFIG: PermissionGateConfig = {
 			sameFolder: 4,
 		},
 	},
-	approvalCounts: {},
 };
 
 // ============================================================================
@@ -169,10 +166,6 @@ export function deepMerge(
 					base.dynamicPolicy.thresholds.sameFolder,
 			},
 		},
-		approvalCounts: {
-			...base.approvalCounts,
-			...overrides.approvalCounts,
-		},
 	};
 
 	return result;
@@ -240,7 +233,6 @@ export function saveConfig(
 		dynamicPolicyEnabled: config.dynamicPolicyEnabled,
 		patterns: config.patterns,
 		dynamicPolicy: config.dynamicPolicy,
-		approvalCounts: config.approvalCounts,
 	};
 
 	writeFileSync(filePath, JSON.stringify(output, null, 2) + '\n', 'utf-8');
@@ -287,6 +279,5 @@ export function getDefaultConfig(): PermissionGateConfig {
 			...DEFAULT_CONFIG.dynamicPolicy,
 			thresholds: { ...DEFAULT_CONFIG.dynamicPolicy.thresholds },
 		},
-		approvalCounts: { ...DEFAULT_CONFIG.approvalCounts },
 	};
 }

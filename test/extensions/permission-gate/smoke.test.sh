@@ -202,6 +202,115 @@ test_it "dynamic policy auto-approves when within thresholds" <<'TEST'
     exit 1
   fi
 
+  # 验证：approvals.json 有记录
+  local approvals_file="$test_home/home/.pi/agent/extensions-data/permission-gate/approvals.json"
+  if [[ -f "$approvals_file" ]]; then
+    echo "PASS: approvals.json created"
+    local entry_count
+    entry_count=$(python3 -c "import json; d=json.load(open('$approvals_file')); entries=list(d['projects'].values())[0]['entries']; print(len(entries))" 2>/dev/null)
+    if [[ "$entry_count" -ge 1 ]]; then
+      echo "PASS: approvals.json has $entry_count entries"
+      # 验证字段完整性
+      python3 -c "
+import json
+d=json.load(open('$approvals_file'))
+e=list(d['projects'].values())[0]['entries'][0]
+assert 'ts' in e, 'missing ts'
+assert 'cmd' in e, 'missing cmd'
+assert 'tool' in e, 'missing tool'
+assert 'dir' in e, 'missing dir'
+assert 'dim' in e, 'missing dim'
+assert 'action' in e, 'missing action'
+assert e['action'] == 'auto', f'expected auto, got {e[\"action\"]}'
+assert 'rm' in e['tool'], f'expected rm tool, got {e[\"tool\"]}'
+print('PASS: entry fields complete, action=' + e['action'] + ', tool=' + e['tool'] + ', dim=' + e['dim'])
+" 2>/dev/null || {
+      echo "FAIL: entry fields incomplete"
+      exit 1
+    }
+    else
+      echo "FAIL: approvals.json has no entries"
+      exit 1
+    fi
+  else
+    echo "FAIL: approvals.json NOT created at $approvals_file"
+    exit 1
+  fi
+
+  rm -rf "$test_home" "$ROOT_DIR/.pi/tmp/${slug}"*
+  exit 0
+TEST
+
+# ── 场景 4：审批记录跨 session 累积 ──
+test_it "approval records accumulate across repeated pi invocations" <<'TEST'
+  local slug="e2e-pg-dp4-$$"
+  local test_home="$ROOT_DIR/.pi/tmp/$slug"
+  mkdir -p "$test_home"
+  setup_sandbox "$test_home" auto_approve
+
+  # 第一次运行
+  echo "=== Run 1 ==="
+  run_pi "$test_home" "clean up the temp directory" || true
+
+  # 第二次运行（同一 sandbox，记录应累积）
+  echo "=== Run 2 ==="
+  run_pi "$test_home" "do it again" || true
+
+  dump_perm_logs "$test_home"
+
+  # 验证 approvals.json 有 2 条记录
+  local approvals_file="$test_home/home/.pi/agent/extensions-data/permission-gate/approvals.json"
+  if [[ -f "$approvals_file" ]]; then
+    local entry_count
+    entry_count=$(python3 -c "import json; d=json.load(open('$approvals_file')); entries=list(d['projects'].values())[0]['entries']; print(len(entries))" 2>/dev/null)
+    if [[ "$entry_count" -eq 2 ]]; then
+      echo "PASS: approvals.json has $entry_count entries (accumulated)"
+    else
+      echo "FAIL: expected 2 entries, got $entry_count"
+      python3 -c "import json; print(json.dumps(json.load(open('$approvals_file')), indent=2))" 2>/dev/null
+      exit 1
+    fi
+
+    # 验证两条记录都有正确字段
+    python3 -c "
+import json
+d=json.load(open('$approvals_file'))
+entries=list(d['projects'].values())[0]['entries']
+assert len(entries) == 2, f'expected 2 entries, got {len(entries)}'
+for i, e in enumerate(entries):
+    for field in ('ts','cmd','tool','dir','dim','action'):
+        assert field in e, f'entry {i} missing {field}'
+    assert e['action'] == 'auto', f'entry {i} action={e[\"action\"]}'
+    assert 'rm' in e['tool'], f'entry {i} tool={e[\"tool\"]}'
+# 两条记录时间戳应不同（或至少不同或有先后）
+if entries[0]['ts'] != entries[1]['ts']:
+    print('PASS: two entries have distinct timestamps')
+else:
+    print('WARN: same timestamp (unrealistic but not a bug)')
+print('PASS: both entries valid')
+" 2>/dev/null || {
+      echo "FAIL: entry validation failed"
+      exit 1
+    }
+
+    # 验证 tool:rm 的累积计数
+    python3 -c "
+import json
+d=json.load(open('$approvals_file'))
+entries=list(d['projects'].values())[0]['entries']
+tool_rm_count=sum(1 for e in entries if e['tool']=='rm')
+assert tool_rm_count == 2, f'expected tool:rm count=2, got {tool_rm_count}'
+print(f'PASS: tool:rm accumulated to {tool_rm_count}')
+" 2>/dev/null || {
+      echo "FAIL: tool count accumulation check failed"
+      exit 1
+    }
+
+  else
+    echo "FAIL: approvals.json not found"
+    exit 1
+  fi
+
   rm -rf "$test_home" "$ROOT_DIR/.pi/tmp/${slug}"*
   exit 0
 TEST
