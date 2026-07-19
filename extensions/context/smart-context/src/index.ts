@@ -25,6 +25,40 @@ export default function (pi: ExtensionAPI) {
 	let enabled = true;
 	const debug = process.env.SMART_CONTEXT_DEBUG === '1';
 
+	// ── 首次安装：输出默认配置文件，让用户可以看到完整策略并可编辑 ──
+	pi.on('session_start', async (_event, ctx) => {
+		const cfgPath = configFilePath(ctx.cwd);
+		if (!cfgPath) return;
+		try {
+			const [fs, path] = await Promise.all([import('node:fs'), import('node:path')]);
+			if (!fs.existsSync(cfgPath)) {
+				const defaultCfg = {
+					activeProfile: 'balanced',
+					profiles: {
+						balanced: {
+							classifier: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+							routing: {
+								trivial: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+								simple: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+								medium: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+								complex: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+							},
+							largeContext: {
+								thresholdTokens: 500_000,
+								model: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+							},
+						},
+					},
+				};
+				fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
+				fs.writeFileSync(cfgPath, JSON.stringify(defaultCfg, null, 2) + '\n');
+				log.info('Default config written | path=%s', cfgPath);
+			}
+		} catch (err) {
+			log.warn('Failed to write default config', { error: String(err) });
+		}
+	});
+
 	pi.on('before_agent_start', async (event, ctx) => {
 		if (!enabled) {
 			log.debug('Routing skipped (disabled)');
@@ -32,12 +66,13 @@ export default function (pi: ExtensionAPI) {
 		}
 		try {
 			ctx.ui.setWorkingMessage('Routing...');
-			const model = await router.pick(event.prompt, ctx);
-			if (!model) {
+			const decision = await router.pick(event.prompt, ctx);
+			if (!decision) {
 				log.info('No route — keeping current model');
 				if (debug) ctx.ui.notify('smart-context: no route (keeping current model)', 'info');
 				return;
 			}
+			const { model } = decision;
 			const resolved = ctx.modelRegistry.find(model.provider, model.model);
 			if (!resolved) {
 				log.warn('Route target not found in registry', {
@@ -65,9 +100,16 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 			await pi.setModel(resolved);
-			log.info('Model switched | provider=%s model=%s', model.provider, model.model);
-			if (debug)
-				ctx.ui.notify(`smart-context: routed → ${model.provider}/${model.model}`, 'info');
+			log.info(
+				'Model switched | provider=%s model=%s reason=%s',
+				model.provider,
+				model.model,
+				decision.reason,
+			);
+			ctx.ui.notify(
+				`smart-context: ${decision.detail} → 切换到 ${model.provider}/${model.model}`,
+				'info',
+			);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			log.error('Routing error', { error: msg, diagnostics: getDiagnostics() });

@@ -47,12 +47,12 @@ const DEEPSEEK_PRO: ModelRef = {
 };
 
 const BUILTIN_PROFILES: Record<string, ModelProfile> = {
-	/** 平衡模式（默认）：分类用 flash，复杂任务用 pro */
+	/** 平衡模式（默认）：分类用 flash，trivial/simple 用 flash，medium/complex 用 pro */
 	balanced: {
 		classifier: DEEPSEEK_FLASH,
 		routing: {
 			trivial: DEEPSEEK_FLASH,
-			simple: DEEPSEEK_PRO,
+			simple: DEEPSEEK_FLASH,
 			medium: DEEPSEEK_PRO,
 			complex: DEEPSEEK_PRO,
 		},
