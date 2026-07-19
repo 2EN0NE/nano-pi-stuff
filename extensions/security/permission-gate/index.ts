@@ -31,7 +31,8 @@ import {
 	makeToolKey,
 	saveConfig,
 } from './config.js';
-import { loadRecords, appendRecord, resetRecords } from './records.js';
+import { loadRecords, appendRecord, appendBlockedRecord, getStrategySummary } from './records.js';
+import { showTwoTabPanel } from './two-tab-panel.js';
 
 // ============================================================================
 // Module-level state
@@ -289,21 +290,6 @@ async function handleToolCall(
 			const thresholdResult = checkThreshold(command, toolName, targetDir, _config, _counts);
 
 			if (thresholdResult.pass) {
-				// 自动放行：更新该维度的计数
-				let key: string;
-				switch (thresholdResult.dimension) {
-					case 'sameCommand':
-						key = makeCommandKey(command);
-						break;
-					case 'sameTool':
-						key = makeToolKey(toolName);
-						break;
-					case 'sameFolder':
-						key = makeFolderKey(targetDir);
-						break;
-					default:
-						key = makeCommandKey(command);
-				}
 				// Append approval record & update counts
 				appendRecord(
 					ctx.cwd,
@@ -335,9 +321,18 @@ async function handleToolCall(
 	// 4. No-UI 模式
 	if (!ctx.hasUI) {
 		log.warn('Dangerous command blocked (no UI): %s', command.slice(0, 80));
+		// 记录 blocked
+		appendBlockedRecord(ctx.cwd, {
+			ts: new Date().toISOString(),
+			cmd: command,
+			tool: toolName,
+			dir: targetDir,
+			dim: null,
+			action: 'blocked',
+		});
 		return {
 			block: true,
-			reason: `Blocked – no UI to confirm dangerous command.\n\`${summarizeCommand(command)}\``,
+			reason: `Blocked -- no UI to confirm dangerous command.\n\`${summarizeCommand(command)}\``,
 		};
 	}
 
@@ -367,9 +362,18 @@ async function handleToolCall(
 	}
 
 	log.info('User blocked: %s', command.slice(0, 80));
+	// 记录 blocked
+	appendBlockedRecord(ctx.cwd, {
+		ts: new Date().toISOString(),
+		cmd: command,
+		tool: toolName,
+		dir: targetDir,
+		dim: null,
+		action: 'blocked',
+	});
 	return {
 		block: true,
-		reason: `🛑 User declined dangerous command.\n\`${summary}\``,
+		reason: `User declined dangerous command.\n\`${summary}\``,
 	};
 }
 
@@ -404,67 +408,55 @@ async function handlePermissionGateCommand(
 }
 
 /**
- * 按动态策略维度汇总 _counts，返回可读字符串。
- * 如 "Cmd:5 · Tool:3 · Dir:7 — 15 entries"
+ * 使用 getStrategySummary 统一计算各维度策略总数。
+ * 格式: "Cmd:5 - Tool:3 - Dir:7"
  */
 function summarizeApprovalCounts(): string {
-	let cmd = 0;
-	let tool = 0;
-	let dir = 0;
-	for (const key of Object.keys(_counts)) {
-		if (key.startsWith('cmd:')) cmd++;
-		else if (key.startsWith('tool:')) tool++;
-		else if (key.startsWith('dir:')) dir++;
-	}
-	const total = cmd + tool + dir;
-	if (total === 0) return '0 entries';
-	return `Cmd:${cmd} · Tool:${tool} · Dir:${dir} — ${total} entries`;
+	const summary = getStrategySummary(_counts, _config.dynamicPolicy.thresholds);
+	const parts: string[] = [];
+	if (summary.cmd.total > 0) parts.push(`Cmd(${summary.cmd.total})`);
+	if (summary.tool.total > 0) parts.push(`Tool(${summary.tool.total})`);
+	if (summary.dir.total > 0) parts.push(`Dir(${summary.dir.total})`);
+	return parts.length > 0 ? parts.join(' - ') : 'No strategies';
 }
 
 /**
- * 计算各维度尚未达阈值的最高计数，并拼接为进度字符串。
- * 如 "[cmd:2/2,tool:1/3,folder:2/4]"
- * 各维度遍历计数中未超过阈值的最高值展示；
- * 计数为 0 的维度不展示，如 "cmd:2/2,folder:2/4"（tool 无记录）。
+ * 计算各维度的策略总数和最佳进度，拼接为 widget 字符串。
+ * 格式: "[cmd(n):1/2,tool(m):2/3,folder(l):3/4]"
+ * n/m/l = 该维度 distinct 策略总数（来自 _counts）
+ * 1/2 = 未达阈值的最佳计数 / 阈值
  */
 function calcDynamicProgress(): string {
 	if (!_config.dynamicPolicyEnabled) return '';
 
-	const counts = _counts;
+	const summary = getStrategySummary(_counts, _config.dynamicPolicy.thresholds);
 	const th = _config.dynamicPolicy.thresholds;
 
-	// 命令维度：找未达阈值的最高 cmd 计数
+	// 单次遍历：同时找 bestCmd/bestTool/bestFolder
 	let bestCmd = 0;
-	for (const key of Object.keys(counts)) {
-		if (key.startsWith('cmd:')) {
-			const c = counts[key];
-			if (c < th.sameCommand && c > bestCmd) bestCmd = c;
-		}
-	}
-
-	// 工具维度
 	let bestTool = 0;
-	for (const key of Object.keys(counts)) {
-		if (key.startsWith('tool:')) {
-			const c = counts[key];
-			if (c < th.sameTool && c > bestTool) bestTool = c;
-		}
-	}
-
-	// 文件夹维度
 	let bestFolder = 0;
-	for (const key of Object.keys(counts)) {
-		if (key.startsWith('dir:')) {
-			const c = counts[key];
-			if (c < th.sameFolder && c > bestFolder) bestFolder = c;
+	for (const key of Object.keys(_counts)) {
+		const c = _counts[key] ?? 0;
+		if (key.startsWith('cmd:') && c < th.sameCommand && c > bestCmd) {
+			bestCmd = c;
+		} else if (key.startsWith('tool:') && c < th.sameTool && c > bestTool) {
+			bestTool = c;
+		} else if (key.startsWith('dir:') && c < th.sameFolder && c > bestFolder) {
+			bestFolder = c;
 		}
 	}
 
-	// 仅拼接有记录的维度
 	const parts: string[] = [];
-	if (bestCmd > 0) parts.push(`cmd:${bestCmd}/${th.sameCommand}`);
-	if (bestTool > 0) parts.push(`tool:${bestTool}/${th.sameTool}`);
-	if (bestFolder > 0) parts.push(`folder:${bestFolder}/${th.sameFolder}`);
+	if (summary.cmd.total > 0) {
+		parts.push(`cmd(${summary.cmd.total}):${bestCmd}/${th.sameCommand}`);
+	}
+	if (summary.tool.total > 0) {
+		parts.push(`tool(${summary.tool.total}):${bestTool}/${th.sameTool}`);
+	}
+	if (summary.dir.total > 0) {
+		parts.push(`folder(${summary.dir.total}):${bestFolder}/${th.sameFolder}`);
+	}
 
 	return parts.length > 0 ? `[${parts.join(',')}]` : '';
 }
@@ -508,9 +500,9 @@ async function showMainMenu(ctx: ExtensionCommandContext): Promise<void> {
 		}
 
 		items.push({
-			value: '__reset_counts',
-			label: '🔄  Reset Approval Counts',
-			description: summarizeApprovalCounts(),
+			value: '__view_strategies',
+			label: `📊  Current Allowed  ${summarizeApprovalCounts()}`,
+			description: 'View and manage strategies & history',
 		});
 
 		const selected = await makeCustomSelection(
@@ -540,7 +532,7 @@ async function showMainMenu(ctx: ExtensionCommandContext): Promise<void> {
 						'permission-gate',
 						ctx.ui.theme.fg(
 							_config.enabled ? 'accent' : 'dim',
-							`${_config.enabled ? '🛡' : '◻'} gate:${_config.enabled ? 'on' : 'off'}${calcDynamicProgress()}`,
+							`[${_config.enabled ? '+' : '-'}] gate:${_config.enabled ? 'on' : 'off'}${calcDynamicProgress()}`,
 						),
 					);
 				}
@@ -565,7 +557,7 @@ async function showMainMenu(ctx: ExtensionCommandContext): Promise<void> {
 						'permission-gate',
 						ctx.ui.theme.fg(
 							_config.enabled ? 'accent' : 'dim',
-							`${_config.enabled ? '🛡' : '◻'} gate:${_config.enabled ? 'on' : 'off'}${calcDynamicProgress()}`,
+							`[${_config.enabled ? '+' : '-'}] gate:${_config.enabled ? 'on' : 'off'}${calcDynamicProgress()}`,
 						),
 					);
 				}
@@ -596,17 +588,25 @@ async function showMainMenu(ctx: ExtensionCommandContext): Promise<void> {
 				break;
 			}
 
-			case '__reset_counts': {
-				const confirmed = await showConfirmDestructive(
+			case '__view_strategies': {
+				await showTwoTabPanel(
 					ctx,
-					'Reset Approval Counts?',
-					`This will clear ${summarizeApprovalCounts().toLowerCase()}.`,
+					_counts,
+					_config.dynamicPolicy.thresholds,
+					(newCounts) => {
+						_counts = newCounts;
+						// 同步更新 widget
+						if (ctx.hasUI) {
+							ctx.ui.setStatus(
+								'permission-gate',
+								ctx.ui.theme.fg(
+									_config.enabled ? 'accent' : 'dim',
+									`[${_config.enabled ? '+' : '-'}] gate:${_config.enabled ? 'on' : 'off'}${calcDynamicProgress()}`,
+								),
+							);
+						}
+					},
 				);
-				if (confirmed) {
-					_counts = {};
-					resetRecords(ctx.cwd);
-					ctx.ui.notify('Approval counts reset', 'info');
-				}
 				break;
 			}
 
@@ -818,12 +818,11 @@ export default function permissionGateExtension(pi: ExtensionAPI) {
 
 		// Set status widget
 		if (ctx.hasUI) {
-			const statusIcon = _config.enabled ? '🛡' : '◻';
 			ctx.ui.setStatus(
 				'permission-gate',
 				ctx.ui.theme.fg(
 					_config.enabled ? 'accent' : 'dim',
-					`${statusIcon} gate:${_config.enabled ? 'on' : 'off'}${calcDynamicProgress()}`,
+					`[${_config.enabled ? '+' : '-'}] gate:${_config.enabled ? 'on' : 'off'}${calcDynamicProgress()}`,
 				),
 			);
 		}

@@ -18,6 +18,8 @@ import {
 	resolveConfigPath,
 } from '../../../extensions/security/permission-gate/config';
 import type { PermissionGateConfig } from '../../../extensions/security/permission-gate/config';
+import { getStrategySummary } from '../../../extensions/security/permission-gate/records';
+import { buildStrategyItems } from '../../../extensions/security/permission-gate/two-tab-panel';
 
 // ============================================================================
 // makeCommandKey
@@ -155,5 +157,123 @@ describe('resolveConfigPath', () => {
 	it('resolves user config path', () => {
 		const path = resolveConfigPath('/any/cwd', 'user');
 		expect(path).toContain('/.pi/agent/extensions-data/permission-gate/config.json');
+	});
+});
+
+// ============================================================================
+// getStrategySummary
+// ============================================================================
+describe('getStrategySummary', () => {
+	const thresholds = { sameCommand: 2, sameTool: 3, sameFolder: 4 };
+
+	it('returns all zeros for empty counts', () => {
+		const s = getStrategySummary({}, thresholds);
+		expect(s).toEqual({
+			cmd: { total: 0, active: 0 },
+			tool: { total: 0, active: 0 },
+			dir: { total: 0, active: 0 },
+		});
+	});
+
+	it('counts cmd keys correctly (2 total, 1 active)', () => {
+		const counts = {
+			'cmd:abc123': 1, // 1 < 2 → active
+			'cmd:def456': 2, // 2 >= 2 → not active
+		};
+		const s = getStrategySummary(counts, thresholds);
+		expect(s.cmd).toEqual({ total: 2, active: 1 });
+		expect(s.tool).toEqual({ total: 0, active: 0 });
+		expect(s.dir).toEqual({ total: 0, active: 0 });
+	});
+
+	it('counts tool keys correctly', () => {
+		const counts = {
+			'tool:rm': 1, // 1 < 3 → active
+			'tool:sudo': 3, // 3 >= 3 → not active
+			'tool:chmod': 5, // 5 >= 3 → not active
+		};
+		const s = getStrategySummary(counts, thresholds);
+		expect(s.tool).toEqual({ total: 3, active: 1 });
+	});
+
+	it('counts dir keys correctly', () => {
+		const counts = {
+			'dir:/tmp': 2, // 2 < 4 → active
+			'dir:/home': 4, // 4 >= 4 → not active
+		};
+		const s = getStrategySummary(counts, thresholds);
+		expect(s.dir).toEqual({ total: 2, active: 1 });
+	});
+
+	it('handles mixed dimensions', () => {
+		const counts = {
+			'cmd:abc': 0,
+			'cmd:def': 1,
+			'tool:rm': 2,
+			'dir:/tmp': 3,
+		};
+		const s = getStrategySummary(counts, thresholds);
+		expect(s.cmd).toEqual({ total: 2, active: 2 }); // 0<2, 1<2
+		expect(s.tool).toEqual({ total: 1, active: 1 }); // 2<3
+		expect(s.dir).toEqual({ total: 1, active: 1 }); // 3<4
+	});
+});
+
+// ============================================================================
+// buildStrategyItems
+// ============================================================================
+describe('buildStrategyItems', () => {
+	const thresholds = { sameCommand: 2, sameTool: 3, sameFolder: 4 };
+
+	it('returns empty array for empty counts', () => {
+		const items = buildStrategyItems({}, thresholds);
+		expect(items).toEqual([]);
+	});
+
+	it('builds items with correct dimension labels', () => {
+		const counts = {
+			'cmd:abc123': 1,
+			'tool:rm': 2,
+			'dir:/tmp': 3,
+		};
+		const items = buildStrategyItems(counts, thresholds);
+		expect(items).toHaveLength(3);
+
+		expect(items[0]).toMatchObject({
+			dimension: 'cmd',
+			key: 'cmd:abc123',
+			displayKey: 'abc123',
+			count: 1,
+			threshold: 2,
+			isActive: true,
+		});
+		expect(items[1]).toMatchObject({
+			dimension: 'tool',
+			key: 'tool:rm',
+			displayKey: 'rm',
+			count: 2,
+			threshold: 3,
+			isActive: true,
+		});
+		expect(items[2]).toMatchObject({
+			dimension: 'dir',
+			key: 'dir:/tmp',
+			displayKey: '/tmp',
+			count: 3,
+			threshold: 4,
+			isActive: true,
+		});
+	});
+
+	it('marks items at threshold as inactive', () => {
+		const counts = {
+			'cmd:full': 2, // exactly at threshold → NOT active
+		};
+		const items = buildStrategyItems(counts, thresholds);
+		expect(items[0]).toMatchObject({
+			isActive: false,
+			count: 2,
+			threshold: 2,
+		});
 	});
 });

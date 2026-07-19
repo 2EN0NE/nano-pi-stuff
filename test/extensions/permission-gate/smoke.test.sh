@@ -241,6 +241,126 @@ print('PASS: entry fields complete, action=' + e['action'] + ', tool=' + e['tool
   exit 0
 TEST
 
+# ── 场景 5：blocked 记录持久化（含 action='blocked'） ──
+test_it "blocked commands write action=blocked to approvals.json" <<'TEST'
+  local slug="e2e-pg-dp5-$$"
+  local test_home="$ROOT_DIR/.pi/tmp/$slug"
+  mkdir -p "$test_home"
+  setup_sandbox "$test_home" threshold_exceeded
+
+  # 第一次运行：block
+  run_pi "$test_home" "clean up the temp directory" || true
+
+  # 第二次运行：再次 block（累计 2 条 blocked）
+  echo "=== Run 2 ==="
+  run_pi "$test_home" "do it" || true
+
+  dump_perm_logs "$test_home"
+
+  # 验证 approvals.json 中 blocked 条目
+  local approvals_file="$test_home/home/.pi/agent/extensions-data/permission-gate/approvals.json"
+  if [[ -f "$approvals_file" ]]; then
+    python3 -c "
+import json
+d=json.load(open('$approvals_file'))
+entries=list(d['projects'].values())[0]['entries']
+assert len(entries) >= 1, f'expected >=1 entries, got {len(entries)}'
+
+# 检查所有条目都有 action='blocked'
+for e in entries:
+    assert e['action'] == 'blocked', f'expected blocked, got {e[\"action\"]}'
+    assert 'ts' in e, 'missing ts'
+    assert 'cmd' in e, 'missing cmd'
+    assert 'tool' in e, 'missing tool'
+    assert 'dir' in e, 'missing dir'
+    assert 'dim' in e, 'missing dim'
+
+print(f'PASS: {len(entries)} blocked entries validated')
+" 2>/dev/null || {
+      echo "FAIL: blocked entries validation failed"
+      python3 -c "import json; print(json.dumps(json.load(open('$approvals_file')), indent=2))" 2>/dev/null
+      exit 1
+    }
+  else
+    echo "FAIL: approvals.json not found"
+    exit 1
+  fi
+
+  rm -rf "$test_home" "$ROOT_DIR/.pi/tmp/${slug}"*
+  exit 0
+TEST
+
+# ── 场景 6：策略计数一致性（widget 基础数据与 approvals.json 派生一致） ──
+test_it "strategy counts from approvals.json match _counts derivation" <<'TEST'
+  local slug="e2e-pg-dp6-$$"
+  local test_home="$ROOT_DIR/.pi/tmp/$slug"
+  mkdir -p "$test_home"
+  setup_sandbox "$test_home" auto_approve
+
+  # 运行 3 次，生成 3 条 auto 记录
+  for i in 1 2 3; do
+    echo "=== Run $i ==="
+    run_pi "$test_home" "clean up the temp directory" || true
+  done
+
+  dump_perm_logs "$test_home"
+
+  # Python 验证：从 approvals.json 重建 counts 并验证维度数量
+  local approvals_file="$test_home/home/.pi/agent/extensions-data/permission-gate/approvals.json"
+  if [[ -f "$approvals_file" ]]; then
+    python3 -c "
+import json, hashlib
+
+d=json.load(open('$approvals_file'))
+entries=list(d['projects'].values())[0]['entries']
+print(f'Total entries: {len(entries)}')
+
+# 重建 counts（与 deriveCounts 逻辑一致）
+counts={}
+for e in entries:
+    if e.get('action') == 'blocked':
+        continue
+    # cmd key
+    norm = e['cmd'].strip().replace('\n',' ').replace('  ',' ')
+    ch = hashlib.sha256(norm.encode()).hexdigest()[:16]
+    ck = f'cmd:{ch}'
+    counts[ck] = counts.get(ck, 0) + 1
+    # tool key
+    tk = f\"tool:{e['tool']}\"
+    counts[tk] = counts.get(tk, 0) + 1
+    # dir key
+    dk = f\"dir:{e['dir']}\"
+    counts[dk] = counts.get(dk, 0) + 1
+
+cmd_keys = [k for k in counts if k.startswith('cmd:')]
+tool_keys = [k for k in counts if k.startswith('tool:')]
+dir_keys = [k for k in counts if k.startswith('dir:')]
+print(f'Derived strategy counts: cmd={len(cmd_keys)}, tool={len(tool_keys)}, dir={len(dir_keys)}')
+
+# 验证：3 次相同命令 → 最少 1 个 cmd key（相同命令只产生一个 key）
+assert len(cmd_keys) >= 1, f'expected >=1 cmd key, got {len(cmd_keys)}'
+assert len(tool_keys) >= 1, f'expected >=1 tool key, got {len(tool_keys)}'
+assert len(dir_keys) >= 1, f'expected >=1 dir key, got {len(dir_keys)}'
+
+# 验证：cmd key 计数应该 = 3（因为 3 次都匹配同一命令）
+cmd_count = sum(counts[k] for k in cmd_keys)
+assert cmd_count == 3, f'expected cmd count=3, got {cmd_count}'
+print(f'PASS: cmd keys={len(cmd_keys)}, total cmd count={cmd_count}')
+print(f'PASS: strategy summary consistent')
+" 2>/dev/null || {
+      echo "FAIL: strategy summary validation failed"
+      python3 -c "import json; print(json.dumps(json.load(open('$approvals_file')), indent=2))" 2>/dev/null
+      exit 1
+    }
+  else
+    echo "FAIL: approvals.json not found"
+    exit 1
+  fi
+
+  rm -rf "$test_home" "$ROOT_DIR/.pi/tmp/${slug}"*
+  exit 0
+TEST
+
 # ── 场景 4：审批记录跨 session 累积 ──
 test_it "approval records accumulate across repeated pi invocations" <<'TEST'
   local slug="e2e-pg-dp4-$$"

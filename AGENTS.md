@@ -252,6 +252,38 @@ bash test/scripts/run-e2e.sh --ext quit    # 同时跑 smoke + tui
 
 完整文档见 [`test/README.md`](test/README.md) 和 [`skills/e2e-test/SKILL.md`](skills/e2e-test/SKILL.md)。
 
+### TUI 设计约定
+
+#### 不要使用 Emoji/图标
+
+TUI 组件的渲染**禁止使用 emoji 和 Unicode 图标字符**（如 📋📜✅❌⭐🔍▼▊→ 等）。原因：
+
+1. **宽度不确定性**：emojii 在不同终端的显示宽度不同（单宽或双宽），`visibleWidth()` 和 `truncateToWidth()` 可能无法正确处理，导致 `Rendered line exceeds terminal width` 崩溃
+2. **可读性**：部分终端/字体不支持 emoji，显示为方块
+3. **搜索/过滤不便**：emoji 无法用文字匹配
+
+**替代方案**：一律使用纯文本表示：
+
+- `[Strategies]` 代替 `[📋 Strategies]`
+- `OK/BLOCK` 代替 `✅/❌`
+- `>` (大于号) 代替 `→` 表示选中
+- `_` (下划线) 代替 `▊` 表示光标
+
+#### `truncateToWidth` 安全网
+
+每个 TUI `render()` 方法返回的每一行，都必须用 `truncateToWidth(line, width)` 包裹作为最后的安全保障，确保不会超过终端宽度。
+
+```typescript
+import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
+
+// ✅ 正确: 每行都经过 truncateToWidth
+lines.push(truncateToWidth(th.fg('accent', title), width));
+lines.push(truncateToWidth('│  ' + content, width));
+
+// ❌ 错误: 不包裹可能导致崩溃
+lines.push(th.fg('accent', title));
+```
+
 #### 普通测试辅助扩展示例
 
 **`test/extensions/tools/helpers/dynamic-registrar.ts`**

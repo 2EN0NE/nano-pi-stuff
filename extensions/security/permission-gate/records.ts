@@ -43,10 +43,17 @@ export interface ApprovalEntry {
 	tool: string;
 	/** 目标目录绝对路径 */
 	dir: string;
-	/** 触发维度 */
-	dim: 'sameCommand' | 'sameTool' | 'sameFolder';
+	/** 触发维度（blocked 记录为 null） */
+	dim: 'sameCommand' | 'sameTool' | 'sameFolder' | null;
 	/** 放行方式 */
-	action: 'auto' | 'confirmed';
+	action: 'auto' | 'confirmed' | 'blocked';
+}
+
+/** 策略维度汇总 */
+export interface StrategySummary {
+	cmd: { total: number; active: number };
+	tool: { total: number; active: number };
+	dir: { total: number; active: number };
 }
 
 export interface ProjectRecords {
@@ -141,6 +148,9 @@ function deriveCounts(entries: ApprovalEntry[]): Record<string, number> {
 	const counts: Record<string, number> = {};
 
 	for (const entry of entries) {
+		// blocked 记录不计入阈值计数（避免 block 行为消耗 auto-approve 配额）
+		if (entry.action === 'blocked') continue;
+
 		// cmd key（与原 makeCommandKey 逻辑一致）
 		const normalized = entry.cmd.trim().replace(/\s+/g, ' ');
 		const cmdHash = createHash('sha256').update(normalized).digest('hex').slice(0, 16);
@@ -254,6 +264,119 @@ export function resetRecords(cwd: string): void {
 	delete file.projects[key];
 	writeApprovalsFile(file);
 	log.info('Approval records reset for project %s (key=%s)', resolve(cwd), key);
+}
+
+/**
+ * 追加一条 blocked 记录（被拦截/拒绝的命令）。
+ * blocked 记录不计入 _counts，仅供历史审计。
+ */
+export function appendBlockedRecord(cwd: string, entry: ApprovalEntry): void {
+	const file = readApprovalsFile();
+	const key = getProjectKey(cwd);
+	const absPath = resolve(cwd);
+
+	if (!file.projects[key]) {
+		file.projects[key] = {
+			path: absPath,
+			git: getGitRemote(absPath) ?? undefined,
+			entries: [],
+		};
+	}
+
+	file.projects[key].entries.push(entry);
+	writeApprovalsFile(file);
+	log.debug('Blocked record appended for project %s', key);
+}
+
+/**
+ * 删除指定维度下某个 key 的所有审批记录。
+ * 返回删除后重建的 counts。
+ *
+ * @param cwd 项目工作目录
+ * @param dimension 维度：'cmd' | 'tool' | 'dir'
+ * @param key 完整的计数 key（如 "cmd:abc123", "tool:rm", "dir:/path"）
+ */
+export function deleteStrategy(
+	cwd: string,
+	dimension: 'cmd' | 'tool' | 'dir',
+	key: string,
+): { entries: ApprovalEntry[]; counts: Record<string, number> } {
+	const file = readApprovalsFile();
+	const projectKey = getProjectKey(cwd);
+	const project = file.projects[projectKey];
+
+	if (!project) {
+		return { entries: [], counts: {} };
+	}
+
+	// 根据维度筛选要删除的条目
+	project.entries = project.entries.filter((entry) => {
+		if (entry.action === 'blocked') {
+			// blocked 条目不受策略删除影响
+			return true;
+		}
+		switch (dimension) {
+			case 'cmd': {
+				const normalized = entry.cmd.trim().replace(/\s+/g, ' ');
+				const cmdHash = createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+				return `cmd:${cmdHash}` !== key;
+			}
+			case 'tool':
+				return `tool:${entry.tool}` !== key;
+			case 'dir':
+				return `dir:${entry.dir}` !== key;
+			default:
+				return true;
+		}
+	});
+
+	writeApprovalsFile(file);
+
+	const newCounts = deriveCounts(project.entries);
+	log.info(
+		'Deleted strategy %s:%s for project %s, remaining entries: %d',
+		dimension,
+		key,
+		projectKey,
+		project.entries.length,
+	);
+
+	return { entries: [...project.entries], counts: newCounts };
+}
+
+/**
+ * 计算策略维度汇总：每个维度的总数和仍然 active（未达阈值）的数量。
+ */
+export function getStrategySummary(
+	counts: Record<string, number>,
+	thresholds: { sameCommand: number; sameTool: number; sameFolder: number },
+): StrategySummary {
+	let cmdTotal = 0;
+	let cmdActive = 0;
+	let toolTotal = 0;
+	let toolActive = 0;
+	let dirTotal = 0;
+	let dirActive = 0;
+
+	for (const key of Object.keys(counts)) {
+		const count = counts[key] ?? 0;
+		if (key.startsWith('cmd:')) {
+			cmdTotal++;
+			if (count < thresholds.sameCommand) cmdActive++;
+		} else if (key.startsWith('tool:')) {
+			toolTotal++;
+			if (count < thresholds.sameTool) toolActive++;
+		} else if (key.startsWith('dir:')) {
+			dirTotal++;
+			if (count < thresholds.sameFolder) dirActive++;
+		}
+	}
+
+	return {
+		cmd: { total: cmdTotal, active: cmdActive },
+		tool: { total: toolTotal, active: toolActive },
+		dir: { total: dirTotal, active: dirActive },
+	};
 }
 
 // ============================================================================
