@@ -86,67 +86,15 @@ Example output:
   ]
 }`;
 
-const CODEX_MODEL_IDS = ['gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.4', 'gpt-5.3-codex'];
-const HAIKU_MODEL_ID = 'claude-haiku-4-5';
-
-// 短时 auth 缓存：避免在 cold-start 时对同一 provider 多次串行 getApiKeyAndHeaders 调用。
-// 缓存时间 1 秒，足以覆盖单次模型选择循环内的重复调用。
-const authCache = new Map<string, { ok: boolean } | null>();
-let authCacheTimer: ReturnType<typeof setTimeout> | undefined;
-
-function getCachedAuth(
-	modelId: string,
-	provider: string,
-	modelRegistry: ModelRegistry,
-): Promise<{ ok: boolean } | null> {
-	const key = `${provider}:${modelId}`;
-	const cached = authCache.get(key);
-	if (cached !== undefined) return Promise.resolve(cached);
-
-	return modelRegistry
-		.getApiKeyAndHeaders({ id: modelId, provider } as Model<Api>)
-		.then((auth) => {
-			authCache.set(key, auth);
-			// 1 秒后自动过期
-			if (!authCacheTimer) {
-				authCacheTimer = setTimeout(() => {
-					authCache.clear();
-					authCacheTimer = undefined;
-				}, 1000);
-			}
-			return auth;
-		});
-}
-
 /**
- * Prefer a fast configured Codex model for extraction, then haiku, then the current model.
- * Uses short-lived auth cache to avoid redundant credential lookups.
+ * 直接使用当前模型进行问答提取，无需硬编码 fallback。
+ * 提取问题是一个轻量任务，当前模型足以胜任。
  */
-async function selectExtractionModel(
+function selectExtractionModel(
 	currentModel: Model<Api>,
-	modelRegistry: ModelRegistry,
-): Promise<Model<Api>> {
-	for (const modelId of CODEX_MODEL_IDS) {
-		const codexModel = modelRegistry.find('openai-codex', modelId);
-		if (codexModel) {
-			const auth = await getCachedAuth(modelId, 'openai-codex', modelRegistry);
-			if (auth?.ok) {
-				return codexModel;
-			}
-		}
-	}
-
-	const haikuModel = modelRegistry.find('anthropic', HAIKU_MODEL_ID);
-	if (!haikuModel) {
-		return currentModel;
-	}
-
-	const auth = await getCachedAuth(HAIKU_MODEL_ID, 'anthropic', modelRegistry);
-	if (auth?.ok === false) {
-		return currentModel;
-	}
-
-	return haikuModel;
+	_modelRegistry: ModelRegistry,
+): Model<Api> {
+	return currentModel;
 }
 
 function toExtractedQuestion(value: unknown): ExtractedQuestion | null {
@@ -576,7 +524,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		// Select the best model for extraction
-		const extractionModel = await selectExtractionModel(ctx.model, ctx.modelRegistry);
+		const extractionModel = selectExtractionModel(ctx.model, ctx.modelRegistry);
 		log.info('Extraction model selected', {
 			modelId: extractionModel.id,
 			provider: extractionModel.provider,
