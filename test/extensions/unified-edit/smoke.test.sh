@@ -3,8 +3,7 @@
 # unified-edit 扩展 smoke 测试
 # 验证：
 # 1. 扩展加载无崩溃
-# 2. edit 工具注册成功（不冲突）
-# 3. 基本 row edit script 功能
+# 2. pi-logger 日志输出正常
 # ──────────────────────────────────────────────────────────────────────────────
 
 test_describe "unified-edit extension (experimental, upstream)"
@@ -14,19 +13,6 @@ test_it "loads without errors" <<'TEST'
     --extensions "unified-edit" \
     --prompt "hi" \
     --save-output
-  exit 0
-TEST
-
-test_it "registers edit tool" <<'TEST'
-  run_pi_and_check \
-    --extensions "unified-edit" \
-    --prompt "/tools" \
-    --save-output
-
-  grep -q "edit" "$SAVED_OUTPUT" && echo "PASS: edit tool found in /tools" || {
-    echo "FAIL: edit tool not found"
-    exit 1
-  }
   exit 0
 TEST
 

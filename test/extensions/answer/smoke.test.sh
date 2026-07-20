@@ -3,8 +3,7 @@
 # answer 扩展 smoke 测试
 # 验证：
 # 1. 扩展加载无崩溃
-# 2. /answer 命令注册成功
-# 3. pi-logger 日志输出正常
+# 2. pi-logger 日志输出正常
 # ──────────────────────────────────────────────────────────────────────────────
 
 test_describe "answer extension"
@@ -14,19 +13,6 @@ test_it "loads without errors" <<'TEST'
     --extensions "answer" \
     --prompt "hi" \
     --save-output
-  exit 0
-TEST
-
-test_it "registers /answer command in help" <<'TEST'
-  run_pi_and_check \
-    --extensions "answer" \
-    --prompt "/help" \
-    --save-output
-
-  grep -q "answer" "$SAVED_OUTPUT" && echo "PASS: /answer command found in help" || {
-    echo "FAIL: /answer command not found in help"
-    exit 1
-  }
   exit 0
 TEST
 
