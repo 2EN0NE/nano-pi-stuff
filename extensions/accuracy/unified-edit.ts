@@ -99,7 +99,15 @@ const TOOL_PROMPT_GUIDELINES = [
 	'Use @DEL N-M for inclusive line ranges. @DEL N deletes one line. Multiple [file] sections are allowed in one edit call.',
 ];
 
-const unifiedEditSchema = {
+/** JSON Schema shape for registerTool parameters. */
+interface JsonSchema {
+	type: string;
+	additionalProperties?: boolean;
+	required?: string[];
+	properties?: Record<string, { type: string; description?: string }>;
+}
+
+const unifiedEditSchema: JsonSchema = {
 	type: 'object',
 	additionalProperties: false,
 	required: ['text'],
@@ -109,7 +117,7 @@ const unifiedEditSchema = {
 			description: TOOL_DESCRIPTION,
 		},
 	},
-} as any;
+};
 
 type UnifiedEditParams = { text: string };
 type ToolContent = Array<{ type: 'text'; text: string }>;

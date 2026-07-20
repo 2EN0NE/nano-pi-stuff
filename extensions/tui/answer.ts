@@ -89,8 +89,38 @@ Example output:
 const CODEX_MODEL_IDS = ['gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.4', 'gpt-5.3-codex'];
 const HAIKU_MODEL_ID = 'claude-haiku-4-5';
 
+// 短时 auth 缓存：避免在 cold-start 时对同一 provider 多次串行 getApiKeyAndHeaders 调用。
+// 缓存时间 1 秒，足以覆盖单次模型选择循环内的重复调用。
+const authCache = new Map<string, { ok: boolean } | null>();
+let authCacheTimer: ReturnType<typeof setTimeout> | undefined;
+
+function getCachedAuth(
+	modelId: string,
+	provider: string,
+	modelRegistry: ModelRegistry,
+): Promise<{ ok: boolean } | null> {
+	const key = `${provider}:${modelId}`;
+	const cached = authCache.get(key);
+	if (cached !== undefined) return Promise.resolve(cached);
+
+	return modelRegistry
+		.getApiKeyAndHeaders({ id: modelId, provider } as Model<Api>)
+		.then((auth) => {
+			authCache.set(key, auth);
+			// 1 秒后自动过期
+			if (!authCacheTimer) {
+				authCacheTimer = setTimeout(() => {
+					authCache.clear();
+					authCacheTimer = undefined;
+				}, 1000);
+			}
+			return auth;
+		});
+}
+
 /**
  * Prefer a fast configured Codex model for extraction, then haiku, then the current model.
+ * Uses short-lived auth cache to avoid redundant credential lookups.
  */
 async function selectExtractionModel(
 	currentModel: Model<Api>,
@@ -99,8 +129,8 @@ async function selectExtractionModel(
 	for (const modelId of CODEX_MODEL_IDS) {
 		const codexModel = modelRegistry.find('openai-codex', modelId);
 		if (codexModel) {
-			const auth = await modelRegistry.getApiKeyAndHeaders(codexModel);
-			if (auth.ok) {
+			const auth = await getCachedAuth(modelId, 'openai-codex', modelRegistry);
+			if (auth?.ok) {
 				return codexModel;
 			}
 		}
@@ -111,8 +141,8 @@ async function selectExtractionModel(
 		return currentModel;
 	}
 
-	const auth = await modelRegistry.getApiKeyAndHeaders(haikuModel);
-	if (auth.ok === false) {
+	const auth = await getCachedAuth(HAIKU_MODEL_ID, 'anthropic', modelRegistry);
+	if (auth?.ok === false) {
 		return currentModel;
 	}
 
@@ -143,6 +173,50 @@ function toExtractionResult(value: unknown): ExtractionResult | null {
 }
 
 /**
+ * 使用括号计数器提取第一个完整的顶层 JSON 对象。
+ * 避免在 LLM 输出包含多个以文本分隔的 JSON 对象时跨对象截取。
+ */
+function extractFirstJsonObject(text: string): string | null {
+	const start = text.indexOf('{');
+	if (start === -1) return null;
+
+	let depth = 0;
+	let inString = false;
+	let escape = false;
+
+	for (let i = start; i < text.length; i++) {
+		const ch = text[i];
+
+		if (escape) {
+			escape = false;
+			continue;
+		}
+
+		if (ch === '\\' && inString) {
+			escape = true;
+			continue;
+		}
+
+		if (ch === '"') {
+			inString = !inString;
+			continue;
+		}
+
+		if (!inString) {
+			if (ch === '{') depth++;
+			else if (ch === '}') {
+				depth--;
+				if (depth === 0) {
+					return text.slice(start, i + 1);
+				}
+			}
+		}
+	}
+
+	return null;
+}
+
+/**
  * Parse the JSON response from the LLM.  Tries multiple candidate strings
  * (markdown code block, raw text, brace-extracted JSON) with parseJsonWithRepair.
  */
@@ -154,11 +228,8 @@ function parseExtractionResult(text: string): ExtractionResult | null {
 	const trimmed = text.trim();
 	candidates.push(trimmed);
 
-	const firstBrace = trimmed.indexOf('{');
-	const lastBrace = trimmed.lastIndexOf('}');
-	if (firstBrace !== -1 && lastBrace > firstBrace) {
-		candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
-	}
+	const braceJson = extractFirstJsonObject(trimmed);
+	if (braceJson) candidates.push(braceJson);
 
 	for (const candidate of candidates) {
 		try {
