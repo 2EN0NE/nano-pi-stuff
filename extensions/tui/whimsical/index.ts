@@ -264,6 +264,7 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 
 	// 7. On session shutdown: persist metrics
 	pi.on('session_shutdown', async (_event, ctx) => {
+		const wsT0 = Date.now();
 		log.debug('event: session_shutdown');
 		shuttingDown = true;
 		cancelRefresh();
@@ -272,13 +273,23 @@ export default function whimsicalExtension(pi: ExtensionAPI) {
 
 		if (sessionId) {
 			const metrics = tracker.toSessionMetrics();
+			const wsT1 = Date.now();
 			await appendSession({
 				sessionId,
 				timestamp: Date.now(),
 				cwd: sessionCwd ?? ctx.cwd,
 				metrics,
 			});
+			const wsT2 = Date.now();
 			await deleteLiveState(sessionId); // Clean up mid-session state
+			const wsT3 = Date.now();
+			log.info(
+				'whimsical:timing:session_shutdown: prep=%dms appendSession=%dms deleteLive=%dms total=%dms',
+				wsT1 - wsT0,
+				wsT2 - wsT1,
+				wsT3 - wsT2,
+				wsT3 - wsT0,
+			);
 			log.info(
 				'whimsical:persist sessionId=%s thinkingSteps=%d avgTurns=%s questions=%d tools=%d',
 				sessionId,

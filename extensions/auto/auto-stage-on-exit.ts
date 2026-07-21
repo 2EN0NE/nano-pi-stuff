@@ -14,6 +14,9 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { createLogger } from '@zenone/pi-logger';
+
+const log = createLogger('auto-stage-on-exit');
 
 /** File-path (absolute) → SHA-256 hex hash of file contents at session start. */
 const initialFileHashes = new Map<string, string>();
@@ -126,20 +129,26 @@ export default function (pi: ExtensionAPI) {
 	// Session shutdown: compare current state, stage changed files only
 	// ---------------------------------------------------------------
 	pi.on('session_shutdown', async (_event, ctx: ExtensionContext) => {
+		const ast0 = Date.now();
+
 		if (initialFileHashes.size === 0) {
-			return; // Nothing was dirty at start — nothing to compare
+			log.debug('session_shutdown: no tracked dirty files, skip');
+			return;
 		}
 
 		const { stdout: status, code } = await pi.exec('git', ['status', '--porcelain'], {
 			cwd: ctx.cwd,
 		});
+		const ast1 = Date.now();
+		log.info('auto-stage:timing: git_status=%dms', ast1 - ast0);
 
 		if (code !== 0) {
 			return; // Not a git repo (shouldn't happen, but be safe)
 		}
 
 		if (status.trim().length === 0) {
-			return; // Working tree is now clean — nothing to stage
+			log.debug('session_shutdown: clean working tree, skip');
+			return;
 		}
 
 		const currentDirtyFiles = parseDirtyFilePaths(status);
@@ -170,9 +179,27 @@ export default function (pi: ExtensionAPI) {
 				filesToStage.push(filePath);
 			}
 		}
+		const ast2 = Date.now();
+		log.info(
+			'auto-stage:timing: hash_compare=%dms files_processed=%d files_to_stage=%d',
+			ast2 - ast1,
+			currentDirtyFiles.length,
+			filesToStage.length,
+		);
 
 		if (filesToStage.length > 0) {
 			await stageFiles(pi, filesToStage, ctx);
+		}
+
+		const ast3 = Date.now();
+		if (ast3 - ast0 > 50) {
+			log.info(
+				'auto-stage:timing: total=%dms (git_status=%d + hash_compare=%d + stage=%d)',
+				ast3 - ast0,
+				ast1 - ast0,
+				ast2 - ast1,
+				ast3 - ast2,
+			);
 		}
 
 		initialFileHashes.clear();
