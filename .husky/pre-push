@@ -22,15 +22,24 @@ EXTS=""
 SKILLS=""
 for file in $CHANGED_FILES; do
   case "$file" in
-    extensions/*.ts)
-      # 直接扩展文件：extensions/category/name.ts → name
-      name=$(basename "$file" .ts)
-      EXTS="$EXTS $name"
-      ;;
+    # 目录扩展优先匹配：extensions/category/name/index.ts → name
+    # 必须在单文件匹配之前，避免 index.ts 被 *.ts 模式误匹配
     extensions/*/index.ts)
-      # 目录扩展：extensions/category/name/index.ts → name
       name=$(basename "$(dirname "$file")")
       EXTS="$EXTS $name"
+      ;;
+    # 单文件扩展：extensions/category/name.ts → name
+    # ⚠ bash case 中 * 会匹配斜杠，必须排除深层嵌套文件
+    # 如 extensions/cat/name/sub.ts 应跳过（属于目录扩展的内部文件）
+    extensions/*/*.ts)
+      rel="${file#extensions/}"
+      case "$rel" in
+        */*/*) ;;  # 超过1层目录 → 跳过
+        *)
+          name=$(basename "$file" .ts)
+          EXTS="$EXTS $name"
+          ;;
+      esac
       ;;
     skills/*/SKILL.md)
       name=$(basename "$(dirname "$file")")

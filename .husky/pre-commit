@@ -1,3 +1,5 @@
+# 仅对 staged 文件做增量校验（lint-staged 内部跑 prettier + eslint --fix）
 npm run lint:staged
-npm run format:check
+
+# 类型检查（不阻塞提交，仅提醒）
 npm run typecheck || echo "⚠️  TypeScript errors found (non-blocking — pi API version mismatch)"
