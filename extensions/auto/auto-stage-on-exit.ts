@@ -157,6 +157,7 @@ export default function (pi: ExtensionAPI) {
 		for (const filePath of currentDirtyFiles) {
 			const absolutePath = path.resolve(ctx.cwd, filePath);
 			const storedHash = initialFileHashes.get(absolutePath);
+			const ht0 = Date.now();
 
 			// File was NOT in the initial snapshot → appeared during the session → stage it
 			if (storedHash === undefined) {
@@ -165,14 +166,37 @@ export default function (pi: ExtensionAPI) {
 				if (currentHash !== null) {
 					filesToStage.push(filePath);
 				}
+				const ht1 = Date.now();
+				if (ht1 - ht0 > 10) {
+					log.info(
+						'auto-stage:timing: hash_check(file=%s, new)=%dms',
+						filePath,
+						ht1 - ht0,
+					);
+				}
 				continue;
 			}
 
 			// File was in the initial snapshot → compare hashes
 			const currentHash = await getFileHash(absolutePath);
 
+			const ht1 = Date.now();
+
 			// If the file can't be read now (deleted), skip it
-			if (currentHash === null) continue;
+			if (currentHash === null) {
+				if (ht1 - ht0 > 10) {
+					log.info(
+						'auto-stage:timing: hash_check(file=%s, deleted)=%dms',
+						filePath,
+						ht1 - ht0,
+					);
+				}
+				continue;
+			}
+
+			if (ht1 - ht0 > 10) {
+				log.info('auto-stage:timing: hash_check(file=%s)=%dms', filePath, ht1 - ht0);
+			}
 
 			// If the hash changed, the file was modified during the session
 			if (currentHash !== storedHash) {
@@ -187,20 +211,26 @@ export default function (pi: ExtensionAPI) {
 			filesToStage.length,
 		);
 
+		let stageMs = 0;
 		if (filesToStage.length > 0) {
+			const st0 = Date.now();
 			await stageFiles(pi, filesToStage, ctx);
+			stageMs = Date.now() - st0;
+			log.info(
+				'auto-stage:timing: git_add=%dms files_staged=%d',
+				stageMs,
+				filesToStage.length,
+			);
 		}
 
 		const ast3 = Date.now();
-		if (ast3 - ast0 > 50) {
-			log.info(
-				'auto-stage:timing: total=%dms (git_status=%d + hash_compare=%d + stage=%d)',
-				ast3 - ast0,
-				ast1 - ast0,
-				ast2 - ast1,
-				ast3 - ast2,
-			);
-		}
+		log.info(
+			'auto-stage:timing: total=%dms (git_status=%d + hash_compare=%d + stage=%d)',
+			ast3 - ast0,
+			ast1 - ast0,
+			ast2 - ast1,
+			stageMs,
+		);
 
 		initialFileHashes.clear();
 	});
