@@ -494,33 +494,37 @@ run_target() {
 		# 根据 --tui flag 选择主测试文件
 		if $TUI_ONLY; then
 			local tf="$TEST_DIR/$type_dir/$target_name/tui.smoke.test.sh"
-			[[ -f "$tf" ]] && {
+			if [[ -f "$tf" ]]; then
 				run_test_file "$tf" "$type_dir" "$target_name"
 				FOUND_ANY=true
-			} || echo "Not found: $tf"
+			else
+				echo "Not found: $tf"
+			fi
 		else
 			# 默认：先跑 smoke.test.sh，再跑 tui.smoke.test.sh（如果有）
 			local tf_smoke="$TEST_DIR/$type_dir/$target_name/smoke.test.sh"
-			[[ -f "$tf_smoke" ]] && {
+			if [[ -f "$tf_smoke" ]]; then
 				run_test_file "$tf_smoke" "$type_dir" "$target_name"
 				FOUND_ANY=true
-			} || echo "Not found: $tf_smoke"
+			else
+				echo "Not found: $tf_smoke"
+			fi
 
 			local tf_tui="$TEST_DIR/$type_dir/$target_name/tui.smoke.test.sh"
-			[[ -f "$tf_tui" ]] && {
+			if [[ -f "$tf_tui" ]]; then
 				run_test_file "$tf_tui" "$type_dir" "$target_name"
 				FOUND_ANY=true
-			}
+			fi
 		fi
 	else
 		for d in "$TEST_DIR/$type_dir"/*/; do
 			local bn
 			bn=$(basename "$d")
 			local tf="$d/smoke.test.sh"
-			[[ -f "$tf" ]] && {
+			if [[ -f "$tf" ]]; then
 				run_test_file "$tf" "$type_dir" "$bn"
 				FOUND_ANY=true
-			}
+			fi
 		done
 
 		# In non-TUI mode, also run tui.smoke.test.sh files if found
@@ -530,10 +534,10 @@ run_target() {
 				local bn
 				bn=$(basename "$d")
 				local tf="$d/tui.smoke.test.sh"
-				[[ -f "$tf" ]] && {
+				if [[ -f "$tf" ]]; then
 					run_test_file "$tf" "$type_dir" "$bn"
 					FOUND_ANY=true
-				}
+				fi
 			done
 		fi
 	fi
