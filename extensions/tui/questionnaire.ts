@@ -366,9 +366,38 @@ async function handleMultiQuestion(
 			return questions.every((q) => answers.has(q.id));
 		}
 
+		/** Track last-selected index per tab so returning preserves scroll position */
+		const tabSelectedIndices = new Map<number, number>();
+
+		function resolveTabSelectedIndex(tab: number): number {
+			// If this question tab has an answer, jump to the answered option
+			const q = questions[tab];
+			if (q) {
+				const answer = answers.get(q.id);
+				if (answer) {
+					const opts: RenderOption[] = [...q.options];
+					if (q.allowOther) {
+						opts.push({ value: '__other__', label: 'Type something.', isOther: true });
+					}
+					// If answer was custom, point to the "Type something." option
+					if (answer.wasCustom) {
+						const otherIdx = opts.findIndex((o) => o.isOther);
+						if (otherIdx >= 0) return otherIdx;
+					}
+					// Match by value
+					const idx = opts.findIndex((o) => !o.isOther && o.value === answer.value);
+					if (idx >= 0) return idx;
+				}
+			}
+			// Fall back to last scroll position, or 0
+			return tabSelectedIndices.get(tab) ?? 0;
+		}
+
 		function goToTab(tab: number) {
+			// Save current scroll position before leaving
+			tabSelectedIndices.set(currentTab, selectedIndex);
 			currentTab = ((tab % totalTabs) + totalTabs) % totalTabs;
-			selectedIndex = 0;
+			selectedIndex = resolveTabSelectedIndex(currentTab);
 			// Exit any input mode when switching tabs
 			supplementMode = false;
 			supplementText = '';
