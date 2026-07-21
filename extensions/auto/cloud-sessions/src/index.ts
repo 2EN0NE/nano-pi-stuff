@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { truncateToWidth, visibleWidth, matchesKey, Key } from '@earendil-works/pi-tui';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import {
 	configFilePath,
@@ -154,6 +155,16 @@ async function writeConfig(partial: Record<string, unknown>): Promise<void> {
 	await writeFile(configFilePath(), JSON.stringify(merged, null, 2));
 }
 
+/** Save project-match config to ~/.pi/agent/extensions-data/cloud-sessions/project-match.json */
+async function writeProjectMatchConfig(pm: {
+	suffixSegments: number;
+	gitRemote: boolean;
+}): Promise<void> {
+	const path = projectMatchConfigPath();
+	await mkdir(dirname(path), { recursive: true });
+	await writeFile(path, JSON.stringify(pm, null, 2));
+}
+
 export default function cloudSessions(pi: ExtensionAPI): void {
 	pi.on('session_start', async (event, ctx) => {
 		const config = await loadConfig();
@@ -166,8 +177,11 @@ export default function cloudSessions(pi: ExtensionAPI): void {
 		}
 		setStatus(STATUS_KEY, `sessions: ${config.provider}`);
 
-		if (config.pullOnStart && event.reason === 'startup') {
-			await runSync(setStatus, notifyUser).catch(() => {});
+		if (config.pullOnStart && (event.reason === 'startup' || event.reason === 'reload')) {
+			// Fire-and-forget: don't block session_start on network/git operations.
+			// The sync runs in background; status widget updates via setStatus().
+			// startup/reload both benefit from pulling latest remote sessions.
+			runSync(setStatus, notifyUser).catch(() => {});
 		}
 
 		startPolling(config, setStatus, notifyUser);
@@ -176,7 +190,8 @@ export default function cloudSessions(pi: ExtensionAPI): void {
 	pi.on('session_before_switch', async (_event, ctx) => {
 		const config = await loadConfig();
 		if (!isProviderConfigured(config)) return;
-		await runSync(
+		// Fire-and-forget: don't block session switch on sync.
+		runSync(
 			(k, t) => ctx.ui.setStatus(k, t),
 			(text, level) => ctx.ui.notify(text, level),
 		).catch(() => {});
@@ -196,95 +211,561 @@ export default function cloudSessions(pi: ExtensionAPI): void {
 		stopTimers();
 		const config = await loadConfig();
 		if (!config.autoPush || !isProviderConfigured(config)) return;
-		await runSync(
+		// Fire-and-forget: don't block session_shutdown (/reload) on sync.
+		runSync(
 			(k, t) => ctx.ui.setStatus(k, t),
 			(text, level) => ctx.ui.notify(text, level),
 		).catch(() => {});
 	});
 
-	pi.registerCommand('cloud-sessions-sync', {
-		description: 'Sync pi sessions with the cloud backend now (pull + push)',
+	// ── Unified /cloud-sessions command ──
+	pi.registerCommand('cloud-sessions', {
+		description:
+			'TUI panel for cloud sessions: sync, configure backend, view status, and edit settings',
 		handler: async (_args, ctx) => {
-			try {
-				const result = await runSync((k, t) => ctx.ui.setStatus(k, t));
-				if (!result) {
-					ctx.ui.notify(
-						'cloud-sessions is not configured. Run /cloud-sessions-setup.',
-						'warning',
+			if (typeof (ctx as any).mode !== 'string' || (ctx as any).mode !== 'tui') {
+				ctx.ui.notify('/cloud-sessions requires TUI mode.', 'warning');
+				return;
+			}
+
+			// ── Setup helper (uses overlay UI) ──
+			async function runSetup(cfg: CloudSessionsConfig): Promise<boolean> {
+				const provider = await ctx.ui.select('Cloud sessions backend', ['git', 'icloud']);
+				if (!provider) return false;
+
+				if (provider === 'git') {
+					const repo = await ctx.ui.input(
+						'Private git repo URL',
+						'git@github.com:you/pi-sessions.git',
 					);
-					return;
+					if (!repo) {
+						ctx.ui.notify('Setup cancelled: repo is required.', 'warning');
+						return false;
+					}
+					const branch = (await ctx.ui.input('Branch', 'main')) || 'main';
+					await writeConfig({ provider: 'git', git: { repo, branch } });
+				} else {
+					const dir =
+						(await ctx.ui.input('iCloud sessions folder', cfg.icloud.dir)) ||
+						cfg.icloud.dir;
+					await writeConfig({ provider: 'icloud', icloud: { dir } });
 				}
-				ctx.ui.notify(
-					`Synced: ${result.pushed.length} pushed, ${result.pulled.length} pulled, ${result.unchanged} unchanged.`,
-					'info',
-				);
-			} catch (error) {
-				ctx.ui.notify(
-					`Sync failed: ${error instanceof Error ? error.message : String(error)}`,
-					'error',
-				);
-			}
-		},
-	});
 
-	pi.registerCommand('cloud-sessions-status', {
-		description: 'Show cloud-sessions configuration and status',
-		handler: async (_args, ctx) => {
-			const config = await loadConfig();
-			const pm = await loadProjectMatchConfig();
-			const lines = [
-				`provider: ${config.provider}`,
-				`configured: ${isProviderConfigured(config) ? 'yes' : 'no'}`,
-				`autoPush: ${config.autoPush}`,
-				`pullOnStart: ${config.pullOnStart}`,
-				`pollIntervalMs: ${config.pollIntervalMs}`,
-				`machineId: ${config.machineId}`,
-				config.provider === 'git'
-					? `git repo: ${config.git.repo || '(unset)'} [${config.git.branch}]`
-					: `icloud dir: ${config.icloud.dir}`,
-				`config file: ${configFilePath()}`,
-				`projectMatch.suffixSegments: ${pm.suffixSegments ?? 0}`,
-				`projectMatch.gitRemote: ${pm.gitRemote ?? false}`,
-				`projectMatch config: ${projectMatchConfigPath()}`,
-			];
-			ctx.ui.notify(lines.join('\n'), 'info');
-		},
-	});
-
-	pi.registerCommand('cloud-sessions-setup', {
-		description: 'Configure the cloud-sessions backend (git repo or iCloud folder)',
-		handler: async (_args, ctx) => {
-			const provider = await ctx.ui.select('Cloud sessions backend', ['git', 'icloud']);
-			if (!provider) return;
-
-			if (provider === 'git') {
-				const repo = await ctx.ui.input(
-					'Private git repo URL',
-					'git@github.com:you/pi-sessions.git',
-				);
-				if (!repo) {
-					ctx.ui.notify('Setup cancelled: repo is required.', 'warning');
-					return;
-				}
-				const branch = (await ctx.ui.input('Branch', 'main')) || 'main';
-				await writeConfig({ provider: 'git', git: { repo, branch } });
-				ctx.ui.notify(
-					`Saved git backend to ${configFilePath()}. Syncing automatically from now on.`,
-					'info',
-				);
-			} else {
-				const config = await loadConfig();
-				const dir =
-					(await ctx.ui.input('iCloud sessions folder', config.icloud.dir)) ||
-					config.icloud.dir;
-				await writeConfig({ provider: 'icloud', icloud: { dir } });
-				ctx.ui.notify(
-					`Saved iCloud backend to ${configFilePath()}. Syncing automatically from now on.`,
-					'info',
-				);
+				ctx.ui.setStatus(STATUS_KEY, `sessions: ${provider}`);
+				ctx.ui.notify('Cloud sessions configured.', 'info');
+				return true;
 			}
 
-			ctx.ui.setStatus(STATUS_KEY, `sessions: ${provider}`);
+			// ── Settings panel helper ──
+			async function runSettings(): Promise<void> {
+				const cfg = await loadConfig();
+				const currentPM = await loadProjectMatchConfig();
+
+				const edited = {
+					autoPush: cfg.autoPush,
+					pullOnStart: cfg.pullOnStart,
+					pollIntervalMs: cfg.pollIntervalMs,
+					pushDebounceMs: cfg.pushDebounceMs,
+					suffixSegments: currentPM.suffixSegments ?? 0,
+					gitRemote: currentPM.gitRemote === true,
+				};
+
+				type FieldId =
+					| 'autoPush'
+					| 'pullOnStart'
+					| 'pollIntervalMs'
+					| 'pushDebounceMs'
+					| 'suffixSegments'
+					| 'gitRemote'
+					| 'save'
+					| 'cancel';
+				const fields: { id: FieldId; label: string; hint: string }[] = [
+					{
+						id: 'autoPush',
+						label: 'Auto push: {v}',
+						hint: 'Automatically push sessions after each turn.',
+					},
+					{
+						id: 'pullOnStart',
+						label: 'Pull on start: {v}',
+						hint: 'Pull from remote sessions when pi starts.',
+					},
+					{
+						id: 'pollIntervalMs',
+						label: 'Poll interval (ms): {v}',
+						hint: 'How often to check for remote changes. 0 = disable polling.',
+					},
+					{
+						id: 'pushDebounceMs',
+						label: 'Push debounce (ms): {v}',
+						hint: 'Delay in ms before pushing after a turn ends.',
+					},
+					{
+						id: 'suffixSegments',
+						label: 'Suffix segments: {v}',
+						hint: 'Match projects by last N path segments. 0 = disabled.',
+					},
+					{
+						id: 'gitRemote',
+						label: 'Git remote match: {v}',
+						hint: 'Match sessions by git remote URL via .project-map.json.',
+					},
+					{
+						id: 'save',
+						label: '[ Save ]',
+						hint: 'Save all changes and close the panel.',
+					},
+					{
+						id: 'cancel',
+						label: '[ Cancel ]',
+						hint: 'Discard changes and close the panel.',
+					},
+				];
+
+				function labelFor(field: (typeof fields)[0]): string {
+					const id = field.id;
+					if (id === 'save' || id === 'cancel') return field.label;
+					const val = (edited as Record<string, unknown>)[id];
+					const display = typeof val === 'boolean' ? (val ? 'ON' : 'OFF') : String(val);
+					return field.label.replace('{v}', display);
+				}
+
+				const numberFields = new Set<FieldId>([
+					'pollIntervalMs',
+					'pushDebounceMs',
+					'suffixSegments',
+				]);
+				const toggleFields = new Set<FieldId>(['autoPush', 'pullOnStart', 'gitRemote']);
+
+				async function saveAll() {
+					await writeConfig({
+						autoPush: edited.autoPush,
+						pullOnStart: edited.pullOnStart,
+						pollIntervalMs: edited.pollIntervalMs,
+						pushDebounceMs: edited.pushDebounceMs,
+					});
+					await writeProjectMatchConfig({
+						suffixSegments: edited.suffixSegments,
+						gitRemote: edited.gitRemote,
+					});
+				}
+
+				const providerLine =
+					cfg.provider === 'git'
+						? `Backend: git  [${cfg.git.repo || '(unset)'}]  branch: ${cfg.git.branch}`
+						: `Backend: iCloud  [${cfg.icloud.dir}]`;
+				const detailLines = [
+					providerLine,
+					`Machine: ${cfg.machineId}`,
+					`Config: ${configFilePath()}`,
+				];
+
+				const MIN_HEIGHT = 16;
+				let focusIndex = 0;
+				let editingField: FieldId | null = null;
+				let inputBuffer = '';
+				let saved = false;
+				let detailsExpanded = false;
+
+				await ctx.ui.custom<void>((tui, theme, _kb, done) => {
+					const render = (width: number): string[] => {
+						const lines: string[] = [];
+						const cw = width;
+						const add = (s: string) => lines.push(truncateToWidth(s, width));
+						const padRight = (text: string, offset = 0): string => {
+							const fill = Math.max(0, cw - offset - visibleWidth(text));
+							return text + ' '.repeat(fill);
+						};
+
+						const sepLine = theme.fg('borderMuted', '─'.repeat(cw - 1));
+						add(theme.fg('accent', 'Cloud Sessions Config'));
+						add(sepLine);
+
+						if (detailsExpanded) {
+							for (const dl of detailLines) {
+								add(theme.fg('dim', dl));
+							}
+							add(sepLine);
+						}
+
+						for (let i = 0; i < fields.length; i++) {
+							const field = fields[i];
+							const isFocused = i === focusIndex;
+							const prefix = isFocused ? theme.fg('accent', '>') : ' ';
+							const lblColor = isFocused ? 'text' : 'dim';
+
+							if (editingField === field.id && numberFields.has(field.id)) {
+								const base = `${field.label.split(':')[0]}:`;
+								const display = inputBuffer || String((edited as any)[field.id]);
+								const editContent = ` ${base} ${theme.bg('selectedBg', display + ' ')}`;
+								add(`${prefix}${padRight(editContent, 1)}`);
+							} else if (field.id === 'save' || field.id === 'cancel') {
+								add(
+									`${prefix}${padRight(` ${theme.fg(isFocused ? 'accent' : 'dim', field.label)}`, 1)}`,
+								);
+							} else {
+								add(
+									`${prefix}${padRight(` ${theme.fg(lblColor, labelFor(field))}`, 1)}`,
+								);
+							}
+						}
+
+						const focusedField = fields[focusIndex];
+						add(sepLine);
+						if (focusedField && editingField !== focusedField.id) {
+							add(
+								`${theme.fg('dim', '  ')}${padRight(theme.fg('muted', focusedField.hint), 2)}`,
+							);
+						} else if (editingField) {
+							add(
+								padRight(
+									theme.fg(
+										'muted',
+										'Type digits, Enter to confirm, Esc to cancel.',
+									),
+								),
+							);
+						} else {
+							add(
+								theme.fg(
+									'dim',
+									padRight(
+										'Up/Down navigate  Enter toggle/edit  Ctrl+Shift+O details  Esc close',
+									),
+								),
+							);
+							saved = false;
+						}
+
+						if (saved) {
+							add(theme.fg('success', padRight('Saved.')));
+						}
+
+						const padCount = Math.max(0, MIN_HEIGHT - lines.length);
+						for (let i = 0; i < padCount; i++) lines.push('');
+
+						return lines;
+					};
+
+					function commitNumberEdit() {
+						if (!editingField || !numberFields.has(editingField)) return;
+						const raw = inputBuffer.trim();
+						const current = (edited as any)[editingField] as number;
+						const val = raw ? parseInt(raw, 10) : current;
+						(edited as any)[editingField] = Number.isFinite(val) && val >= 0 ? val : 0;
+						editingField = null;
+						inputBuffer = '';
+						tui.requestRender();
+					}
+
+					return {
+						render,
+						invalidate: () => {},
+						handleInput: (data: string) => {
+							const isEnter = data === '\r' || data === '\n';
+							const isEsc = data === '\x1b';
+							const isUp = data === '\x1b[A';
+							const isDown = data === '\x1b[B';
+							const isBackspace = data === '\x7f' || data === '\b';
+
+							if (editingField) {
+								if (isEnter) {
+									commitNumberEdit();
+									return;
+								}
+								if (isEsc) {
+									editingField = null;
+									inputBuffer = '';
+									tui.requestRender();
+									return;
+								}
+								if (isBackspace) {
+									inputBuffer = inputBuffer.slice(0, -1);
+									tui.requestRender();
+									return;
+								}
+								if (/^[0-9]$/.test(data)) {
+									inputBuffer += data;
+									tui.requestRender();
+								}
+								return;
+							}
+
+							if (matchesKey(data, Key.ctrlShift('o'))) {
+								detailsExpanded = !detailsExpanded;
+								tui.requestRender();
+								return;
+							}
+
+							if (isUp) {
+								focusIndex = (focusIndex - 1 + fields.length) % fields.length;
+								tui.requestRender();
+								return;
+							}
+							if (isDown) {
+								focusIndex = (focusIndex + 1) % fields.length;
+								tui.requestRender();
+								return;
+							}
+
+							const focused = fields[focusIndex];
+							if (isEnter) {
+								if (focused.id === 'save') {
+									void (async () => {
+										await saveAll();
+										saved = true;
+										tui.requestRender();
+										setTimeout(() => done(), 600);
+									})();
+									return;
+								}
+								if (focused.id === 'cancel') {
+									done();
+									return;
+								}
+								if (numberFields.has(focused.id)) {
+									editingField = focused.id;
+									inputBuffer = '';
+									tui.requestRender();
+									return;
+								}
+								if (toggleFields.has(focused.id)) {
+									(edited as any)[focused.id] = !(edited as any)[focused.id];
+									tui.requestRender();
+									return;
+								}
+								return;
+							}
+							if (isEsc) done();
+						},
+						dispose: () => {},
+					};
+				});
+			}
+
+			// ── Main TUI panel ──
+			type MainAction = 'sync' | 'reconfigure' | 'settings' | 'close';
+
+			async function showMainPanel(): Promise<MainAction> {
+				const cfg = await loadConfig();
+				const pm = await loadProjectMatchConfig();
+				let lastResult: SyncResult | null = null;
+				let syncRunning = false;
+
+				// Compute one-line status heading
+				function statusLine(): string {
+					if (!isProviderConfigured(cfg)) return 'Not configured';
+					if (syncRunning) return `Syncing (${cfg.provider})...`;
+					if (lastResult) {
+						const parts: string[] = [];
+						if (lastResult.pushed.length)
+							parts.push(`${lastResult.pushed.length} pushed`);
+						if (lastResult.pulled.length)
+							parts.push(`${lastResult.pulled.length} pulled`);
+						if (lastResult.unchanged) parts.push(`${lastResult.unchanged} unchanged`);
+						return parts.join(', ') || 'up to date';
+					}
+					return 'Idle';
+				}
+
+				const actionFields: { id: MainAction; label: string; hint: string }[] = [
+					{
+						id: 'sync',
+						label: '[ Sync Now ]',
+						hint: 'Sync sessions immediately (pull + push).',
+					},
+					{
+						id: 'reconfigure',
+						label: '[ Reconfigure Backend ]',
+						hint: 'Change provider (git/icloud) or repo details.',
+					},
+					{
+						id: 'settings',
+						label: '[ Advanced Settings ]',
+						hint: 'Edit auto-push, polling, project matching, and more.',
+					},
+					{ id: 'close', label: '[ Close ]', hint: 'Close the panel.' },
+				];
+
+				const configured = isProviderConfigured(cfg);
+				const providerDesc = configured
+					? cfg.provider === 'git'
+						? `git  [${cfg.git.repo || '(unset)'}]  branch: ${cfg.git.branch}`
+						: `icloud  [${cfg.icloud.dir}]`
+					: '(none)';
+
+				const summaryLine = configured
+					? `Auto: ${cfg.autoPush ? 'ON' : 'OFF'}  |  Pull start: ${cfg.pullOnStart ? 'ON' : 'OFF'}  |  Poll: ${cfg.pollIntervalMs}ms  |  Debounce: ${cfg.pushDebounceMs}ms`
+					: '';
+
+				const pmLine = configured
+					? `Match: ${(pm.suffixSegments ?? 0) > 0 ? `suffix=${pm.suffixSegments}` : 'suffix=0'}  |  gitRemote: ${pm.gitRemote ? 'ON' : 'OFF'}`
+					: '';
+
+				const MIN_HEIGHT = 14;
+				let focusIndex = 1; // start on first action (skip provider line)
+
+				return new Promise<MainAction>((resolve) => {
+					ctx.ui.custom<void>((tui, theme, _kb, done) => {
+						const render = (width: number): string[] => {
+							const lines: string[] = [];
+							const cw = width;
+							const add = (s: string) => lines.push(truncateToWidth(s, width));
+							const padRight = (text: string): string => {
+								const fill = Math.max(0, cw - visibleWidth(text));
+								return text + ' '.repeat(fill);
+							};
+
+							const sepLine = theme.fg('borderMuted', '─'.repeat(cw - 1));
+							add(theme.fg('accent', 'Cloud Sessions'));
+							add(sepLine);
+
+							// ── Provider ──
+							add(theme.fg('dim', `Provider: ${providerDesc}`));
+
+							// ── Status ──
+							const statusText = statusLine();
+							const statusFg = syncRunning ? 'text' : lastResult ? 'success' : 'dim';
+							add(theme.fg(statusFg, `Status: ${statusText}`));
+
+							if (summaryLine) {
+								add(theme.fg('muted', summaryLine));
+							}
+							if (pmLine) {
+								add(theme.fg('muted', pmLine));
+							}
+
+							// ── Separator ──
+							add(sepLine);
+
+							// ── Action fields ──
+							for (let i = 0; i < actionFields.length; i++) {
+								const f = actionFields[i];
+								const focused = i === focusIndex;
+								const prefix = focused ? theme.fg('accent', '>') : ' ';
+								const color = focused ? 'accent' : 'dim';
+								add(`${prefix} ${padRight(theme.fg(color, f.label))}`);
+							}
+
+							// ── Separator + Hint area ──
+							add(sepLine);
+							const hint = actionFields[focusIndex]?.hint ?? '';
+							add(theme.fg('muted', hint));
+
+							// ── Footer help bar ──
+							add(
+								theme.fg(
+									'dim',
+									padRight('Up/Down navigate  Enter confirm  Esc close'),
+								),
+							);
+
+							const padCount = Math.max(0, MIN_HEIGHT - lines.length);
+							for (let i = 0; i < padCount; i++) lines.push('');
+
+							return lines;
+						};
+
+						return {
+							render,
+							invalidate: () => {},
+							handleInput: async (data: string) => {
+								if (data === '\x1b[A') {
+									focusIndex =
+										(focusIndex - 1 + actionFields.length) %
+										actionFields.length;
+									tui.requestRender();
+									return;
+								}
+								if (data === '\x1b[B') {
+									focusIndex = (focusIndex + 1) % actionFields.length;
+									tui.requestRender();
+									return;
+								}
+								if (data === '\x1b') {
+									done();
+									resolve('close');
+									return;
+								}
+
+								if (data === '\r' || data === '\n') {
+									const action = actionFields[focusIndex].id;
+
+									if (action === 'close') {
+										done();
+										resolve('close');
+										return;
+									}
+
+									if (action === 'reconfigure' || action === 'settings') {
+										done();
+										resolve(action);
+										return;
+									}
+
+									if (action === 'sync') {
+										if (syncRunning) return;
+										syncRunning = true;
+										tui.requestRender();
+										try {
+											const result = await runSync(
+												(k, t) => ctx.ui.setStatus(k, t),
+												(text, level) => ctx.ui.notify(text, level),
+											);
+											lastResult = result;
+										} catch {
+											// error already logged by runSync
+										} finally {
+											syncRunning = false;
+											tui.requestRender();
+										}
+										return;
+									}
+								}
+							},
+							dispose: () => {},
+						};
+					});
+				});
+			}
+
+			// ── Main loop: keep returning to the panel after sub-actions ──
+			let firstRun = true;
+			while (true) {
+				const cfg = await loadConfig();
+
+				if (!isProviderConfigured(cfg)) {
+					if (!firstRun) {
+						// Came back from reconfigure that resulted in no config
+						ctx.ui.notify('Cloud sessions not configured.', 'warning');
+						break;
+					}
+					const ok = await runSetup(cfg);
+					if (!ok) break;
+					firstRun = false;
+					continue; // re-check, now configured
+				}
+
+				firstRun = false;
+				const action = await showMainPanel();
+
+				if (action === 'close') break;
+
+				if (action === 'reconfigure') {
+					const cfg2 = await loadConfig();
+					const ok = await runSetup(cfg2);
+					if (!ok) continue; // cancelled, back to main panel
+					continue;
+				}
+
+				if (action === 'settings') {
+					await runSettings();
+					continue; // back to main panel
+				}
+
+				// 'sync' never reaches here (handled within panel)
+				break;
+			}
 		},
 	});
 }

@@ -89,9 +89,7 @@ pi 将会话存储为 `<agent-dir>/sessions/--<project-path>--/<timestamp>_<uuid
 
 ## 命令
 
-- `/cloud-sessions-sync` — 立即拉取 + 推送（可选；同步是自动的）。
-- `/cloud-sessions-status` — 显示配置和当前状态。
-- `/cloud-sessions-setup` — 交互式配置后端。
+- `/cloud-sessions` — 打开统一 TUI 面板，在一个界面中完成所有操作：**手动同步**、**配置后端**（git/icloud）、**查看状态**、以及**调整高级设置**（autoPush、轮询间隔、项目路径匹配等）。（需 TUI 模式）
 
 ## 配置
 

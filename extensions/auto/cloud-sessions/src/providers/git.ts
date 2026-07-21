@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, unlinkSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -7,6 +7,9 @@ import type { GitProviderConfig } from '../config.js';
 import { configDir } from '../config.js';
 import { copyInto, listJsonlIn } from './mirror.js';
 import type { RemoteFile, SyncProvider } from './types.js';
+import { createLogger } from '@zenone/pi-logger';
+
+const log = createLogger('pi-cloud-sessions:git');
 
 const exec = promisify(execFile);
 
@@ -95,6 +98,30 @@ esac
 		return this.git([...auth, ...args]);
 	}
 
+	/**
+	 * Remove a stale index.lock file if it is older than `maxAgeMs`.
+	 * Git processes that crash mid-command leave this file behind, blocking
+	 * all subsequent write operations (reset, commit, etc.).
+	 */
+	private cleanStaleIndexLock(maxAgeMs = 60_000): void {
+		const lockPath = join(this.clonePath, '.git', 'index.lock');
+		let mtimeMs: number;
+		try {
+			const s = require('node:fs').statSync(lockPath);
+			mtimeMs = Number(s.mtimeMs);
+		} catch {
+			// No lock file → nothing to clean
+			return;
+		}
+		const age = Date.now() - mtimeMs;
+		if (age > maxAgeMs) {
+			unlinkSync(lockPath);
+			log.warn('removed stale index.lock (age=%dms)', age);
+		} else {
+			log.debug('index.lock is recent (age=%dms), leaving it alone', age);
+		}
+	}
+
 	private isCloned(): boolean {
 		return existsSync(join(this.clonePath, '.git'));
 	}
@@ -145,6 +172,7 @@ esac
 
 	async pull(): Promise<void> {
 		await this.ensureReady();
+		this.cleanStaleIndexLock();
 		await this.gitNetwork(['fetch', this.remoteName, this.branch]).catch(() => '');
 		await this.git(['reset', '--hard', `${this.remoteName}/${this.branch}`]).catch(() => '');
 	}
@@ -166,6 +194,7 @@ esac
 	}
 
 	async push(message: string): Promise<void> {
+		this.cleanStaleIndexLock();
 		await this.git(['add', '-A']);
 		const status = await this.git(['status', '--porcelain']);
 		if (status.length === 0) return;
