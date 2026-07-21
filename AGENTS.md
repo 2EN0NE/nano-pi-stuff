@@ -322,6 +322,10 @@ export default function (pi: ExtensionAPI) {
 
 测试用例中使用手动隔离环境（见 `test/extensions/tools/smoke.test.sh` 的场景 4/5）。
 
+#### 完整 TUI 设计规范
+
+完整的设计规范、颜色使用、键盘交互、边框布局和 TUI 测试方法见 [`docs/tui-design-principles.md`](docs/tui-design-principles.md)。开发扩展 TUI 前请先阅读。
+
 ---
 
 ## 开发Pi插件一些补充信息
