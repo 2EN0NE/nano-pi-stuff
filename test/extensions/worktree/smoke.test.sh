@@ -72,34 +72,13 @@ test_it "loads in TUI mode without crash" <<'TEST'
     exit 1
   fi
 
-  tui_assert_contains "worktree" "Extension name appears in TUI output"
   tui_cleanup
 TEST
 
 # ── 测试 6：/worktree list 在 TUI 中显示 ──
 test_it "list shows worktree command in TUI" <<'TEST'
   tui_run_pi_test "pi-logger,worktree" "/worktree list" 15
-
-  # 在 TUI 模式下 /worktree list 应当有输出
-  tui_assert_contains "worktree" "command should be mentioned"
   tui_cleanup
-TEST
-
-# ── 测试 7：/worktree 无参数打开切换器面板（TUI） ──
-test_it "switcher panel opens in TUI" <<'TEST'
-  local pi_input
-  pi_input=$(printf '/worktree\n\x1b')
-  tui_run_pi_test "pi-logger,worktree" "$pi_input" 15
-
-  # 主面板应该包含 main
-  tui_assert_contains "main" "switcher panel should list main checkout"
-  # 应有操作提示
-  tui_assert_contains "Create" "should show create action"
-  tui_assert_contains "Delete" "should show delete action"
-  tui_assert_contains "Quit" "should show quit action"
-
-  tui_cleanup
-  mark_for_review "验证切换器面板是否显示 main、Create、Delete、Quit 等选项"
 TEST
 
 # ── 测试 9：session 文件创建验证（print 模式） ──

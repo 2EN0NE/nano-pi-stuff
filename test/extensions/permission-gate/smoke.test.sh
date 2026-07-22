@@ -500,11 +500,14 @@ test_it "compound command auto-approve records originalCommand and subCommands" 
 
   # 修改沙箱中的 mock-llm/index.ts，将单命令替换为复合命令
   # 使用相对路径 ./compound-test 确保在 scope 内
-  sed -i "s|rm -rf ./permission-gate-test-target|rm -rf ./compound-test \&\& echo done|g" \
-    "$test_home/.pi/extensions/mock-llm/index.ts"
+  # 便携式跨平台 sed：sed -i.bak + 清理 .bak（macOS BSD sed 与 Linux GNU sed 兼容）
+  local mock_file="$test_home/.pi/extensions/mock-llm/index.ts"
+  sed -i.bak "s|rm -rf ./permission-gate-test-target|rm -rf ./compound-test \&\& echo done|g" \
+    "$mock_file"
+  rm -f "$mock_file.bak"
 
   # 确认替换成功
-  if grep -q "rm -rf ./compound-test && echo done" "$test_home/.pi/extensions/mock-llm/index.ts" 2>/dev/null; then
+  if grep -q "rm -rf ./compound-test && echo done" "$mock_file" 2>/dev/null; then
     echo "PASS: mock-llm updated with compound command"
   else
     echo "FAIL: mock-llm NOT updated"

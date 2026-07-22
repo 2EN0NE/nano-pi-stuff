@@ -47,8 +47,9 @@ const log = createLogger('pi-worktree');
 // ═══════════════════════════════════════════
 
 function parseArgs(input: string): { command: string; flags: Record<string, string> } {
-	const parts = input.trim().split(/\s+/);
-	const command = parts[0] || 'help';
+	const trimmed = input.trim();
+	const parts = trimmed ? trimmed.split(/\s+/) : [];
+	const command = parts.length > 0 ? parts[0] : '';
 	const flags: Record<string, string> = {};
 	const extraPositional: string[] = [];
 	for (let i = 1; i < parts.length; i++) {
@@ -80,6 +81,7 @@ export const COMMANDS = [
 	'rebase [--source <n>] [--target <b>]',
 	'clean [--dry-run]',
 	'shell',
+	'widget <on|off>',
 ];
 
 export function formatHelp(): string {
@@ -151,8 +153,14 @@ export async function handleWorktreeCommand(
 		return;
 	}
 
-	// 无参数：显示切换器面板
-	if (command === 'help' || command === '') {
+	// 显式 help：始终显示帮助文本
+	if (command === 'help') {
+		ctx.ui.notify(formatHelp(), 'info');
+		return;
+	}
+
+	// 无参数：在 TUI 模式下显示切换器面板，否则显示帮助
+	if (command === '') {
 		if (!ctx.hasUI) {
 			ctx.ui.notify(formatHelp(), 'info');
 			return;
@@ -185,6 +193,9 @@ export async function handleWorktreeCommand(
 			break;
 		case 'shell':
 			handleShell(repoRoot, ctx);
+			break;
+		case 'widget':
+			handleWidget(flags, ctx);
 			break;
 		default:
 			ctx.ui.notify(formatHelp(), 'info');
@@ -832,6 +843,43 @@ async function handleClean(
 // ═══════════════════════════════════════════
 // shell
 // ═══════════════════════════════════════════
+
+// ═══════════════════════════════════════════
+// widget（切换 widget 可见性）
+// ═══════════════════════════════════════════
+
+function handleWidget(flags: Record<string, string>, ctx: any): void {
+	const arg = flags._positional || '';
+	if (arg === 'off') {
+		log.info('widget hidden');
+		try {
+			// 尝试通过 widget-wrangler 或直接设置 widget
+			ctx.ui.setStatus?.('pi-worktree', '');
+		} catch {
+			/* ignore */
+		}
+		ctx.ui.notify('Worktree widget hidden', 'info');
+	} else if (arg === 'on') {
+		log.info('widget visible');
+		const repoRoot = getRepoRoot(ctx.cwd);
+		if (repoRoot) {
+			const wts = getManagedWorktrees(repoRoot);
+			const currentName = _getCurrentName(repoRoot, ctx.cwd);
+			const label = currentName ? `wt:${currentName}` : `main:${wts.length}`;
+			try {
+				ctx.ui.setStatus?.('pi-worktree', label);
+			} catch {
+				/* ignore */
+			}
+		}
+		ctx.ui.notify('Worktree widget visible', 'info');
+	} else {
+		ctx.ui.notify(
+			'Usage: /worktree widget <on|off>\n  on   Show worktree widget in status bar\n  off  Hide worktree widget',
+			'info',
+		);
+	}
+}
 
 function handleShell(repoRoot: string, ctx: any, targetName?: string): void {
 	const name = targetName || _getCurrentName(repoRoot, ctx.cwd);
