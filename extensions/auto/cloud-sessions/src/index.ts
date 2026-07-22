@@ -541,7 +541,7 @@ export default function cloudSessions(pi: ExtensionAPI): void {
 						}
 
 						const padCount = Math.max(0, MIN_HEIGHT - lines.length);
-						for (let i = 0; i < padCount; i++) lines.push('');
+						for (let i = 0; i < padCount; i++) lines.push(' '.repeat(width));
 
 						return lines;
 					};
@@ -760,7 +760,8 @@ export default function cloudSessions(pi: ExtensionAPI): void {
 							);
 
 							const padCount = Math.max(0, MIN_HEIGHT - lines.length);
-							for (let i = 0; i < padCount; i++) lines.push('');
+							// 必须用空格而非空字符串，否则旧渲染内容无法清除导致残影
+							for (let i = 0; i < padCount; i++) lines.push(' '.repeat(width));
 
 							return lines;
 						};
