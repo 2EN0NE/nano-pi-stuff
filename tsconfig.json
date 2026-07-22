@@ -19,7 +19,9 @@
 		"paths": {
 			"@zenone/pi-logger": ["./extensions/meta/pi-logger/api.ts"],
 			"@zenone/pi-logger/types": ["./extensions/meta/pi-logger/types.ts"],
-			"@zenone/pi-selector": ["./extensions/meta/selector/index.ts"]
+			"@zenone/pi-selector": ["./extensions/meta/selector/index.ts"],
+			"@zenone/pi-config": ["./extensions/meta/pi-config/api.ts"],
+			"@zenone/pi-config/types": ["./extensions/meta/pi-config/types.ts"]
 		}
 	},
 	"include": ["extensions/**/*.ts", "scripts/**/*.ts"],

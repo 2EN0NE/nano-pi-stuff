@@ -127,3 +127,40 @@ jobs:
                   LATEST=$(ls -1t test/results/ | head -1)
                   SF="test/results/$LATEST/summary.md"
                   cat "$SF" 2>/dev/null || echo "(no summary)"
+
+    # ── Worktree E2E Tests (blocking) ──
+    # 独立 job：worktree 扩展的测试作为 required status check 阻断合并
+    e2e-worktree:
+        name: E2E Worktree
+        runs-on: ubuntu-latest
+        continue-on-error: false
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            - name: Install project dependencies
+              run: npm ci
+            - name: Install pi globally
+              run: npm install -g @earendil-works/pi-coding-agent
+            - name: Create node_modules link for @zenone/pi-logger
+              run: |
+                  PI_PKG=$(node -e "console.log(
+                    require.resolve('@earendil-works/pi-coding-agent/package.json')
+                  )")
+                  PI_NM=$(dirname "$PI_PKG")/node_modules/@zenone
+                  mkdir -p "$PI_NM"
+                  ln -sf "$PWD/extensions/meta/pi-logger" \
+                    "$PI_NM/pi-logger" 2>/dev/null || true
+            - name: Run Vitest worktree tests
+              env:
+                  CI: true
+              run: |
+                  npx vitest run \
+                    test/vitest/extensions/worktree.test.ts \
+                    test/vitest/extensions/worktree.operations.test.ts
+            - name: Run bash e2e worktree tests
+              env:
+                  CI: true
+              run: bash test/scripts/run-e2e.sh --ext worktree

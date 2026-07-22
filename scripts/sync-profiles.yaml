@@ -72,6 +72,7 @@ profiles:
             - prompt-editor # prompt 组装检查与控制
             - mode-switcher # 一键切换模型预设
             - session-tree-label # 快捷键进行session-tree打标
+            - worktree #TUI中操作worktree插件
         # ── 全局通用技能（research/ 和分析类 analyze/） ──
         skills:
             # research/ — 信息获取与研究
@@ -160,6 +161,7 @@ profiles:
                 - mode-switcher
                 - quit
                 - session-tree-label
+                - worktree
                 # 以下插件为不常用或待观察
                 - unified-edit # ⚠ 待观察：上游实验性编辑工具，未替代 multi-edit
                 - control # 外部进程通过unix socket控制pi
