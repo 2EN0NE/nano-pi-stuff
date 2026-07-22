@@ -6,7 +6,7 @@
  *
  * 键盘处理使用 matchesKey() / getKeybindings() 而非 raw escape codes。
  */
-import { truncateToWidth, matchesKey, getKeybindings } from '@earendil-works/pi-tui';
+import { truncateToWidth, visibleWidth, matchesKey, getKeybindings } from '@earendil-works/pi-tui';
 import type { ManagedWorktree } from './paths.js';
 import type { NodeModulesStrategy } from '../types.js';
 import { setLastNodeModulesStrategy } from '../state.js';
@@ -26,7 +26,16 @@ const STRATEGY_LABELS: Record<NodeModulesStrategy, string> = {
 // ═══════════════════════════════════════════
 
 export interface SwitchResult {
-	action: 'switch' | 'fork' | 'create' | 'delete' | 'merge' | 'shell' | 'quit';
+	action:
+		| 'switch'
+		| 'fork'
+		| 'create'
+		| 'delete'
+		| 'merge'
+		| 'rebase'
+		| 'shell'
+		| 'quit'
+		| 'operations';
 	target?: string;
 }
 
@@ -105,7 +114,14 @@ class WorktreeSwitcherPanel {
 		}
 
 		if (matchesKey(data, 'enter') || matchesKey(data, 'space')) {
-			this.done_({ action: 'switch', target: this.resolveTarget_() });
+			const target = this.resolveTarget_();
+			if (target === 'main') {
+				// main: 直接切换（兼容旧行为）
+				this.done_({ action: 'switch', target: 'main' });
+			} else {
+				// worktree: 弹出操作子菜单
+				this.done_({ action: 'operations', target });
+			}
 			return;
 		}
 
@@ -184,13 +200,15 @@ class WorktreeSwitcherPanel {
 					: isCurrent
 						? th.fg('success', item.name)
 						: th.fg('text', item.name);
+			const nameVisible = visibleWidth(namePart);
+			const namePadded = namePart + ' '.repeat(Math.max(0, 15 - nameVisible));
 			const dirtyStr =
 				item.dirty > 0 ? th.fg('warning', `dirty(${item.dirty})`) : th.fg('dim', 'clean');
 			const aheadStr = item.ahead > 0 ? th.fg('info', ` +${item.ahead}`) : '';
 
 			lines.push(
 				truncateToWidth(
-					` ${arrow} ${namePart.padEnd(15)} ${item.branch.padEnd(18)} ${dirtyStr}${aheadStr}`,
+					` ${arrow} ${namePadded} ${item.branch.padEnd(18)} ${dirtyStr}${aheadStr}`,
 					width,
 				),
 			);
@@ -654,6 +672,134 @@ export async function promptWorktreeName(ctx: any): Promise<string | null> {
 }
 
 // ═══════════════════════════════════════════
+// 操作子菜单（Enter 选中 worktree 时弹出）
 // ═══════════════════════════════════════════
-// （widget 已移除，保留此区域供未来 TUI 组件使用）
-// ═══════════════════════════════════════════
+
+export interface SubmenuResult {
+	action: 'switch' | 'fork' | 'merge' | 'rebase' | 'delete' | 'shell' | 'cancel';
+}
+
+interface SubmenuOption {
+	value: SubmenuResult['action'];
+	label: string;
+	key: string;
+}
+
+class OperationSubmenu {
+	private tui_: { requestRender: () => void };
+	private theme_: any;
+	private done_: (v: SubmenuResult) => void;
+	private options_: SubmenuOption[];
+	private cursor_: number;
+	private worktreeName_: string;
+
+	constructor(opts: {
+		tui: { requestRender: () => void };
+		theme: any;
+		done: (v: SubmenuResult) => void;
+		worktreeName: string;
+	}) {
+		this.tui_ = opts.tui;
+		this.theme_ = opts.theme;
+		this.done_ = opts.done;
+		this.worktreeName_ = opts.worktreeName;
+
+		this.options_ = [
+			{ value: 'switch', label: 'Switch to worktree', key: 'S' },
+			{ value: 'fork', label: 'Fork context to worktree', key: 'F' },
+			{ value: 'merge', label: 'Merge into main', key: 'M' },
+			{ value: 'rebase', label: 'Rebase onto main', key: 'R' },
+			{ value: 'delete', label: 'Delete worktree', key: 'D' },
+			{ value: 'shell', label: 'Open shell in worktree', key: 'H' },
+			{ value: 'cancel', label: 'Cancel', key: '' },
+		];
+		this.cursor_ = 0;
+	}
+
+	handleInput(data: string): void {
+		const kb = getKeybindings();
+
+		if (kb.matches(data, 'tui.select.up') || matchesKey(data, 'up')) {
+			this.cursor_ = Math.max(0, this.cursor_ - 1);
+			this.tui_.requestRender();
+			return;
+		}
+
+		if (kb.matches(data, 'tui.select.down') || matchesKey(data, 'down')) {
+			this.cursor_ = Math.min(this.options_.length - 1, this.cursor_ + 1);
+			this.tui_.requestRender();
+			return;
+		}
+
+		if (matchesKey(data, 'enter') || matchesKey(data, 'space')) {
+			this.done_({ action: this.options_[this.cursor_]?.value ?? 'cancel' });
+			return;
+		}
+
+		// 快捷键直达
+		const lower = data.toLowerCase();
+		for (const opt of this.options_) {
+			if (lower === opt.key.toLowerCase()) {
+				this.done_({ action: opt.value });
+				return;
+			}
+		}
+
+		if (matchesKey(data, 'escape')) {
+			this.done_({ action: 'cancel' });
+		}
+	}
+
+	render(width: number): string[] {
+		const th = this.theme_;
+		const lines: string[] = [];
+
+		lines.push(
+			truncateToWidth(th.fg('accent', th.bold(` Worktree: ${this.worktreeName_}`)), width),
+		);
+		lines.push(truncateToWidth(th.fg('dim', '─'.repeat(width)), width));
+
+		for (let i = 0; i < this.options_.length; i++) {
+			const opt = this.options_[i];
+			const arrow = i === this.cursor_ ? th.fg('accent', '>') : ' ';
+			const label =
+				i === this.cursor_ ? th.fg('accent', opt.label) : th.fg('text', opt.label);
+			const keyHint = opt.key ? th.fg('dim', ` [${opt.key}]`) : '';
+			lines.push(truncateToWidth(` ${arrow} ${label}${keyHint}`, width));
+		}
+
+		lines.push(truncateToWidth(th.fg('dim', '─'.repeat(width)), width));
+		lines.push(
+			truncateToWidth(
+				th.fg('dim', ' up/down navigate  Enter confirm  key shortcut  Esc back'),
+				width,
+			),
+		);
+
+		return lines;
+	}
+
+	invalidate(): void {}
+}
+
+export async function showOperationSubmenu(ctx: any, worktreeName: string): Promise<SubmenuResult> {
+	if (!ctx.hasUI) {
+		return { action: 'switch' };
+	}
+
+	return (ctx.ui.custom as <T>(cb: (...a: any[]) => any) => Promise<T>)<SubmenuResult>(
+		(tui, theme, _kb, done) => {
+			const submenu = new OperationSubmenu({
+				tui,
+				theme,
+				done,
+				worktreeName,
+			});
+			return {
+				render: (w: number) => submenu.render(w),
+				handleInput: (d: string) => submenu.handleInput(d),
+				invalidate: () => submenu.invalidate(),
+			};
+		},
+	);
+}

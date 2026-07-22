@@ -9,7 +9,7 @@
  * 删除 worktree 不会自动删除关联 session 文件，插件会提示用户手动清理。
  */
 import { createLogger } from '@zenone/pi-logger';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import crypto from 'node:crypto';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
@@ -76,16 +76,19 @@ export function findExistingSession(
 	targetName: string,
 ): string | null {
 	const isMain = targetName === 'main';
-	const sessionPath = isMain
-		? mainSessionFileName(repoRoot)
-		: worktreeSessionFileName(repoRoot, targetName);
+	// main 同时检查两种命名约定，兼容旧创建文件 (worktree-main.jsonl) 和新创建文件 (main.jsonl)
+	const candidates: string[] = isMain
+		? [mainSessionFileName(repoRoot), worktreeSessionFileName(repoRoot, 'main')]
+		: [worktreeSessionFileName(repoRoot, targetName)];
 
-	if (existsSync(sessionPath)) {
-		try {
-			const sm = SessionManager.open(sessionPath);
-			if (sm && sm.getCwd() === targetCwd) return sessionPath;
-		} catch {
-			/* header 不匹配或文件损坏 */
+	for (const sessionPath of candidates) {
+		if (existsSync(sessionPath)) {
+			try {
+				const sm = SessionManager.open(sessionPath);
+				if (sm && sm.getCwd() === targetCwd) return sessionPath;
+			} catch {
+				/* header 不匹配或文件损坏 */
+			}
 		}
 	}
 
@@ -128,7 +131,10 @@ export function createSession(targetCwd: string, repoRoot: string, targetName: s
 		mkdirSync(sessionDir, { recursive: true });
 	}
 
-	const filePath = worktreeSessionFileName(repoRoot, targetName);
+	const filePath =
+		targetName === 'main'
+			? mainSessionFileName(repoRoot)
+			: worktreeSessionFileName(repoRoot, targetName);
 
 	// 写入合法的 v3 session header
 	// type: "session" 是 SessionManager.find(e => e.type === "session") 查找的关键标识
@@ -153,19 +159,28 @@ export function createSession(targetCwd: string, repoRoot: string, targetName: s
  * 读取源 session 文件，生成新 header id，重映射 parentId 链，
  * 确保克隆后的会话树完整独立，不与源文件共享 id。
  *
+ * 设计决策：JSON 解析采用 fail-fast 策略 —— 任何损坏的 JSON 行都会
+ * 立即 throw Error，中断整个克隆操作。这是因为：
+ *   - 损坏的 session 文件意味着数据完整性已被破坏，不应静默传播
+ *   - 部分克隆可能导致用户误以为数据完整（丢失的 entries 不可见）
+ *   - 与 SessionManager 内部的行为保持一致（损坏文件无法 open）
+ *
  * @param sourcePath - 当前 session 文件绝对路径
  * @param targetCwd - 目标目录（worktree 路径）
  * @returns 克隆后的 session 文件路径
+ * @throws {Error} 如果源 session 文件包含无法解析的 JSON 行
  */
 export function cloneSession(sourcePath: string, targetCwd: string): string {
 	const content = readFileSync(sourcePath, 'utf-8');
 	const lines = content.trim().split('\n').filter(Boolean);
 	const entries: any[] = [];
-	for (const l of lines) {
+	for (let i = 0; i < lines.length; i++) {
 		try {
-			entries.push(JSON.parse(l));
+			entries.push(JSON.parse(lines[i]));
 		} catch {
-			log.warn('clone: skipping malformed line', { line: l.slice(0, 100) });
+			throw new Error(
+				`clone: malformed JSON at line ${i + 1} in ${sourcePath}: ${lines[i].slice(0, 120)}`,
+			);
 		}
 	}
 
@@ -341,7 +356,11 @@ export function forkToNewSession(
 		}
 		log.info('fork: getEntries()', { count: entries.length });
 
-		if (entries.length > 0) {
+		// 过滤掉可能已存在的 session header，防止重复
+		const filteredEntries = entries.filter((e: any) => e.type !== 'session');
+
+		// 至少需要 1 条有效条目（不含 header）才能构建有意义的 fork
+		if (filteredEntries.length > 0) {
 			const newId = crypto.randomUUID();
 			const now = new Date().toISOString();
 			const sourceFile: string =
@@ -366,10 +385,10 @@ export function forkToNewSession(
 			};
 
 			// 保留原始 entry 的 id/parentId 链，添加新 header
-			// 重映射：将第一个 entry（消息/事件）的 parentId 从旧 header id 改为 newId
-			const remapped = entries.map((e: any, idx: number) => {
+			// 重映射：将旧的 parentId 指向旧 header 的改为指向新 header id
+			const remapped = filteredEntries.map((e: any) => {
 				const entry = { ...e };
-				if (idx === 0 && oldHeaderId && entry.parentId === oldHeaderId) {
+				if (oldHeaderId && entry.parentId === oldHeaderId) {
 					entry.parentId = newId;
 				}
 				return entry;
@@ -397,6 +416,8 @@ export function forkToNewSession(
  * 对 worktree 路径自动批准，避免用户在切换 worktree 时频繁确认信任。
  */
 export function autoApproveProjectTrust(repoRoot: string, cwd: string): boolean {
-	const worktreesDir = getWorktreesDir(repoRoot);
-	return cwd.startsWith(worktreesDir + '/');
+	const worktreesDir = resolve(getWorktreesDir(repoRoot));
+	const resolved = resolve(cwd);
+	// Exact match (e.g. process running in the worktrees root) or path under worktreesDir
+	return resolved === worktreesDir || resolved.startsWith(worktreesDir + sep);
 }

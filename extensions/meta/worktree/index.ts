@@ -12,6 +12,7 @@
  *   /worktree delete     删除 worktree
  *   /worktree list       列出所有 worktree
  *   /worktree merge      合并 worktree 分支到 main
+ *   /worktree rebase     Rebase worktree 分支到 main
  *   /worktree clean      清理已合并的 worktree
  *   /worktree shell      在 worktree 目录打开终端
  *   /worktree widget     切换 widget 可见性
@@ -55,7 +56,7 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 	});
 
 	// ── project_trust 自动批准 worktree 路径 ──
-
+	// 注：project_trust 事件不在 ExtensionAPI 的公开类型中，故使用 as any
 	(pi as any).on('project_trust', async (event: any, ctx: any) => {
 		if (!event || !event.cwd) return;
 		const cwd = event.cwd;

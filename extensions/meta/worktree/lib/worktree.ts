@@ -169,15 +169,19 @@ export function findMergedWorktrees(
 	exclude?: Set<string>,
 ): Array<{ name: string; branch: string }> {
 	const ex = exclude || new Set();
-	return getManagedWorktrees(repoRoot)
-		.filter((wt) => !ex.has(wt.name) && wt.branch !== 'detached')
-		.filter((wt) => {
-			// 先尝试同步远程（非 blocking：离线时静默跳过）
-			spawnSync('git', ['fetch', 'origin', wt.branch, '--quiet'], {
-				cwd: repoRoot,
-				encoding: 'utf-8',
-			});
+	const wts = getManagedWorktrees(repoRoot).filter(
+		(wt) => !ex.has(wt.name) && wt.branch !== 'detached',
+	);
+	if (wts.length === 0) return [];
 
+	// 单次 fetch 同步所有远程状态（而非每个分支各一次）
+	spawnSync('git', ['fetch', 'origin', '--quiet'], {
+		cwd: repoRoot,
+		encoding: 'utf-8',
+	});
+
+	return wts
+		.filter((wt) => {
 			// 检查是否已合并到本地 HEAD
 			const local = spawnSync('git', ['merge-base', '--is-ancestor', wt.branch, 'HEAD'], {
 				cwd: repoRoot,

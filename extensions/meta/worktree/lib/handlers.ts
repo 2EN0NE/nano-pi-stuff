@@ -5,7 +5,7 @@ import { createLogger } from '@zenone/pi-logger';
 import { basename } from 'node:path';
 import { spawnSync, spawn, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { getCurrentBranch } from './git.js';
+import { getCurrentBranch, execRebase } from './git.js';
 import {
 	createWorktree,
 	removeWorktree,
@@ -22,6 +22,7 @@ import {
 } from './paths.js';
 import {
 	showWorktreeTui,
+	showOperationSubmenu,
 	askSessionStrategy,
 	askNodeModulesStrategy,
 	promptWorktreeName,
@@ -76,6 +77,7 @@ export const COMMANDS = [
 	'list',
 	'delete <name>',
 	'merge [--source <n>] [--target <b>]',
+	'rebase [--source <n>] [--target <b>]',
 	'clean [--dry-run]',
 	'shell',
 ];
@@ -175,6 +177,9 @@ export async function handleWorktreeCommand(
 		case 'merge':
 			await handleMerge(repoRoot, flags, ctx);
 			break;
+		case 'rebase':
+			await handleRebase(repoRoot, flags, ctx);
+			break;
 		case 'clean':
 			await handleClean(repoRoot, flags, ctx);
 			break;
@@ -235,6 +240,11 @@ async function handlePanel(repoRoot: string, ctx: any): Promise<void> {
 				await handleUse(repoRoot, { _positional: result.target }, ctx);
 			}
 			break;
+		case 'operations':
+			if (result.target) {
+				await handleOperationsSubmenu(repoRoot, result.target, ctx);
+			}
+			break;
 		case 'fork':
 			await handleFork(repoRoot, result.target || 'main', ctx);
 			break;
@@ -248,6 +258,9 @@ async function handlePanel(repoRoot: string, ctx: any): Promise<void> {
 			break;
 		case 'merge':
 			await handleMerge(repoRoot, {}, ctx);
+			break;
+		case 'rebase':
+			await handleRebase(repoRoot, {}, ctx);
 			break;
 		case 'shell':
 			handleShell(repoRoot, ctx);
@@ -564,6 +577,7 @@ export function execMerge(
 
 	const origBranch = getCurrentBranch(repo);
 	let dirty = '';
+	let stashed = false;
 	try {
 		dirty = execSync('git status --porcelain', { cwd: repo, encoding: 'utf-8' }).trim();
 	} catch {
@@ -575,11 +589,12 @@ export function execMerge(
 		if (stash.status !== 0) {
 			return { ok: false, message: 'Cannot stash changes', conflicts: [] };
 		}
+		stashed = true;
 	}
 
 	const checkout = git(['checkout', targetBranch]);
 	if (checkout.status !== 0) {
-		if (dirty) git(['stash', 'pop']);
+		if (stashed) git(['stash', 'pop']);
 		return { ok: false, message: "Cannot checkout '" + targetBranch + "'", conflicts: [] };
 	}
 
@@ -592,7 +607,7 @@ export function execMerge(
 
 	if (merge.status === 0) {
 		git(['checkout', origBranch]);
-		if (dirty) git(['stash', 'pop']);
+		if (stashed) git(['stash', 'pop']);
 		return {
 			ok: true,
 			message: "Merged '" + sourceBranch + "' -> '" + targetBranch + "'",
@@ -601,7 +616,7 @@ export function execMerge(
 	}
 
 	git(['checkout', origBranch]);
-	if (dirty) git(['stash', 'pop']);
+	if (stashed) git(['stash', 'pop']);
 
 	const unmerged = (git(['diff', '--name-only', '--diff-filter=U']).stdout || '').trim();
 	const conflictFiles = unmerged
@@ -641,7 +656,11 @@ async function handleMerge(
 			'Select source to merge:',
 			repoRoot,
 		);
-		if (result.action !== 'switch' && result.action !== 'fork') {
+		if (
+			result.action !== 'switch' &&
+			result.action !== 'fork' &&
+			result.action !== 'operations'
+		) {
 			ctx.ui.notify('Cancelled', 'info');
 			return;
 		}
@@ -671,6 +690,105 @@ async function handleMerge(
 		);
 	} else {
 		ctx.ui.notify('Merge failed: ' + result.message, 'error');
+	}
+}
+
+// ═══════════════════════════════════════════
+// rebase
+// ═══════════════════════════════════════════
+
+async function handleRebase(
+	repoRoot: string,
+	flags: Record<string, string>,
+	ctx: any,
+): Promise<void> {
+	const allWorktrees = getManagedWorktrees(repoRoot);
+	const currentName = _getCurrentName(repoRoot, ctx.cwd);
+
+	let sourceWorktree = flags.source || currentName || '';
+	if (!sourceWorktree && allWorktrees.length > 0 && ctx.hasUI) {
+		// Pick source from TUI
+		const result = await showWorktreeTui(
+			ctx,
+			allWorktrees,
+			currentName,
+			'Select source to rebase:',
+			repoRoot,
+		);
+		if (
+			result.action !== 'switch' &&
+			result.action !== 'fork' &&
+			result.action !== 'operations'
+		) {
+			ctx.ui.notify('Cancelled', 'info');
+			return;
+		}
+		sourceWorktree = result.target || '';
+	}
+
+	if (!sourceWorktree || sourceWorktree === 'main') {
+		ctx.ui.notify(
+			'Please specify --source <worktree-name> or switch to a worktree first.',
+			'warning',
+		);
+		return;
+	}
+
+	const sourceBranch = 'wt/' + sourceWorktree;
+	const ontoBranch = flags.target || 'main';
+
+	log.info('rebasing', { source: sourceBranch, onto: ontoBranch, repo: basename(repoRoot) });
+	ctx.ui.notify(`Rebasing '${sourceBranch}' onto '${ontoBranch}'...`, 'info');
+
+	const result = execRebase(repoRoot, sourceBranch, ontoBranch);
+
+	if (result.ok) {
+		ctx.ui.notify(result.message, 'success');
+	} else if (result.conflicts.length > 0) {
+		const summary = result.conflicts.map((f) => '  - ' + f).join('\n');
+		ctx.ui.notify(
+			'Rebase conflict in ' + result.conflicts.length + ' file(s):\n' + summary,
+			'error',
+		);
+	} else {
+		ctx.ui.notify('Rebase failed: ' + result.message, 'error');
+	}
+}
+
+// ═══════════════════════════════════════════
+// 操作子菜单分发
+// ═══════════════════════════════════════════
+
+async function handleOperationsSubmenu(
+	repoRoot: string,
+	worktreeName: string,
+	ctx: any,
+): Promise<void> {
+	const subResult = await showOperationSubmenu(ctx, worktreeName);
+
+	switch (subResult.action) {
+		case 'switch':
+			await handleUse(repoRoot, { _positional: worktreeName }, ctx);
+			break;
+		case 'fork':
+			await handleFork(repoRoot, worktreeName, ctx);
+			break;
+		case 'merge':
+			await handleMerge(repoRoot, { source: worktreeName }, ctx);
+			break;
+		case 'rebase':
+			await handleRebase(repoRoot, { source: worktreeName }, ctx);
+			break;
+		case 'delete':
+			await handleDelete(repoRoot, { _positional: worktreeName }, ctx);
+			break;
+		case 'shell':
+			handleShell(repoRoot, ctx, worktreeName);
+			break;
+		case 'cancel':
+			// 返回面板
+			await handlePanel(repoRoot, ctx);
+			break;
 	}
 }
 
@@ -715,14 +833,14 @@ async function handleClean(
 // shell
 // ═══════════════════════════════════════════
 
-function handleShell(repoRoot: string, ctx: any): void {
-	const currentName = _getCurrentName(repoRoot, ctx.cwd);
-	if (!currentName) {
+function handleShell(repoRoot: string, ctx: any, targetName?: string): void {
+	const name = targetName || _getCurrentName(repoRoot, ctx.cwd);
+	if (!name) {
 		ctx.ui.notify('No active worktree. Switch to one first.', 'warning');
 		return;
 	}
 
-	const targetDir = getWorktreePath(repoRoot, currentName);
+	const targetDir = getWorktreePath(repoRoot, name);
 	if (!existsSync(targetDir)) {
 		ctx.ui.notify(`Worktree directory not found: ${targetDir}`, 'error');
 		return;
@@ -735,13 +853,13 @@ function handleShell(repoRoot: string, ctx: any): void {
 
 	if (inTmux) {
 		spawn('tmux', ['split-window', '-h', '-c', targetDir], { stdio: 'ignore' }).unref();
-		ctx.ui.notify(`Opened shell in worktree "${currentName}"`, 'info');
+		ctx.ui.notify(`Opened shell in worktree "${name}"`, 'info');
 	} else if (inWarp) {
 		spawn(opener, [`warp://action/new_tab?path=${encodeURIComponent(targetDir)}`], {
 			detached: true,
 			stdio: 'ignore',
 		}).unref();
-		ctx.ui.notify(`Opened Warp tab for worktree "${currentName}"`, 'info');
+		ctx.ui.notify(`Opened Warp tab for worktree "${name}"`, 'info');
 	} else if (process.platform === 'darwin') {
 		ctx.ui.notify(
 			`Worktree path:\n  ${targetDir}\nUse 'cd "${targetDir}"' or open a new terminal.`,

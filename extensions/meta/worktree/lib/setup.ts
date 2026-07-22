@@ -48,7 +48,8 @@ function doSymlink(src: string, dest: string): string {
 		return 'symlink (skipped, exists)';
 	}
 	try {
-		symlinkSync(src, dest, 'junction');
+		const linkType = process.platform === 'win32' ? 'junction' : undefined;
+		symlinkSync(src, dest, linkType as any);
 		return 'symlink';
 	} catch (err) {
 		log.error('symlink node_modules failed', { error: String(err), src, dest });
